@@ -38,7 +38,7 @@ export default function ResellerManager() {
           <select 
             value={role} 
             onChange={(e) => setRole(e.target.value)}
-            className="w-full border p-2 rounded mt-1 text-black"
+            className="w-full border p-2 rounded mt-1 text-black bg-white"
           >
             <option value="RESELLER">Reseller Account</option>
             <option value="USER">Direct User Account</option>
@@ -52,7 +52,7 @@ export default function ResellerManager() {
             value={name} 
             onChange={(e) => setName(e.target.value)} 
             required 
-            className="w-full border p-2 rounded mt-1 text-black"
+            className="w-full border p-2 rounded mt-1 text-black bg-white"
           />
         </div>
 
@@ -63,7 +63,7 @@ export default function ResellerManager() {
             value={email} 
             onChange={(e) => setEmail(e.target.value)} 
             required 
-            className="w-full border p-2 rounded mt-1 text-black"
+            className="w-full border p-2 rounded mt-1 text-black bg-white"
           />
         </div>
 
@@ -74,7 +74,7 @@ export default function ResellerManager() {
             value={password} 
             onChange={(e) => setPassword(e.target.value)} 
             required 
-            className="w-full border p-2 rounded mt-1 text-black"
+            className="w-full border p-2 rounded mt-1 text-black bg-white"
           />
         </div>
 
@@ -84,7 +84,7 @@ export default function ResellerManager() {
             type="number" 
             value={balance} 
             onChange={(e) => setBalance(parseFloat(e.target.value))} 
-            className="w-full border p-2 rounded mt-1 text-black"
+            className="w-full border p-2 rounded mt-1 text-black bg-white"
           />
         </div>
 

@@ -30,8 +30,8 @@ export default function ResellerManager() {
   };
 
   return (
-    <div className="p-8 max-w-2xl mx-auto bg-white rounded-xl shadow-md space-y-6 mt-10">
-      <h2 className="text-2xl font-bold text-gray-800">Create Account (Reseller / User)</h2>
+    <div className="p-8 max-w-2xl mx-auto bg-white rounded-xl shadow-md space-y-6 mt-10 text-gray-800">
+      <h2 className="text-2xl font-bold">Create Account (Reseller / User)</h2>
       <form onSubmit={handleCreateAccount} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">Account Type</label>

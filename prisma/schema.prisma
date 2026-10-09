@@ -1,0 +1,57 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  RESELLER
+  USER
+}
+
+model User {
+  id             String   @id @default(uuid())
+  name           String
+  email          String   @unique
+  password       String
+  role           Role     @default(USER)
+  
+  createdById    String?
+  createdBy      User?    @relation("UserHierarchy", fields: [createdById], references: [id])
+  childUsers     User[]   @relation("UserHierarchy")
+
+  walletBalance  Float    @default(0.0)
+  perMsgRate     Float    @default(0.80)
+
+  transactions   WalletTransaction[]
+  wabaAccounts   WabaAccount[]
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model WalletTransaction {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  amount      Float
+  type        String   
+  description String
+  createdAt   DateTime @default(now())
+}
+
+model WabaAccount {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  wabaId          String   @unique
+  phoneNumberId   String
+  displayPhone    String
+  accessToken     String
+  status          String   @default("ACTIVE")
+  createdAt       DateTime @default(now())
+}

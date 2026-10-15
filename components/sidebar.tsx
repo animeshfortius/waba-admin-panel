@@ -8,11 +8,13 @@ import {
   MessageSquare, 
   Wallet, 
   Settings, 
-  Radio 
+  Radio,
+  ShieldAlert 
 } from "lucide-react";
 
 const navItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Admin Panel", href: "/admin/admin-home", icon: ShieldAlert }, // Ye naya add kiya hai
   { name: "Clients", href: "/clients", icon: Users },
   { name: "WABA Accounts", href: "/waba", icon: Radio },
   { name: "Broadcasts", href: "/broadcasts", icon: MessageSquare },

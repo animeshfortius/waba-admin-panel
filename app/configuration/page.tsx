@@ -15,20 +15,20 @@ export default function ConfigPage() {
     | "channel_settings"
   >("hub");
 
-  // Initial Clean WABA Channels Table
+  // Updated WABA Channels Table with exact columns matching your screenshot
   const [channels, setChannels] = useState([
     {
       id: 1,
-      number: "15553945963",
-      phoneId: "1055489258",
-      wabaId: "987654321",
-      bspName: "Primary BSP",
-      msgLimit: "1K / day",
-      quality: "High",
-      default: "Yes",
-      displayName: "Fortius Official",
-      configDate: "12-Oct-2026 12:00",
-      webhookUrl: "https://waba.fortius.in/webhook/1",
+      wabaNumber: "15553945963",
+      phoneNumberId: "1384456657081014",
+      wabaBusinessId: "28402710282733872",
+      bspName: "BSP-3",
+      messagingLimit: "2000 | TIER_250",
+      qualityRating: "HIGH | VERIFIED",
+      default: true,
+      displayName: "Active-08",
+      configDate: "06 Oct 2026 11:53:57 AM",
+      webhookUrl: "NA",
     },
   ]);
 
@@ -61,12 +61,6 @@ export default function ConfigPage() {
     },
   ]);
   const [showAddContactModal, setShowAddContactModal] = useState(false);
-  const [newContact, setNewContact] = useState({
-    number: "",
-    profileName: "",
-    email: "",
-    contactName: "",
-  });
 
   // 3. UNSUBSCRIBE NUMBERS STATE
   const [unsubscribers, setUnsubscribers] = useState([
@@ -84,14 +78,12 @@ export default function ConfigPage() {
     { id: 1, name: "VIP Broadcast Group", totalContacts: 45 },
   ]);
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
-  const [newGroupName, setNewGroupName] = useState("");
 
   // 5. BLACKLIST NUMBERS STATE
   const [blacklist, setBlacklist] = useState([
     { id: 1, number: "919999888777", createdDate: "10-Oct-2026" },
   ]);
   const [showBlacklistModal, setShowBlacklistModal] = useState(false);
-  const [blacklistInput, setBlacklistInput] = useState("");
 
   // GENERIC IMPORT / EXPORT / DOWNLOAD SAMPLE HANDLERS
   const handleDownloadSample = (sectionName: string) => {
@@ -125,7 +117,6 @@ export default function ConfigPage() {
       "width=600,height=700,top=100,left=200"
     );
 
-    // Simulated authentic onboard delay
     setTimeout(() => {
       if (fbPopup && !fbPopup.closed) {
         fbPopup.close();
@@ -159,7 +150,7 @@ export default function ConfigPage() {
             {activeSection === "groups" && "Group List"}
             {activeSection === "blacklist" && "Blacklisted Numbers"}
             {activeSection === "channel_settings" &&
-              `Channel Settings: +${selectedChannel?.number}`}
+              `Channel Settings: +${selectedChannel?.wabaNumber}`}
           </h1>
         </div>
 
@@ -304,16 +295,16 @@ export default function ConfigPage() {
         </div>
       )}
 
-      {/* 2. WABA CHANNELS SCREEN */}
+      {/* 2. WABA CHANNELS SCREEN (Updated with all exact requested columns) */}
       {activeSection === "waba_channels" && (
         <div className="space-y-6">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
             <button
               onClick={() => setShowFacebookModal(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow transition flex items-center space-x-1.5"
+              className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow transition flex items-center space-x-1.5"
             >
               <span>+</span>
-              <span>Engine New Whatsapp</span>
+              <span>Register New WhatsApp</span>
             </button>
           </div>
 
@@ -321,62 +312,83 @@ export default function ConfigPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                    <th className="p-4">Phone Number</th>
-                    <th className="p-4">Phone Number ID</th>
-                    <th className="p-4">WABA ID</th>
-                    <th className="p-4">BSP Name</th>
-                    <th className="p-4">Messaging Limit</th>
-                    <th className="p-4">Quality Rating</th>
-                    <th className="p-4">Default</th>
-                    <th className="p-4">Display Name</th>
-                    <th className="p-4">Configure Date</th>
-                    <th className="p-4 text-center">Actions</th>
+                  <tr className="bg-slate-50 text-slate-600 font-bold border-b uppercase tracking-wider text-[11px]">
+                    <th className="p-3">WABA NUMBER</th>
+                    <th className="p-3">PHONENUMBER ID</th>
+                    <th className="p-3">WABA BUSINESSID</th>
+                    <th className="p-3">BSP NAME</th>
+                    <th className="p-3">MESSAGING LIMIT</th>
+                    <th className="p-3">QUALITY RATING</th>
+                    <th className="p-3 text-center">DEFAULT</th>
+                    <th className="p-3">DISPLAY NAME</th>
+                    <th className="p-3">CONFIGUREDATE</th>
+                    <th className="p-3">WEBHOOK URL</th>
+                    <th className="p-3 text-center">ACTIONS</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 text-gray-700 font-medium">
                   {channels.map((ch) => (
-                    <tr key={ch.id} className="hover:bg-gray-50">
-                      <td className="p-4 font-mono font-bold text-gray-800">
-                        +{ch.number}
+                    <tr key={ch.id} className="hover:bg-slate-50 transition">
+                      <td className="p-3 font-semibold text-slate-800">
+                        {ch.wabaNumber}
                       </td>
-                      <td className="p-4 font-mono text-gray-500">
-                        {ch.phoneId}
+                      <td className="p-3 font-mono text-slate-600">
+                        {ch.phoneNumberId}
                       </td>
-                      <td className="p-4 font-mono text-gray-500">
-                        {ch.wabaId}
+                      <td className="p-3 font-mono text-slate-600">
+                        {ch.wabaBusinessId}
                       </td>
-                      <td className="p-4 font-bold text-emerald-700">
+                      <td className="p-3 font-semibold text-slate-800">
                         {ch.bspName}
                       </td>
-                      <td className="p-4 font-mono">{ch.msgLimit}</td>
-                      <td className="p-4 font-bold text-emerald-600">
-                        {ch.quality}
-                      </td>
-                      <td className="p-4">
-                        <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full text-[10px]">
-                          {ch.default}
+                      <td className="p-3">
+                        <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-200 font-semibold text-[11px]">
+                          🟡 {ch.messagingLimit}
                         </span>
                       </td>
-                      <td className="p-4 font-bold">{ch.displayName}</td>
-                      <td className="p-4 font-mono text-gray-500">
+                      <td className="p-3 font-bold text-emerald-600">
+                        ✓ {ch.qualityRating}
+                      </td>
+                      <td className="p-3 text-center">
+                        <label className="inline-flex items-center cursor-pointer gap-1">
+                          <input
+                            type="radio"
+                            name="defaultWaba"
+                            defaultChecked={ch.default}
+                            className="text-emerald-600 h-3.5 w-3.5"
+                          />
+                          <span className="text-[11px] text-gray-500">
+                            {ch.default ? "Default" : "Set Default"}
+                          </span>
+                        </label>
+                      </td>
+                      <td className="p-3 font-semibold text-slate-800">
+                        {ch.displayName}
+                      </td>
+                      <td className="p-3 text-gray-500 whitespace-nowrap">
                         {ch.configDate}
                       </td>
-                      <td className="p-4 text-center">
+                      <td className="p-3 text-gray-400 font-mono">
+                        {ch.webhookUrl}
+                      </td>
+                      <td className="p-3 text-center">
                         <button
                           onClick={() => {
                             setSelectedChannel(ch);
                             setActiveSection("channel_settings");
                           }}
-                          className="bg-emerald-50 text-emerald-700 p-2 rounded-lg hover:bg-emerald-100 font-bold shadow-sm"
+                          className="p-1 hover:bg-gray-100 rounded text-gray-500 transition font-bold"
                         >
-                          ⚙️
+                          ⋮
                         </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="p-3 border-t border-gray-100 text-xs text-gray-500 flex justify-between items-center">
+              <span>Showing 1 to {channels.length} of {channels.length} records</span>
             </div>
           </div>
         </div>

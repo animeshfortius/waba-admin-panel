@@ -34,7 +34,7 @@ export default function ConfigPage() {
   ]);
 
   const [selectedChannel, setSelectedChannel] = useState<any>(null);
-  
+
   // Webhook Modal States
   const [showWebhookModal, setShowWebhookModal] = useState(false);
   const [webhookInput, setWebhookInput] = useState("");
@@ -489,12 +489,29 @@ export default function ConfigPage() {
                   <select
                     value={profileData.category}
                     onChange={(e) => setProfileData({ ...profileData, category: e.target.value })}
-                    className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none"
+                    className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none focus:border-emerald-500"
                   >
-                    <option value="Professional Services">Professional Services</option>
-                    <option value="Retail">Retail & Shopping</option>
-                    <option value="Finance">Finance & Banking</option>
+                    <option value="Automotive">Automotive</option>
+                    <option value="Beauty">Beauty</option>
+                    <option value="Apparel">Apparel</option>
                     <option value="Education">Education</option>
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Online Gambling">Online Gambling</option>
+                    <option value="Physical Gambling">Physical Gambling</option>
+                    <option value="Event Planning">Event Planning</option>
+                    <option value="Finance">Finance</option>
+                    <option value="Grocery">Grocery</option>
+                    <option value="Alcohol">Alcohol</option>
+                    <option value="Government">Government</option>
+                    <option value="Hotel & Hospitality">Hotel & Hospitality</option>
+                    <option value="Healthcare">Healthcare</option>
+                    <option value="OTC Drugs">OTC Drugs</option>
+                    <option value="Nonprofit / NGO">Nonprofit / NGO</option>
+                    <option value="Professional Services">Professional Services</option>
+                    <option value="Retail">Retail</option>
+                    <option value="Travel">Travel</option>
+                    <option value="Restaurant & Food">Restaurant & Food</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
               </div>
@@ -505,7 +522,7 @@ export default function ConfigPage() {
                   rows={4}
                   value={profileData.description}
                   onChange={(e) => setProfileData({ ...profileData, description: e.target.value })}
-                  className="w-full border rounded-lg p-2.5 bg-white text-xs text-gray-800 focus:outline-none"
+                  className="w-full border rounded-lg p-2.5 bg-white text-xs text-gray-800 focus:outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
@@ -523,7 +540,7 @@ export default function ConfigPage() {
                     type="email"
                     value={profileData.email}
                     onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                    className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none"
+                    className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
@@ -544,7 +561,7 @@ export default function ConfigPage() {
                   rows={2}
                   value={profileData.address}
                   onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
-                  className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none"
+                  className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
@@ -554,7 +571,7 @@ export default function ConfigPage() {
                   type="text"
                   value={profileData.website}
                   onChange={(e) => setProfileData({ ...profileData, website: e.target.value })}
-                  className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none"
+                  className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none focus:border-emerald-500"
                 />
               </div>
 

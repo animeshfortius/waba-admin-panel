@@ -6,16 +6,15 @@ export default function ConfigPage() {
   const [activeSection, setActiveSection] = useState<
     | "hub"
     | "waba_channels"
+    | "business_profile"
     | "onboarding"
     | "media_library"
     | "contacts"
     | "unsubscribe"
     | "groups"
     | "blacklist"
-    | "channel_settings"
   >("hub");
 
-  // Updated WABA Channels Table with exact columns matching your screenshot
   const [channels, setChannels] = useState([
     {
       id: 1,
@@ -29,15 +28,35 @@ export default function ConfigPage() {
       displayName: "Active-08",
       configDate: "06 Oct 2026 11:53:57 AM",
       webhookUrl: "NA",
+      authEnabled: false,
+      webhookType: "Default",
     },
   ]);
 
   const [selectedChannel, setSelectedChannel] = useState<any>(null);
+  
+  // Webhook Modal States
+  const [showWebhookModal, setShowWebhookModal] = useState(false);
+  const [webhookInput, setWebhookInput] = useState("");
+  const [enableAuth, setEnableAuth] = useState(false);
+  const [webhookType, setWebhookType] = useState("Default");
+
+  // Business Profile Form State
+  const [profileData, setProfileData] = useState({
+    displayName: "Active-08",
+    category: "Professional Services",
+    description:
+      "Professional Business Communication Solutions • WhatsApp Business API • Bulk SMS & RCS • Voice, IVR & Toll-Free Solutions • Chatbot & Business Automation • API & Customer Communication Solutions. Smart Communication. Reliable Technology.",
+    email: "info@fortiusinfocom.com",
+    channelNumber: "15553945963",
+    address: "Lucknow, UP, India",
+    website: "https://www.fortiusinfocom.com/",
+  });
+
   const [showFacebookModal, setShowFacebookModal] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 1. MEDIA LIBRARY STATE
   const [mediaList, setMediaList] = useState([
     {
       id: 1,
@@ -47,10 +66,7 @@ export default function ConfigPage() {
       configDate: "12-Oct-2026",
     },
   ]);
-  const [showUploadMediaModal, setShowUploadMediaModal] = useState(false);
-  const [newMediaName, setNewMediaName] = useState("");
 
-  // 2. WHATSAPP CONTACTS STATE
   const [contacts, setContacts] = useState([
     {
       id: 1,
@@ -60,9 +76,7 @@ export default function ConfigPage() {
       contactName: "Rahul",
     },
   ]);
-  const [showAddContactModal, setShowAddContactModal] = useState(false);
 
-  // 3. UNSUBSCRIBE NUMBERS STATE
   const [unsubscribers, setUnsubscribers] = useState([
     {
       id: 1,
@@ -73,19 +87,64 @@ export default function ConfigPage() {
     },
   ]);
 
-  // 4. MANAGE GROUPS STATE
   const [groups, setGroups] = useState([
     { id: 1, name: "VIP Broadcast Group", totalContacts: 45 },
   ]);
-  const [showAddGroupModal, setShowAddGroupModal] = useState(false);
 
-  // 5. BLACKLIST NUMBERS STATE
   const [blacklist, setBlacklist] = useState([
     { id: 1, number: "919999888777", createdDate: "10-Oct-2026" },
   ]);
-  const [showBlacklistModal, setShowBlacklistModal] = useState(false);
 
-  // GENERIC IMPORT / EXPORT / DOWNLOAD SAMPLE HANDLERS
+  const openWebhookModal = (channel: any) => {
+    setSelectedChannel(channel);
+    setWebhookInput(channel.webhookUrl === "NA" ? "" : channel.webhookUrl);
+    setEnableAuth(channel.authEnabled || false);
+    setWebhookType(channel.webhookType || "Default");
+    setShowWebhookModal(true);
+  };
+
+  const handleSaveWebhook = () => {
+    if (selectedChannel) {
+      setChannels((prev) =>
+        prev.map((ch) =>
+          ch.id === selectedChannel.id
+            ? {
+                ...ch,
+                webhookUrl: webhookInput.trim() === "" ? "NA" : webhookInput,
+                authEnabled: enableAuth,
+                webhookType,
+              }
+            : ch
+        )
+      );
+    }
+    setShowWebhookModal(false);
+  };
+
+  const openBusinessProfile = (channel: any) => {
+    setSelectedChannel(channel);
+    setProfileData((prev) => ({
+      ...prev,
+      displayName: channel.displayName || "Active-08",
+      channelNumber: channel.wabaNumber || "15553945963",
+    }));
+    setActiveSection("business_profile");
+  };
+
+  const handleSaveProfile = () => {
+    if (selectedChannel) {
+      setChannels((prev) =>
+        prev.map((ch) =>
+          ch.id === selectedChannel.id
+            ? { ...ch, displayName: profileData.displayName }
+            : ch
+        )
+      );
+    }
+    alert("Business Profile details updated successfully!");
+    setActiveSection("waba_channels");
+  };
+
   const handleDownloadSample = (sectionName: string) => {
     alert(`Downloading sample CSV/Excel template for ${sectionName}...`);
   };
@@ -107,10 +166,8 @@ export default function ConfigPage() {
     input.click();
   };
 
-  // CONTROLLED FACEBOOK SIGNUP WITH REALISTIC TIMED DIALOG
   const handleFacebookSignup = () => {
     setIsProcessing(true);
-
     const fbPopup = window.open(
       "https://www.facebook.com/v18.0/dialog/oauth?client_id=meta_waba_app&redirect_uri=https://waba.fortius.in/facebook/callback&scope=whatsapp_business_management",
       "FacebookLogin",
@@ -121,10 +178,8 @@ export default function ConfigPage() {
       if (fbPopup && !fbPopup.closed) {
         fbPopup.close();
       }
-
       setIsProcessing(false);
       setShowFacebookModal(false);
-      
       alert("Facebook Embedded Signup completed! Connecting channel...");
       setActiveSection("waba_channels");
     }, 3000);
@@ -132,7 +187,6 @@ export default function ConfigPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-2">
-      {/* Top Header & Breadcrumb */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
         <div>
           <div className="text-xs text-gray-400">
@@ -142,15 +196,14 @@ export default function ConfigPage() {
           </div>
           <h1 className="text-xl font-bold text-gray-800">
             {activeSection === "hub" && "Configuration"}
-            {activeSection === "waba_channels" && "WABA Channels Management"}
+            {activeSection === "waba_channels" && "WABA Channels"}
+            {activeSection === "business_profile" && "Personal Info"}
             {activeSection === "onboarding" && "Coexistence Onboarding"}
             {activeSection === "media_library" && "Media Library"}
             {activeSection === "contacts" && "WhatsApp Contact"}
             {activeSection === "unsubscribe" && "Unsubscriber Number List"}
             {activeSection === "groups" && "Group List"}
             {activeSection === "blacklist" && "Blacklisted Numbers"}
-            {activeSection === "channel_settings" &&
-              `Channel Settings: +${selectedChannel?.wabaNumber}`}
           </h1>
         </div>
 
@@ -158,14 +211,14 @@ export default function ConfigPage() {
           <button
             onClick={() =>
               setActiveSection(
-                activeSection === "channel_settings" ? "waba_channels" : "hub"
+                activeSection === "business_profile" ? "waba_channels" : "hub"
               )
             }
             className="border px-3.5 py-1.5 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 flex items-center space-x-1.5 shadow-sm"
           >
             <span>⬅</span>
             <span>
-              {activeSection === "channel_settings"
+              {activeSection === "business_profile"
                 ? "Back to Channels"
                 : "Back to Hub"}
             </span>
@@ -173,7 +226,6 @@ export default function ConfigPage() {
         )}
       </div>
 
-      {/* 1. CONFIGURATION HUB MAIN GRID */}
       {activeSection === "hub" && (
         <div className="space-y-6">
           <div className="space-y-3">
@@ -188,9 +240,7 @@ export default function ConfigPage() {
                 <div className="text-3xl group-hover:scale-110 transition duration-200">
                   📡
                 </div>
-                <h3 className="font-bold text-sm text-gray-800">
-                  Waba Channels
-                </h3>
+                <h3 className="font-bold text-sm text-gray-800">Waba Channels</h3>
                 <p className="text-[11px] text-gray-400">
                   Easily Connect and manage WABA Channels.
                 </p>
@@ -203,9 +253,7 @@ export default function ConfigPage() {
                 <div className="text-3xl group-hover:scale-110 transition duration-200">
                   💻
                 </div>
-                <h3 className="font-bold text-sm text-gray-800">
-                  Coexistence Onboarding
-                </h3>
+                <h3 className="font-bold text-sm text-gray-800">Coexistence Onboarding</h3>
                 <p className="text-[11px] text-gray-400">
                   Easily Onboard WhatsApp Business App users.
                 </p>
@@ -218,9 +266,7 @@ export default function ConfigPage() {
                 <div className="text-3xl group-hover:scale-110 transition duration-200">
                   📼
                 </div>
-                <h3 className="font-bold text-sm text-gray-800">
-                  Media Library
-                </h3>
+                <h3 className="font-bold text-sm text-gray-800">Media Library</h3>
                 <p className="text-[11px] text-gray-400">
                   Browse media library assets.
                 </p>
@@ -240,12 +286,8 @@ export default function ConfigPage() {
                 <div className="text-3xl group-hover:scale-110 transition duration-200">
                   📱
                 </div>
-                <h3 className="font-bold text-sm text-gray-800">
-                  WhatsApp Contact
-                </h3>
-                <p className="text-[11px] text-gray-400">
-                  Manage your Contacts.
-                </p>
+                <h3 className="font-bold text-sm text-gray-800">WhatsApp Contact</h3>
+                <p className="text-[11px] text-gray-400">Manage your Contacts.</p>
               </div>
 
               <div
@@ -255,9 +297,7 @@ export default function ConfigPage() {
                 <div className="text-3xl group-hover:scale-110 transition duration-200">
                   📗
                 </div>
-                <h3 className="font-bold text-sm text-gray-800">
-                  Unsubscriber Number List
-                </h3>
+                <h3 className="font-bold text-sm text-gray-800">Unsubscriber Number List</h3>
                 <p className="text-[11px] text-gray-400">
                   View and manage unsubscribed numbers.
                 </p>
@@ -283,9 +323,7 @@ export default function ConfigPage() {
                 <div className="text-3xl group-hover:scale-110 transition duration-200">
                   🖥️
                 </div>
-                <h3 className="font-bold text-sm text-gray-800">
-                  Blacklist Numbers
-                </h3>
+                <h3 className="font-bold text-sm text-gray-800">Blacklist Numbers</h3>
                 <p className="text-[11px] text-gray-400">
                   Manage your blacklist for better control.
                 </p>
@@ -295,7 +333,6 @@ export default function ConfigPage() {
         </div>
       )}
 
-      {/* 2. WABA CHANNELS SCREEN (Updated with all exact requested columns) */}
       {activeSection === "waba_channels" && (
         <div className="space-y-6">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
@@ -368,18 +405,21 @@ export default function ConfigPage() {
                       <td className="p-3 text-gray-500 whitespace-nowrap">
                         {ch.configDate}
                       </td>
-                      <td className="p-3 text-gray-400 font-mono">
-                        {ch.webhookUrl}
+                      <td className="p-3">
+                        <button
+                          onClick={() => openWebhookModal(ch)}
+                          className="text-emerald-600 hover:underline font-mono"
+                        >
+                          {ch.webhookUrl}
+                        </button>
                       </td>
                       <td className="p-3 text-center">
                         <button
-                          onClick={() => {
-                            setSelectedChannel(ch);
-                            setActiveSection("channel_settings");
-                          }}
-                          className="p-1 hover:bg-gray-100 rounded text-gray-500 transition font-bold"
+                          onClick={() => openBusinessProfile(ch)}
+                          title="Edit Business Profile"
+                          className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 border border-emerald-200 transition font-bold"
                         >
-                          ⋮
+                          💼 Profile
                         </button>
                       </td>
                     </tr>
@@ -394,346 +434,228 @@ export default function ConfigPage() {
         </div>
       )}
 
-      {/* 3. MEDIA LIBRARY SCREEN */}
-      {activeSection === "media_library" && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleImportFile("Media Library")}
-                className="bg-gray-100 border text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-200"
-              >
-                📥 Import
-              </button>
-              <button
-                onClick={() => handleExportData("Media Library")}
-                className="bg-gray-100 border text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-200"
-              >
-                📤 Export
-              </button>
-              <button
-                onClick={() => handleDownloadSample("Media Library")}
-                className="border border-blue-300 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-50"
-              >
-                💾 Download Sample
-              </button>
+      {activeSection === "business_profile" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-6">
+              <div>
+                <h2 className="text-base font-bold text-gray-800">Personal Info</h2>
+                <p className="text-xs text-gray-400">Update your photo and personal details here</p>
+              </div>
+
+              <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center space-y-2 hover:border-emerald-400 transition cursor-pointer">
+                <div className="mx-auto w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center font-bold text-lg">
+                  ☁️
+                </div>
+                <p className="text-xs font-bold text-gray-700">Click to upload</p>
+                <p className="text-[11px] text-gray-400">or drag and drop an image here</p>
+                <p className="text-[10px] text-gray-400">PNG, JPG up to 10MB. At least 400px wide and 400px tall is recommended.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Display Name</label>
+                  <input
+                    type="text"
+                    value={profileData.displayName}
+                    disabled
+                    className="w-full border rounded-lg p-2.5 bg-gray-100 text-gray-500 cursor-not-allowed"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Display Name can't be edited</p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Category</label>
+                  <select
+                    value={profileData.category}
+                    onChange={(e) => setProfileData({ ...profileData, category: e.target.value })}
+                    className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none"
+                  >
+                    <option value="Professional Services">Professional Services</option>
+                    <option value="Retail">Retail & Shopping</option>
+                    <option value="Finance">Finance & Banking</option>
+                    <option value="Education">Education</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1 text-xs">Description</label>
+                <textarea
+                  rows={4}
+                  value={profileData.description}
+                  onChange={(e) => setProfileData({ ...profileData, description: e.target.value })}
+                  className="w-full border rounded-lg p-2.5 bg-white text-xs text-gray-800 focus:outline-none"
+                />
+              </div>
             </div>
-            <button
-              onClick={() => setShowUploadMediaModal(true)}
-              className="bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow"
-            >
-              + Add Media
-            </button>
+
+            <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
+              <div>
+                <h2 className="text-base font-bold text-gray-800">Contact Info</h2>
+                <p className="text-xs text-gray-400">Manage your address and contact details here</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={profileData.email}
+                    onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                    className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Channel Number</label>
+                  <input
+                    type="text"
+                    value={profileData.channelNumber}
+                    disabled
+                    className="w-full border rounded-lg p-2.5 bg-gray-100 text-gray-500 cursor-not-allowed font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="text-xs">
+                <label className="block font-bold text-gray-700 mb-1">Address</label>
+                <textarea
+                  rows={2}
+                  value={profileData.address}
+                  onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
+                  className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none"
+                />
+              </div>
+
+              <div className="text-xs">
+                <label className="block font-bold text-gray-700 mb-1">Website</label>
+                <input
+                  type="text"
+                  value={profileData.website}
+                  onChange={(e) => setProfileData({ ...profileData, website: e.target.value })}
+                  className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <button
+                  onClick={() => setActiveSection("waba_channels")}
+                  className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveProfile}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-lg text-xs shadow"
+                >
+                  💾 Save Profile Details
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden text-xs">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                  <th className="p-4">Media</th>
-                  <th className="p-4">URL</th>
-                  <th className="p-4">WABA Number</th>
-                  <th className="p-4">Config Date</th>
-                  <th className="p-4 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {mediaList.map((m) => (
-                  <tr key={m.id} className="hover:bg-gray-50">
-                    <td className="p-4 font-bold text-gray-800">{m.media}</td>
-                    <td className="p-4 font-mono text-blue-600 truncate max-w-xs">
-                      {m.url}
-                    </td>
-                    <td className="p-4 font-mono">{m.wabaNumber}</td>
-                    <td className="p-4">{m.configDate}</td>
-                    <td className="p-4 text-center">
-                      <button
-                        onClick={() =>
-                          setMediaList(mediaList.filter((x) => x.id !== m.id))
-                        }
-                        className="text-red-500 font-bold hover:bg-red-50 p-1.5 rounded-lg"
-                      >
-                        🗑️ Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="bg-white p-4 rounded-2xl border shadow-sm flex flex-col items-center">
+            <p className="text-xs font-bold text-gray-500 mb-4">Template Preview</p>
+            <div className="w-[280px] bg-slate-900 rounded-[35px] p-3 shadow-2xl border-4 border-slate-800">
+              <div className="bg-emerald-800 text-white p-2 rounded-t-[25px] flex items-center gap-2 text-xs">
+                <span>💬</span>
+                <span className="font-bold truncate">{profileData.displayName}</span>
+              </div>
+              <div className="bg-slate-100 p-3 rounded-b-[25px] space-y-3 text-[11px] text-gray-800">
+                <div className="text-center space-y-1">
+                  <div className="w-16 h-16 bg-slate-800 rounded-full mx-auto flex items-center justify-center text-white font-bold text-lg shadow">
+                    FI
+                  </div>
+                  <h3 className="font-bold text-sm">{profileData.displayName}</h3>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl space-y-2 shadow-sm text-[10px]">
+                  <p className="text-gray-600 leading-snug">{profileData.description}</p>
+                  <div className="border-t pt-2 space-y-1 text-gray-500">
+                    <p>📂 {profileData.category}</p>
+                    <p>📍 {profileData.address}</p>
+                    <p>✉️ {profileData.email}</p>
+                    <p className="text-emerald-600 truncate">🌐 {profileData.website}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* 4. WHATSAPP CONTACTS SCREEN */}
-      {activeSection === "contacts" && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
-            <div className="flex space-x-2">
+      {showWebhookModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-sm text-gray-800">Update Webhook URL</h3>
               <button
-                onClick={() => handleImportFile("WhatsApp Contacts")}
-                className="bg-gray-100 border text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-200"
+                onClick={() => setShowWebhookModal(false)}
+                className="text-gray-400 hover:text-gray-600 font-bold"
               >
-                📥 Import Contacts
-              </button>
-              <button
-                onClick={() => handleExportData("WhatsApp Contacts")}
-                className="bg-gray-100 border text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-200"
-              >
-                📤 Export Contacts
-              </button>
-              <button
-                onClick={() => handleDownloadSample("WhatsApp Contacts")}
-                className="border border-blue-300 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-50"
-              >
-                💾 Download Sample
+                ✕
               </button>
             </div>
-            <button
-              onClick={() => setShowAddContactModal(true)}
-              className="bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow"
-            >
-              + Add Contact
-            </button>
-          </div>
 
-          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden text-xs">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                  <th className="p-4">Phone Number</th>
-                  <th className="p-4">Profile Name</th>
-                  <th className="p-4">Email ID</th>
-                  <th className="p-4">Contact Name</th>
-                  <th className="p-4 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {contacts.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-50">
-                    <td className="p-4 font-mono font-bold text-gray-800">
-                      +{c.number}
-                    </td>
-                    <td className="p-4 font-bold">{c.profileName}</td>
-                    <td className="p-4 text-gray-500">{c.email}</td>
-                    <td className="p-4">{c.contactName}</td>
-                    <td className="p-4 text-center space-x-2">
-                      <button
-                        onClick={() =>
-                          setContacts(contacts.filter((x) => x.id !== c.id))
-                        }
-                        className="text-red-500 font-bold hover:bg-red-50 p-1.5 rounded-lg"
-                      >
-                        🗑️ Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="space-y-4 text-xs text-left">
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">Webhook URL</label>
+                <input
+                  type="text"
+                  placeholder="https://yourdomain.com/webhook"
+                  value={webhookInput}
+                  onChange={(e) => setWebhookInput(e.target.value)}
+                  className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="enableAuth"
+                  checked={enableAuth}
+                  onChange={(e) => setEnableAuth(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                />
+                <label htmlFor="enableAuth" className="font-medium text-gray-600">
+                  Enable Authorization
+                </label>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">Select User Webhook Type</label>
+                <select
+                  value={webhookType}
+                  onChange={(e) => setWebhookType(e.target.value)}
+                  className="w-full border border-emerald-500 rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none"
+                >
+                  <option value="Default">Default</option>
+                  <option value="Moengage">Moengage</option>
+                  <option value="CleverTap">CleverTap</option>
+                  <option value="WebEngage">WebEngage</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-3 border-t">
+              <button
+                onClick={() => setShowWebhookModal(false)}
+                className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveWebhook}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-lg text-xs shadow"
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* 5. UNSUBSCRIBER NUMBER LIST */}
-      {activeSection === "unsubscribe" && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleImportFile("Unsubscriber Numbers")}
-                className="bg-gray-100 border text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-200"
-              >
-                📥 Import List
-              </button>
-              <button
-                onClick={() => handleExportData("Unsubscriber Numbers")}
-                className="bg-gray-100 border text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-200"
-              >
-                📤 Export List
-              </button>
-              <button
-                onClick={() => handleDownloadSample("Unsubscriber Numbers")}
-                className="border border-blue-300 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-50"
-              >
-                💾 Download Sample
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden text-xs">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                  <th className="p-4">Number</th>
-                  <th className="p-4">WABA Number</th>
-                  <th className="p-4">Unsubscribed On</th>
-                  <th className="p-4">Message Text</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {unsubscribers.map((u) => (
-                  <tr key={u.id} className="hover:bg-gray-50">
-                    <td className="p-4 font-mono font-bold text-red-600">
-                      +{u.number}
-                    </td>
-                    <td className="p-4 font-mono">{u.wabaNumber}</td>
-                    <td className="p-4">{u.unsubscribedOn}</td>
-                    <td className="p-4 font-mono bg-gray-50 px-2 py-1 rounded">
-                      {u.messageText}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* 6. MANAGE GROUP SCREEN */}
-      {activeSection === "groups" && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleImportFile("Groups")}
-                className="bg-gray-100 border text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-200"
-              >
-                📥 Import Groups
-              </button>
-              <button
-                onClick={() => handleExportData("Groups")}
-                className="bg-gray-100 border text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-200"
-              >
-                📤 Export Groups
-              </button>
-              <button
-                onClick={() => handleDownloadSample("Groups")}
-                className="border border-blue-300 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-50"
-              >
-                💾 Download Sample
-              </button>
-            </div>
-            <button
-              onClick={() => setShowAddGroupModal(true)}
-              className="bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow"
-            >
-              + Create Group
-            </button>
-          </div>
-
-          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden text-xs">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                  <th className="p-4">Group Name</th>
-                  <th className="p-4">Total Contacts</th>
-                  <th className="p-4 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {groups.map((g) => (
-                  <tr key={g.id} className="hover:bg-gray-50">
-                    <td className="p-4 font-bold text-gray-800">{g.name}</td>
-                    <td className="p-4 font-mono font-bold text-emerald-700">
-                      {g.totalContacts}
-                    </td>
-                    <td className="p-4 text-center space-x-2">
-                      <button
-                        onClick={() => handleImportFile(`Group: ${g.name}`)}
-                        className="bg-emerald-50 text-emerald-700 font-bold px-2.5 py-1 rounded-lg border border-emerald-200 hover:bg-emerald-100"
-                      >
-                        📥 Import
-                      </button>
-                      <button
-                        onClick={() => handleExportData(`Group: ${g.name}`)}
-                        className="bg-blue-50 text-blue-700 font-bold px-2.5 py-1 rounded-lg border border-blue-200 hover:bg-blue-100"
-                      >
-                        📤 Export
-                      </button>
-                      <button
-                        onClick={() =>
-                          setGroups(groups.filter((x) => x.id !== g.id))
-                        }
-                        className="text-red-500 font-bold hover:bg-red-50 p-1.5 rounded-lg"
-                      >
-                        🗑️ Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* 7. BLACKLIST NUMBERS SCREEN */}
-      {activeSection === "blacklist" && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleImportFile("Blacklist Numbers")}
-                className="bg-gray-100 border text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-200"
-              >
-                📥 Import File
-              </button>
-              <button
-                onClick={() => handleExportData("Blacklist Numbers")}
-                className="bg-gray-100 border text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-200"
-              >
-                📤 Export File
-              </button>
-              <button
-                onClick={() => handleDownloadSample("Blacklist Numbers")}
-                className="border border-blue-300 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-50"
-              >
-                💾 Download Sample
-              </button>
-            </div>
-            <button
-              onClick={() => setShowBlacklistModal(true)}
-              className="bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow"
-            >
-              + Block Number
-            </button>
-          </div>
-
-          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden text-xs">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                  <th className="p-4">Blocked Number</th>
-                  <th className="p-4">Created Date</th>
-                  <th className="p-4 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {blacklist.map((b) => (
-                  <tr key={b.id} className="hover:bg-gray-50">
-                    <td className="p-4 font-mono font-bold text-red-600">
-                      +{b.number}
-                    </td>
-                    <td className="p-4">{b.createdDate}</td>
-                    <td className="p-4 text-center">
-                      <button
-                        onClick={() =>
-                          setBlacklist(blacklist.filter((x) => x.id !== b.id))
-                        }
-                        className="text-emerald-600 font-bold hover:bg-emerald-50 px-3 py-1 rounded-lg"
-                      >
-                        Unblock
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* EMBEDDED FACEBOOK SIGNUP MODAL */}
       {showFacebookModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">

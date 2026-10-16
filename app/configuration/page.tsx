@@ -382,7 +382,7 @@ export default function ConfigPage() {
         </div>
       )}
 
-      {/* 3. MEDIA LIBRARY SCREEN WITH IMPORT, EXPORT & DOWNLOAD SAMPLE */}
+      {/* 3. MEDIA LIBRARY SCREEN */}
       {activeSection === "media_library" && (
         <div className="space-y-4">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
@@ -452,7 +452,7 @@ export default function ConfigPage() {
         </div>
       )}
 
-      {/* 4. WHATSAPP CONTACTS SCREEN WITH IMPORT, EXPORT & SAMPLE */}
+      {/* 4. WHATSAPP CONTACTS SCREEN */}
       {activeSection === "contacts" && (
         <div className="space-y-4">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
@@ -522,7 +522,7 @@ export default function ConfigPage() {
         </div>
       )}
 
-      {/* 5. UNSUBSCRIBER NUMBER LIST WITH IMPORT/EXPORT/SAMPLE */}
+      {/* 5. UNSUBSCRIBER NUMBER LIST */}
       {activeSection === "unsubscribe" && (
         <div className="space-y-4">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
@@ -577,7 +577,7 @@ export default function ConfigPage() {
         </div>
       )}
 
-      {/* 6. MANAGE GROUP SCREEN WITH IMPORT, EXPORT, DOWNLOAD SAMPLE & DELETE */}
+      {/* 6. MANAGE GROUP SCREEN */}
       {activeSection === "groups" && (
         <div className="space-y-4">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
@@ -655,7 +655,7 @@ export default function ConfigPage() {
         </div>
       )}
 
-      {/* 7. BLACKLIST NUMBERS SCREEN WITH IMPORT, EXPORT & SAMPLE */}
+      {/* 7. BLACKLIST NUMBERS SCREEN */}
       {activeSection === "blacklist" && (
         <div className="space-y-4">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
@@ -721,7 +721,7 @@ export default function ConfigPage() {
         </div>
       )}
 
-      {/* EMBEDDED FACEBOOK SIGNUP MODAL WITH AUTHENTIC DIALOG DURATION */}
+      {/* EMBEDDED FACEBOOK SIGNUP MODAL */}
       {showFacebookModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
@@ -766,11 +766,7 @@ export default function ConfigPage() {
                 className="bg-[#1877F2] hover:bg-[#165fe6] text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow flex items-center space-x-2 disabled:opacity-50"
               >
                 <span>🌐</span>
-                <span>
-                  {isProcessing
-                    ? "Connecting Meta Business..."
-                    : "Continue with Facebook"}
-                </span>
+                <span>{isProcessing ? "Connecting..." : "Continue with Facebook"}</span>
               </button>
             </div>
           </div>

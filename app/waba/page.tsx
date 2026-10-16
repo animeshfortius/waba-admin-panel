@@ -1,169 +1,67 @@
 "use client";
 
-import { useState } from "react";
-import { MoreVertical, Plus, CheckCircle, RefreshCw } from "lucide-react";
+import { Radio, ShieldCheck, RefreshCw, AlertTriangle } from "lucide-react";
 
-interface WabaChannel {
-  id: string;
-  wabaNumber: string;
-  phoneNumberId: string;
-  wabaBusinessId: string;
-  bspName: string;
-  messagingLimit: string;
-  qualityRating: string;
-  isVerified: boolean;
-  isDefault: boolean;
-  displayName: string;
-  configuredDate: string;
-  webhookUrl: string;
-}
-
-const wabaChannelsData: WabaChannel[] = [
-  {
-    id: "1",
-    wabaNumber: "15553945963",
-    phoneNumberId: "1384456657081014",
-    wabaBusinessId: "28402710282733872",
-    bspName: "BSP-3",
-    messagingLimit: "2000 | TIER_250",
-    qualityRating: "HIGH",
-    isVerified: true,
-    isDefault: true,
-    displayName: "Active-08",
-    configuredDate: "06 Oct 2026 11:53:57 AM",
-    webhookUrl: "NA",
-  },
-  {
-    id: "2",
-    wabaNumber: "15553945964",
-    phoneNumberId: "1092837461928374",
-    wabaBusinessId: "28402710282799999",
-    bspName: "BSP-1",
-    messagingLimit: "100K | TIER_100K",
-    qualityRating: "HIGH",
-    isVerified: true,
-    isDefault: false,
-    displayName: "Acme Corp Main",
-    configuredDate: "10 Oct 2026 04:20:10 PM",
-    webhookUrl: "https://api.example.com/webhook",
-  },
+const wabaAccounts = [
+  { id: "WABA-01", name: "Acme Corp Main", phone: "+91 9876543210", phoneId: "109283746", quality: "HIGH", tier: "100K/day", status: "CONNECTED" },
+  { id: "WABA-02", name: "Global Retail Support", phone: "+91 9711223344", phoneId: "584930219", quality: "HIGH", tier: "10K/day", status: "CONNECTED" },
+  { id: "WABA-03", name: "Zeta Marketing", phone: "+91 9988776655", phoneId: "991827364", quality: "LOW", tier: "1K/day", status: "FLAGGED" },
 ];
 
-export default function WabaChannelsPage() {
-  const [channels, setChannels] = useState<WabaChannel[]>(wabaChannelsData);
-
-  const handleSetDefault = (id: string) => {
-    setChannels((prev) =>
-      prev.map((ch) => ({
-        ...ch,
-        isDefault: ch.id === id,
-      }))
-    );
-  };
-
+export default function WabaAccountsPage() {
   return (
-    <div className="p-6 space-y-6">
-      {/* Breadcrumb Navigation */}
-      <div className="text-xs text-gray-500 font-medium space-x-1">
-        <span>WhatsApp</span>
-        <span>&gt;</span>
-        <span>Configuration</span>
-        <span>&gt;</span>
-        <span className="text-gray-800">WABA Channels</span>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">WABA Accounts & Phone Health</h1>
+        <p className="text-slate-500 text-sm">Monitor WhatsApp Business Accounts, phone number health, and messaging limit tiers.</p>
       </div>
 
-      {/* Header & Register Button */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">WABA Channels</h1>
-        <button className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow transition flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          Register New WhatsApp
-        </button>
-      </div>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900">Registered WABA Phone Numbers</h2>
+          <button className="text-slate-600 hover:text-slate-900 text-xs font-medium flex items-center gap-1 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh Health
+          </button>
+        </div>
 
-      {/* Table Area */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
-        <table className="w-full text-left text-xs border-collapse">
-          <thead>
-            <tr className="bg-slate-50 text-slate-600 font-bold border-b border-gray-200 uppercase tracking-wider">
-              <th className="p-3">WABA NUMBER</th>
-              <th className="p-3">PHONENUMBER ID</th>
-              <th className="p-3">WABA BUSINESSID</th>
-              <th className="p-3">BSP NAME</th>
-              <th className="p-3">MESSAGING LIMIT</th>
-              <th className="p-3">QUALITY RATING</th>
-              <th className="p-3 text-center">DEFAULT</th>
-              <th className="p-3">DISPLAY NAME</th>
-              <th className="p-3">CONFIGUREDATE</th>
-              <th className="p-3">WEBHOOK URL</th>
-              <th className="p-3 text-center">ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 text-gray-700 font-medium">
-            {channels.map((channel) => (
-              <tr key={channel.id} className="hover:bg-slate-50 transition">
-                <td className="p-3 font-semibold text-slate-800">
-                  {channel.wabaNumber}
-                </td>
-                <td className="p-3 font-mono text-slate-600">
-                  {channel.phoneNumberId}
-                </td>
-                <td className="p-3 font-mono text-slate-600">
-                  {channel.wabaBusinessId}
-                </td>
-                <td className="p-3">{channel.bspName}</td>
-                <td className="p-3">
-                  <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-200 font-semibold text-[11px] inline-flex items-center gap-1">
-                    🟡 {channel.messagingLimit}
-                  </span>
-                </td>
-                <td className="p-3">
-                  <div className="flex items-center gap-1 font-bold text-emerald-600">
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    <span>{channel.qualityRating}</span>
-                    {channel.isVerified && (
-                      <span className="text-gray-400 font-normal">| VERIFIED</span>
-                    )}
-                  </div>
-                </td>
-                <td className="p-3 text-center">
-                  <label className="inline-flex items-center cursor-pointer gap-1.5">
-                    <input
-                      type="radio"
-                      name="defaultChannel"
-                      checked={channel.isDefault}
-                      onChange={() => handleSetDefault(channel.id)}
-                      className="text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
-                    />
-                    <span className="text-[11px] text-gray-500">
-                      {channel.isDefault ? "Default" : "Set Default"}
-                    </span>
-                  </label>
-                </td>
-                <td className="p-3 font-semibold text-slate-800">
-                  {channel.displayName}
-                </td>
-                <td className="p-3 text-gray-500 whitespace-nowrap">
-                  {channel.configuredDate}
-                </td>
-                <td className="p-3 text-gray-400 font-mono">
-                  {channel.webhookUrl}
-                </td>
-                <td className="p-3 text-center">
-                  <button className="p-1 hover:bg-gray-100 rounded text-gray-500 transition">
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                <th className="p-4">Account Name</th>
+                <th className="p-4">Phone Number</th>
+                <th className="p-4">Phone Number ID</th>
+                <th className="p-4">Messaging Tier</th>
+                <th className="p-4">Quality Rating</th>
+                <th className="p-4">Connection</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Footer info */}
-        <div className="p-3 border-t border-gray-100 text-xs text-gray-500 flex justify-between items-center">
-          <span>
-            Showing 1 to {channels.length} of {channels.length} records
-          </span>
+            </thead>
+            <tbody className="divide-y divide-slate-200 text-sm">
+              {wabaAccounts.map((waba) => (
+                <tr key={waba.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="p-4 font-semibold text-slate-900">{waba.name}</td>
+                  <td className="p-4 text-slate-700">{waba.phone}</td>
+                  <td className="p-4 font-mono text-xs text-slate-500">{waba.phoneId}</td>
+                  <td className="p-4 text-slate-600">{waba.tier}</td>
+                  <td className="p-4">
+                    <span className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                      waba.quality === 'HIGH' ? 'text-emerald-600' : 'text-red-600'
+                    }`}>
+                      {waba.quality === 'HIGH' ? <ShieldCheck className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                      {waba.quality}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                      waba.status === 'CONNECTED' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {waba.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

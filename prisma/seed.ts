@@ -11,6 +11,7 @@ async function main() {
     update: {},
     create: {
       name: "Super Admin",
+      username: "admin", // Yahan naya username jodh diya gaya hai
       email: "admin@waba.com",
       password: hashedPassword,
       role: Role.SUPER_ADMIN,

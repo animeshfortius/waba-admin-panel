@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import LogoutButton from "@/components/LogoutButton";
 import { 
   LayoutDashboard, 
   Users, 
@@ -14,7 +15,7 @@ import {
 
 const navItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Admin Panel", href: "/admin/admin-home", icon: ShieldAlert }, // Ye naya add kiya hai
+  { name: "Admin Panel", href: "/admin/admin-home", icon: ShieldAlert },
   { name: "Clients", href: "/clients", icon: Users },
   { name: "WABA Accounts", href: "/waba", icon: Radio },
   { name: "Broadcasts", href: "/broadcasts", icon: MessageSquare },
@@ -55,8 +56,13 @@ export default function Sidebar() {
         </nav>
       </div>
 
-      <div className="border-t border-slate-800 pt-4 px-2 text-xs text-slate-500">
-        WABA SaaS Platform v1.0
+      <div className="border-t border-slate-800 pt-4 px-2 flex flex-col gap-3">
+        {/* Logout Button yahan add ho gaya hai */}
+        <LogoutButton />
+        
+        <div className="text-xs text-slate-500">
+          WABA SaaS Platform v1.0
+        </div>
       </div>
     </aside>
   );

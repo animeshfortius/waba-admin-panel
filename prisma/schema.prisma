@@ -21,12 +21,14 @@ model User {
   password       String
   role           Role     @default(USER)
   
+  walletBalance  Float    @default(0.0)
+  actualBalance  Float    @default(0.0) // Reseller ke liye Actual Balance
+  virtualBalance Float    @default(0.0) // Reseller aur User ke liye Virtual Balance
+  perMsgRate     Float    @default(0.80)
+
   createdById    String?
   createdBy      User?    @relation("UserHierarchy", fields: [createdById], references: [id])
   childUsers     User[]   @relation("UserHierarchy")
-
-  walletBalance  Float    @default(0.0)
-  perMsgRate     Float    @default(0.80)
 
   transactions   WalletTransaction[]
   wabaAccounts   WabaAccount[]

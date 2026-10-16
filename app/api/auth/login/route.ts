@@ -22,8 +22,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
 
-    // 3. Return user data
-    return NextResponse.json({
+    // 3. Create response and set cookie for middleware
+    const response = NextResponse.json({
       message: "Login successful",
       user: {
         id: user.id,
@@ -33,7 +33,20 @@ export async function POST(req: Request) {
         role: user.role,
       },
     });
-  } catch (error) {
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+
+    // Middleware ke liye token cookie set karein (yahan simple user id ya dummy token de rahe hain)
+    response.cookies.set({
+      name: "token",
+      value: user.id,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7, // 1 week
+    });
+
+    return response;
+  } catch (error: any) {
+    console.error("Login API Error:", error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }

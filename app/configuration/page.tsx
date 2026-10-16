@@ -51,6 +51,7 @@ export default function ConfigPage() {
     channelNumber: "15553945963",
     address: "Lucknow, UP, India",
     website: "https://www.fortiusinfocom.com/",
+    profileImage: null as string | null,
   });
 
   const [showFacebookModal, setShowFacebookModal] = useState(false);
@@ -129,6 +130,15 @@ export default function ConfigPage() {
       channelNumber: channel.wabaNumber || "15553945963",
     }));
     setActiveSection("business_profile");
+  };
+
+  const handleImageUpload = (e: any) => {
+    const file = e.target.files[0];
+    if (file) {
+      const imageUrl = URL.createObjectURL(file);
+      setProfileData((prev) => ({ ...prev, profileImage: imageUrl }));
+      alert(`Image "${file.name}" selected successfully!`);
+    }
   };
 
   const handleSaveProfile = () => {
@@ -443,14 +453,24 @@ export default function ConfigPage() {
                 <p className="text-xs text-gray-400">Update your photo and personal details here</p>
               </div>
 
-              <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center space-y-2 hover:border-emerald-400 transition cursor-pointer">
-                <div className="mx-auto w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center font-bold text-lg">
+              {/* Functional Click to Upload Box */}
+              <label className="border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center space-y-2 hover:border-emerald-500 transition cursor-pointer block bg-gray-50/50">
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/jpg"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                />
+                <div className="mx-auto w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center font-bold text-lg shadow-sm">
                   ☁️
                 </div>
                 <p className="text-xs font-bold text-gray-700">Click to upload</p>
                 <p className="text-[11px] text-gray-400">or drag and drop an image here</p>
                 <p className="text-[10px] text-gray-400">PNG, JPG up to 10MB. At least 400px wide and 400px tall is recommended.</p>
-              </div>
+                {profileData.profileImage && (
+                  <p className="text-xs font-bold text-emerald-600 pt-2">✓ Image Selected Successfully!</p>
+                )}
+              </label>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                 <div>
@@ -564,8 +584,12 @@ export default function ConfigPage() {
               </div>
               <div className="bg-slate-100 p-3 rounded-b-[25px] space-y-3 text-[11px] text-gray-800">
                 <div className="text-center space-y-1">
-                  <div className="w-16 h-16 bg-slate-800 rounded-full mx-auto flex items-center justify-center text-white font-bold text-lg shadow">
-                    FI
+                  <div className="w-16 h-16 bg-slate-800 rounded-full mx-auto flex items-center justify-center text-white font-bold text-lg shadow overflow-hidden">
+                    {profileData.profileImage ? (
+                      <img src={profileData.profileImage} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      "FI"
+                    )}
                   </div>
                   <h3 className="font-bold text-sm">{profileData.displayName}</h3>
                 </div>

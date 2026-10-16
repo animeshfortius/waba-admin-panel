@@ -4,21 +4,24 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  const hashedPassword = await bcrypt.hash("Admin@123", 10); // Aap apna password yahan change kar sakte hain
+  const hashedPassword = await bcrypt.hash("Admin@123", 10);
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@waba.com" },
-    update: {},
+    update: {
+      username: "admin", // Purane user ka username force-update karne ke liye
+      password: hashedPassword,
+    },
     create: {
       name: "Super Admin",
-      username: "admin", // Yahan naya username jodh diya gaya hai
+      username: "admin",
       email: "admin@waba.com",
       password: hashedPassword,
       role: Role.SUPER_ADMIN,
     },
   });
 
-  console.log({ admin });
+  console.log("Admin seeded successfully:", admin);
 }
 
 main()

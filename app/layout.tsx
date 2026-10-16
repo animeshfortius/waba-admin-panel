@@ -1,3 +1,4 @@
+import LogoutButton from "@/components/LogoutButton";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
@@ -91,16 +92,21 @@ export default function RootLayout({
                   <span>₹24,500</span>
                 </div>
 
-                {/* Right Profile Section */}
-                <Link href="/profile" className="flex items-center space-x-3 pl-4 border-l border-gray-200 hover:opacity-80 transition cursor-pointer">
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-gray-800">Fortius Infocom</p>
-                    <p className="text-xs text-emerald-600 font-medium">Admin Panel</p>
-                  </div>
-                  <div className="h-9 w-9 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-sm shadow">
-                    FI
-                  </div>
-                </Link>
+                {/* Right Profile & Logout Section */}
+                <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">
+                  <Link href="/profile" className="flex items-center space-x-3 hover:opacity-80 transition cursor-pointer">
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-gray-800">Fortius Infocom</p>
+                      <p className="text-xs text-emerald-600 font-medium">Admin Panel</p>
+                    </div>
+                    <div className="h-9 w-9 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-sm shadow">
+                      FI
+                    </div>
+                  </Link>
+
+                  {/* FI Avatar ke bagal me Logout Button */}
+                  <LogoutButton />
+                </div>
               </div>
             </header>
 

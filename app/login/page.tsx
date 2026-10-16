@@ -1,14 +1,13 @@
-"use client"; // Agar Next.js App Router me client component use karna hai
+"use client";
 
-import { useState } from "formidable"; // ya React standard hooks
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useState as useReactState } from "react";
 
 export default function LoginPage() {
-  const [email, setEmail] = useReactState("");
-  const [password, setPassword] = useReactState("");
-  const [error, setError] = useReactState("");
-  const [loading, setLoading] = useReactState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -29,7 +28,7 @@ export default function LoginPage() {
         throw new Error(data.error || "Login failed");
       }
 
-      // Login successful hone par admin dashboard par bhej dein
+      // Login successful hone par admin dashboard par redirect karein
       router.push("/admin");
     } catch (err: any) {
       setError(err.message || "Something went wrong");

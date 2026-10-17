@@ -8,7 +8,7 @@ export default function UserManagementPage() {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUser, setSelectedUser] = useState<any>(null); // Details tabhi dikhengi jab ye set hoga
   const [activeTab, setActiveTab] = useState("profile");
 
   // Modals
@@ -46,7 +46,7 @@ export default function UserManagementPage() {
   const [oversellBalance, setOversellBalance] = useState(0);
   const [transactions, setTransactions] = useState<any[]>([]);
 
-  // Initial Load: Fetch All Users
+  // 1. Initial Load: Fetch All Users
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -62,24 +62,13 @@ export default function UserManagementPage() {
     }
   };
 
-  // Select User Handler
-  const selectUserHandler = (user: any) => {
-    setSelectedUser(user);
+  // 2. Suggestion Click Handler: Sirf search box me name set karega, details show nahi karega
+  const handleSuggestionSelect = (user: any) => {
     setSearchQuery(user.name || user.username || user.email || "");
-    setFormData({
-      name: user.name || "",
-      email: user.email || "",
-      phone: user.phone || "",
-      role: user.role || "USER",
-      status: "Active",
-      expiryDate: user.expiryDate ? String(user.expiryDate).substring(0, 10) : "2026-10-29",
-    });
     setShowSuggestions(false);
-    setChangePasswordToggle(false);
-    setNewPasswordInput("");
   };
 
-  // Search Input Change
+  // 3. Dynamic Search Input Change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -101,7 +90,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // Search Button Click
+  // 4. Search Button Click Handler: Button click par hi details load hongi
   const handleSearchClick = () => {
     if (!searchQuery.trim()) {
       alert("Please enter a username or email to search!");
@@ -118,7 +107,19 @@ export default function UserManagementPage() {
     );
 
     if (found) {
-      selectUserHandler(found);
+      // Ab User Details Set hongi
+      setSelectedUser(found);
+      setFormData({
+        name: found.name || "",
+        email: found.email || "",
+        phone: found.phone || "",
+        role: found.role || "USER",
+        status: "Active",
+        expiryDate: found.expiryDate ? String(found.expiryDate).substring(0, 10) : "2026-10-29",
+      });
+      setShowSuggestions(false);
+      setChangePasswordToggle(false);
+      setNewPasswordInput("");
     } else {
       alert(`User "${searchQuery}" not found in database!`);
       setSelectedUser(null);
@@ -225,7 +226,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // Rates Save Handler - Connected to Real API
+  // Rates Save Handler
   const handleSaveRates = async () => {
     if (!selectedUser?.id) return;
 
@@ -293,7 +294,7 @@ export default function UserManagementPage() {
                 {suggestions.map((u) => (
                   <div
                     key={u.id}
-                    onClick={() => selectUserHandler(u)}
+                    onClick={() => handleSuggestionSelect(u)}
                     className="p-3 hover:bg-emerald-50 cursor-pointer flex justify-between items-center"
                   >
                     <div>
@@ -335,7 +336,7 @@ export default function UserManagementPage() {
           </p>
         </div>
       ) : (
-        /* Main Tabs Layout */
+        /* Main Tabs Layout (Shows ONLY when Search button is clicked) */
         <div className="bg-white rounded-2xl border shadow-sm p-6 space-y-6">
           <div className="flex flex-wrap border-b space-x-6 font-semibold text-gray-500 text-xs">
             {[

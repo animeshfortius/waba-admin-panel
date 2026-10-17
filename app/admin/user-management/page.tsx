@@ -25,7 +25,7 @@ export default function UserManagementPage() {
     expiryDate: "2026-10-29",
   });
 
-  // Rates State (Utility, Service, Authentication, Marketing)
+  // Rates State
   const [marginType, setMarginType] = useState("Fixed Price");
   const [rates, setRates] = useState({
     utility: "0.1550",
@@ -90,7 +90,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // 4. Search Button Click Handler (Loads details ONLY on click)
+  // 4. Search Button Click Handler
   const handleSearchClick = () => {
     if (!searchQuery.trim()) {
       alert("Please enter a username or email to search!");
@@ -353,7 +353,6 @@ export default function UserManagementPage() {
               { id: "profile", label: "👤 Profile" },
               { id: "whatsapp", label: "💬 WhatsApp" },
               { id: "funds", label: "💳 Funds" },
-              { id: "products", label: "📦 Products" },
               { id: "email_setting", label: "📧 Email Setting" },
               { id: "seemore", label: "⚙️ See More" },
             ].map((tab) => (

@@ -25,7 +25,7 @@ export default function UserManagementPage() {
     expiryDate: "2026-10-29",
   });
 
-  // Rates State
+  // Rates State (Utility, Service, Authentication, Marketing)
   const [marginType, setMarginType] = useState("Fixed Price");
   const [rates, setRates] = useState({
     utility: "0.1550",
@@ -90,7 +90,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // 4. Search Button Click Details Load Handler
+  // 4. Search Button Click Handler (Loads details ONLY on click)
   const handleSearchClick = () => {
     if (!searchQuery.trim()) {
       alert("Please enter a username or email to search!");
@@ -125,7 +125,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // 5. Load Funds & Rates on User Selection
+  // 5. Fetch Funds & Rates on User Select
   useEffect(() => {
     if (selectedUser?.id) {
       fetch(`/api/admin/funds?userId=${selectedUser.id}`)
@@ -142,23 +142,22 @@ export default function UserManagementPage() {
       fetch(`/api/admin/rates?userId=${selectedUser.id}`)
         .then((res) => res.json())
         .then((data) => {
-          if (data.success && data.perMsgRate !== undefined) {
-            setRates((prev) => ({ ...prev, marketing: String(data.perMsgRate) }));
+          if (data.success && data.rates) {
+            setRates({
+              utility: String(data.rates.utility),
+              service: String(data.rates.service),
+              authentication: String(data.rates.authentication),
+              marketing: String(data.rates.marketing),
+            });
           }
         })
         .catch((err) => console.error("Error loading rates:", err));
     }
   }, [selectedUser]);
 
-  // 6. Save Rates Handler with Live State Update
+  // 6. Save All Rates Handler
   const handleSaveRates = async () => {
     if (!selectedUser?.id) return;
-
-    const rateVal = parseFloat(rates.marketing);
-    if (isNaN(rateVal) || rateVal <= 0) {
-      alert("Please enter a valid rate!");
-      return;
-    }
 
     try {
       const res = await fetch("/api/admin/rates", {
@@ -166,14 +165,26 @@ export default function UserManagementPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: selectedUser.id,
-          perMsgRate: rateVal,
+          rates: {
+            utility: rates.utility,
+            service: rates.service,
+            authentication: rates.authentication,
+            marketing: rates.marketing,
+          },
         }),
       });
 
       const result = await res.json();
       if (result.success) {
-        alert("WhatsApp rates updated and saved in database successfully!");
-        setRates((prev) => ({ ...prev, marketing: String(result.perMsgRate) }));
+        alert("All WhatsApp rates updated and saved in database successfully!");
+        if (result.rates) {
+          setRates({
+            utility: String(result.rates.utility),
+            service: String(result.rates.service),
+            authentication: String(result.rates.authentication),
+            marketing: String(result.rates.marketing),
+          });
+        }
         setShowRateModal(false);
       } else {
         alert("Failed to save rates: " + result.message);
@@ -215,7 +226,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // 8. Fund Transfer Handler
+  // 8. Transfer Funds
   const handleTransferFund = async () => {
     const amt = parseFloat(fundAmount);
     if (isNaN(amt) || amt <= 0) {

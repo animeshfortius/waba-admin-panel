@@ -8,7 +8,7 @@ export default function UserManagementPage() {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
-  const [selectedUser, setSelectedUser] = useState<any>(null); // Details tabhi dikhengi jab ye set hoga
+  const [selectedUser, setSelectedUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("profile");
 
   // Modals
@@ -31,7 +31,7 @@ export default function UserManagementPage() {
     utility: "0.1550",
     service: "0.1550",
     authentication: "0.1550",
-    marketing: "0.8246",
+    marketing: "0.8046",
   });
 
   // Password Toggle
@@ -46,7 +46,7 @@ export default function UserManagementPage() {
   const [oversellBalance, setOversellBalance] = useState(0);
   const [transactions, setTransactions] = useState<any[]>([]);
 
-  // 1. Initial Load: Fetch All Users
+  // 1. Initial Load: Fetch Users
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -62,13 +62,13 @@ export default function UserManagementPage() {
     }
   };
 
-  // 2. Suggestion Click Handler: Sirf search box me name set karega, details show nahi karega
+  // 2. Suggestion click fills search bar
   const handleSuggestionSelect = (user: any) => {
     setSearchQuery(user.name || user.username || user.email || "");
     setShowSuggestions(false);
   };
 
-  // 3. Dynamic Search Input Change
+  // 3. Search Input Change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -90,7 +90,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // 4. Search Button Click Handler: Button click par hi details load hongi
+  // 4. Search Button Click Details Load Handler
   const handleSearchClick = () => {
     if (!searchQuery.trim()) {
       alert("Please enter a username or email to search!");
@@ -107,7 +107,6 @@ export default function UserManagementPage() {
     );
 
     if (found) {
-      // Ab User Details Set hongi
       setSelectedUser(found);
       setFormData({
         name: found.name || "",
@@ -126,7 +125,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // Fetch Funds & Rates Data when selectedUser changes
+  // 5. Load Funds & Rates on User Selection
   useEffect(() => {
     if (selectedUser?.id) {
       fetch(`/api/admin/funds?userId=${selectedUser.id}`)
@@ -144,15 +143,48 @@ export default function UserManagementPage() {
         .then((res) => res.json())
         .then((data) => {
           if (data.success && data.perMsgRate !== undefined) {
-            const mRate = data.perMsgRate.toString();
-            setRates((prev) => ({ ...prev, marketing: mRate }));
+            setRates((prev) => ({ ...prev, marketing: String(data.perMsgRate) }));
           }
         })
         .catch((err) => console.error("Error loading rates:", err));
     }
   }, [selectedUser]);
 
-  // Update Settings Handler
+  // 6. Save Rates Handler with Live State Update
+  const handleSaveRates = async () => {
+    if (!selectedUser?.id) return;
+
+    const rateVal = parseFloat(rates.marketing);
+    if (isNaN(rateVal) || rateVal <= 0) {
+      alert("Please enter a valid rate!");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/admin/rates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          perMsgRate: rateVal,
+        }),
+      });
+
+      const result = await res.json();
+      if (result.success) {
+        alert("WhatsApp rates updated and saved in database successfully!");
+        setRates((prev) => ({ ...prev, marketing: String(result.perMsgRate) }));
+        setShowRateModal(false);
+      } else {
+        alert("Failed to save rates: " + result.message);
+      }
+    } catch (err) {
+      console.error("Error saving rates:", err);
+      alert("Error saving rates to database.");
+    }
+  };
+
+  // 7. Update User Profile Settings
   const handleUpdateSettings = async () => {
     if (!selectedUser) return;
 
@@ -183,7 +215,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // Fund Transfer Handler
+  // 8. Fund Transfer Handler
   const handleTransferFund = async () => {
     const amt = parseFloat(fundAmount);
     if (isNaN(amt) || amt <= 0) {
@@ -226,42 +258,9 @@ export default function UserManagementPage() {
     }
   };
 
-  // Rates Save Handler
-  const handleSaveRates = async () => {
-    if (!selectedUser?.id) return;
-
-    const rateVal = parseFloat(rates.marketing);
-    if (isNaN(rateVal) || rateVal <= 0) {
-      alert("Please enter a valid selling rate!");
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/admin/rates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: selectedUser.id,
-          perMsgRate: rateVal,
-        }),
-      });
-
-      const result = await res.json();
-      if (result.success) {
-        alert("WhatsApp rates updated and saved in database successfully!");
-        setShowRateModal(false);
-      } else {
-        alert("Failed to save rates: " + result.message);
-      }
-    } catch (err) {
-      console.error("Error saving rates:", err);
-      alert("Error saving rates to database.");
-    }
-  };
-
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 text-xs font-sans">
-      {/* Top Header */}
+      {/* Header */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
         <div>
           <div className="text-gray-400">Admin Home › User Management</div>
@@ -326,7 +325,7 @@ export default function UserManagementPage() {
         </button>
       </div>
 
-      {/* Prompt when no user selected */}
+      {/* Empty State Prompt */}
       {!selectedUser ? (
         <div className="bg-white rounded-2xl border shadow-sm p-16 text-center space-y-3">
           <div className="text-4xl">🔍</div>
@@ -336,7 +335,7 @@ export default function UserManagementPage() {
           </p>
         </div>
       ) : (
-        /* Main Tabs Layout (Shows ONLY when Search button is clicked) */
+        /* Tabs Section */
         <div className="bg-white rounded-2xl border shadow-sm p-6 space-y-6">
           <div className="flex flex-wrap border-b space-x-6 font-semibold text-gray-500 text-xs">
             {[
@@ -361,7 +360,7 @@ export default function UserManagementPage() {
             ))}
           </div>
 
-          {/* 1. PROFILE TAB */}
+          {/* PROFILE TAB */}
           {activeTab === "profile" && (
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
               <div className="lg:col-span-1 border rounded-2xl p-6 text-center space-y-3 bg-gray-50/50">
@@ -522,7 +521,7 @@ export default function UserManagementPage() {
             </div>
           )}
 
-          {/* 2. WHATSAPP TAB */}
+          {/* WHATSAPP TAB */}
           {activeTab === "whatsapp" && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -542,7 +541,7 @@ export default function UserManagementPage() {
             </div>
           )}
 
-          {/* 3. FUNDS TAB */}
+          {/* FUNDS TAB */}
           {activeTab === "funds" && (
             <div className="space-y-6">
               <div className="flex justify-between items-center border-b pb-3">
@@ -613,7 +612,7 @@ export default function UserManagementPage() {
             </div>
           )}
 
-          {/* 4. EMAIL SETTINGS TAB */}
+          {/* EMAIL SETTINGS TAB */}
           {activeTab === "email_setting" && (
             <div className="space-y-4 max-w-xl">
               <div className="space-y-3">
@@ -641,7 +640,7 @@ export default function UserManagementPage() {
             </div>
           )}
 
-          {/* 5. SEE MORE TAB */}
+          {/* SEE MORE TAB */}
           {activeTab === "seemore" && (
             <div className="flex space-x-4">
               <button
@@ -661,7 +660,7 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* DYNAMIC FUND TRANSFER MODAL */}
+      {/* FUND TRANSFER MODAL */}
       {showFundModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
@@ -723,7 +722,7 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* MANAGE USER RATES MODAL */}
+      {/* MANAGE RATES MODAL */}
       {showRateModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-4xl w-full p-6 space-y-4">

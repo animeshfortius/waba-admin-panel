@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET handler to fetch user's rates
+// GET: Fetch selected user rates from Neon PostgreSQL
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -9,7 +9,7 @@ export async function GET(req: Request) {
 
     if (!userId) {
       return NextResponse.json(
-        { success: false, message: "User ID is required" },
+        { success: false, message: "User ID required" },
         { status: 400 }
       );
     }
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
   }
 }
 
-// POST handler to update user's rates in Neon PostgreSQL
+// POST: Save selected user rates to Neon PostgreSQL
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
 
     if (!userId || perMsgRate === undefined) {
       return NextResponse.json(
-        { success: false, message: "User ID and perMsgRate are required" },
+        { success: false, message: "User ID and rate required" },
         { status: 400 }
       );
     }
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Rates updated successfully in database!",
+      message: "Rates updated and saved successfully in database!",
       perMsgRate: updatedUser.perMsgRate,
     });
   } catch (error: any) {

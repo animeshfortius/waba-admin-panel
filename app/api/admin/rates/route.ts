@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// 1. GET: Fetch user's message rate
+// 1. GET: User ke sabhi 4 categories ke rates fetch karna
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -16,18 +16,21 @@ export async function GET(req: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { perMsgRate: true },
+      select: {
+        perMsgRate: true,
+        utilityRate: true,
+        serviceRate: true,
+        authRate: true,
+      },
     });
-
-    const currentRate = user?.perMsgRate ?? 0.8046;
 
     return NextResponse.json({
       success: true,
       rates: {
-        utility: currentRate,
-        service: currentRate,
-        authentication: currentRate,
-        marketing: currentRate,
+        utility: user?.utilityRate ?? 0.1550,
+        service: user?.serviceRate ?? 0.1550,
+        authentication: user?.authRate ?? 0.1550,
+        marketing: user?.perMsgRate ?? 0.8046,
       },
     });
   } catch (error: any) {
@@ -39,7 +42,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST: Save message rate to database
+// 2. POST: Saare 4 rates ko alag-alag Neon DB me save karna
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -47,28 +50,28 @@ export async function POST(req: Request) {
 
     if (!userId || !rates) {
       return NextResponse.json(
-        { success: false, message: "User ID and rates are required" },
+        { success: false, message: "User ID and rates object are required" },
         { status: 400 }
       );
     }
 
-    // Since schema has perMsgRate, we use marketing rate (or any of the rates provided)
-    const newRate = parseFloat(rates.marketing || rates.utility || 0.8046);
-
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
-        perMsgRate: newRate,
+        utilityRate: parseFloat(rates.utility || 0.1550),
+        serviceRate: parseFloat(rates.service || 0.1550),
+        authRate: parseFloat(rates.authentication || 0.1550),
+        perMsgRate: parseFloat(rates.marketing || 0.8046),
       },
     });
 
     return NextResponse.json({
       success: true,
-      message: "Rates updated successfully in database!",
+      message: "All WhatsApp rates updated successfully!",
       rates: {
-        utility: updatedUser.perMsgRate,
-        service: updatedUser.perMsgRate,
-        authentication: updatedUser.perMsgRate,
+        utility: updatedUser.utilityRate,
+        service: updatedUser.serviceRate,
+        authentication: updatedUser.authRate,
         marketing: updatedUser.perMsgRate,
       },
     });

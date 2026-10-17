@@ -14,29 +14,34 @@ enum Role {
 }
 
 model User {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   name           String
-  username       String?  @unique
-  email          String   @unique
+  username       String?   @unique
+  email          String    @unique
   password       String
   phone          String?
   expiryDate     String?
-  role           Role     @default(USER)
+  role           Role      @default(USER)
 
-  walletBalance  Float    @default(0.0)
-  actualBalance  Float    @default(0.0)
-  virtualBalance Float    @default(0.0)
-  perMsgRate     Float    @default(0.80)
+  walletBalance  Float     @default(0.0)
+  actualBalance  Float     @default(0.0)
+  virtualBalance Float     @default(0.0)
+
+  // WhatsApp Category Rates
+  perMsgRate     Float     @default(0.8046) // Marketing Rate
+  utilityRate    Float     @default(0.1550) // Utility Rate
+  serviceRate    Float     @default(0.1550) // Service Rate
+  authRate       Float     @default(0.1550) // Authentication Rate
 
   createdById    String?
-  createdBy      User?    @relation("UserHierarchy", fields: [createdById], references: [id])
-  childUsers     User[]   @relation("UserHierarchy")
+  createdBy      User?     @relation("UserHierarchy", fields: [createdById], references: [id])
+  childUsers     User[]    @relation("UserHierarchy")
 
   transactions   WalletTransaction[]
   wabaAccounts   WabaAccount[]
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 model WalletTransaction {

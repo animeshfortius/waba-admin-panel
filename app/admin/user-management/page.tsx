@@ -8,7 +8,7 @@ export default function UserManagementPage() {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
-  const [selectedUser, setSelectedUser] = useState<any>(null); // Default null (No details shown initially)
+  const [selectedUser, setSelectedUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("profile");
 
   // Modals
@@ -46,7 +46,7 @@ export default function UserManagementPage() {
   const [oversellBalance, setOversellBalance] = useState(0);
   const [transactions, setTransactions] = useState<any[]>([]);
 
-  // 1. Initial Load: Fetch All Users (Without auto-selecting anyone)
+  // Initial Load: Fetch All Users
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -62,7 +62,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // 2. Select User Handler
+  // Select User Handler
   const selectUserHandler = (user: any) => {
     setSelectedUser(user);
     setSearchQuery(user.name || user.username || user.email || "");
@@ -79,7 +79,7 @@ export default function UserManagementPage() {
     setNewPasswordInput("");
   };
 
-  // 3. Dynamic Search Input Change
+  // Search Input Change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -101,7 +101,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // 4. Manual Search Button Click Handler
+  // Search Button Click
   const handleSearchClick = () => {
     if (!searchQuery.trim()) {
       alert("Please enter a username or email to search!");
@@ -125,7 +125,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // 5. Fetch Funds Data when selectedUser changes
+  // Fetch Funds & Rates Data when selectedUser changes
   useEffect(() => {
     if (selectedUser?.id) {
       fetch(`/api/admin/funds?userId=${selectedUser.id}`)
@@ -138,10 +138,20 @@ export default function UserManagementPage() {
           }
         })
         .catch((err) => console.error("Error loading user funds:", err));
+
+      fetch(`/api/admin/rates?userId=${selectedUser.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.perMsgRate !== undefined) {
+            const mRate = data.perMsgRate.toString();
+            setRates((prev) => ({ ...prev, marketing: mRate }));
+          }
+        })
+        .catch((err) => console.error("Error loading rates:", err));
     }
   }, [selectedUser]);
 
-  // 6. Update Settings Handler
+  // Update Settings Handler
   const handleUpdateSettings = async () => {
     if (!selectedUser) return;
 
@@ -172,7 +182,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // 7. Fund Transfer Handler
+  // Fund Transfer Handler
   const handleTransferFund = async () => {
     const amt = parseFloat(fundAmount);
     if (isNaN(amt) || amt <= 0) {
@@ -215,6 +225,39 @@ export default function UserManagementPage() {
     }
   };
 
+  // Rates Save Handler - Connected to Real API
+  const handleSaveRates = async () => {
+    if (!selectedUser?.id) return;
+
+    const rateVal = parseFloat(rates.marketing);
+    if (isNaN(rateVal) || rateVal <= 0) {
+      alert("Please enter a valid selling rate!");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/admin/rates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          perMsgRate: rateVal,
+        }),
+      });
+
+      const result = await res.json();
+      if (result.success) {
+        alert("WhatsApp rates updated and saved in database successfully!");
+        setShowRateModal(false);
+      } else {
+        alert("Failed to save rates: " + result.message);
+      }
+    } catch (err) {
+      console.error("Error saving rates:", err);
+      alert("Error saving rates to database.");
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 text-xs font-sans">
       {/* Top Header */}
@@ -231,7 +274,7 @@ export default function UserManagementPage() {
         </Link>
       </div>
 
-      {/* Search Bar with Active Dynamic Matching */}
+      {/* Search Bar */}
       <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between gap-4 relative">
         <div className="flex items-center gap-2 flex-1 max-w-xl relative">
           <div className="w-full relative">
@@ -282,7 +325,7 @@ export default function UserManagementPage() {
         </button>
       </div>
 
-      {/* CONDITIONAL RENDERING: If no user selected, show prompt message */}
+      {/* Prompt when no user selected */}
       {!selectedUser ? (
         <div className="bg-white rounded-2xl border shadow-sm p-16 text-center space-y-3">
           <div className="text-4xl">🔍</div>
@@ -292,7 +335,7 @@ export default function UserManagementPage() {
           </p>
         </div>
       ) : (
-        /* Main Tabs Layout (Only shown when user is selected) */
+        /* Main Tabs Layout */
         <div className="bg-white rounded-2xl border shadow-sm p-6 space-y-6">
           <div className="flex flex-wrap border-b space-x-6 font-semibold text-gray-500 text-xs">
             {[
@@ -790,10 +833,7 @@ export default function UserManagementPage() {
 
                 <div className="flex justify-end pt-2">
                   <button
-                    onClick={() => {
-                      alert("WhatsApp Rates saved successfully!");
-                      setShowRateModal(false);
-                    }}
+                    onClick={handleSaveRates}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2 rounded-xl shadow cursor-pointer text-xs"
                   >
                     💾 Save Rates

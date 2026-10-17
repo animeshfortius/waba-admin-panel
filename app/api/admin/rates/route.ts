@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// User rates fetch karne ke liye (GET)
+// GET handler to fetch user's rates
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -21,9 +21,10 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       success: true,
-      perMsgRate: user?.perMsgRate || 0.80,
+      perMsgRate: user?.perMsgRate || 0.8046,
     });
   } catch (error: any) {
+    console.error("Error fetching rates:", error);
     return NextResponse.json(
       { success: false, message: error.message || "Internal Server Error" },
       { status: 500 }
@@ -31,7 +32,7 @@ export async function GET(req: Request) {
   }
 }
 
-// User rates update karne ke liye (POST)
+// POST handler to update user's rates in Neon PostgreSQL
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -46,15 +47,18 @@ export async function POST(req: Request) {
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: { perMsgRate: parseFloat(perMsgRate) },
+      data: {
+        perMsgRate: parseFloat(perMsgRate),
+      },
     });
 
     return NextResponse.json({
       success: true,
-      message: "Rates updated successfully!",
-      user: updatedUser,
+      message: "Rates updated successfully in database!",
+      perMsgRate: updatedUser.perMsgRate,
     });
   } catch (error: any) {
+    console.error("Error updating rates:", error);
     return NextResponse.json(
       { success: false, message: error.message || "Internal Server Error" },
       { status: 500 }

@@ -50,6 +50,22 @@ export default function UserManagementPage() {
       .catch((err) => console.error("Error fetching users:", err));
   }, []);
 
+  // Fetch user funds and transactions whenever selectedUser changes
+  useEffect(() => {
+    if (selectedUser?.id) {
+      fetch(`/api/admin/funds?userId=${selectedUser.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success) {
+            setWalletBalance(data.actualBalance || 0);
+            setOversellBalance(data.virtualBalance || 0);
+            setTransactions(data.transactions || []);
+          }
+        })
+        .catch((err) => console.error("Error loading user funds:", err));
+    }
+  }, [selectedUser]);
+
   const selectUserHandler = (user: any) => {
     setSelectedUser(user);
     setSearchQuery(user.name || user.email);
@@ -64,11 +80,6 @@ export default function UserManagementPage() {
     setShowSuggestions(false);
     setChangePasswordToggle(false);
     setNewPasswordInput("");
-
-    // Reset balances & transactions per selected user (mock initial state)
-    setWalletBalance(0);
-    setOversellBalance(0);
-    setTransactions([]);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -136,35 +147,48 @@ export default function UserManagementPage() {
     }
   };
 
-  // Fund Transfer Submit Handler
-  const handleTransferFund = () => {
+  // Fund Transfer Database Submit Handler
+  const handleTransferFund = async () => {
     const amt = parseFloat(fundAmount);
     if (isNaN(amt) || amt <= 0) {
-      alert("Please enter a valid transfer amount!");
+      alert("Please enter a valid amount!");
       return;
     }
 
-    if (fundType === "Actual") {
-      setWalletBalance((prev) => prev + amt);
-    } else {
-      setOversellBalance((prev) => prev + amt);
+    try {
+      const res = await fetch("/api/admin/funds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          amount: amt,
+          creditType: fundType,
+          remarks: fundRemarks || "Admin Credit Addition",
+        }),
+      });
+
+      const result = await res.json();
+      if (result.success) {
+        alert(`${fundType} Balance of ₹${amt} transferred and saved successfully!`);
+        setShowFundModal(false);
+        setFundAmount("");
+        setFundRemarks("");
+
+        // Refresh transactions and balances from database
+        const refRes = await fetch(`/api/admin/funds?userId=${selectedUser.id}`);
+        const refData = await refRes.json();
+        if (refData.success) {
+          setWalletBalance(refData.actualBalance || 0);
+          setOversellBalance(refData.virtualBalance || 0);
+          setTransactions(refData.transactions || []);
+        }
+      } else {
+        alert("Failed to transfer: " + result.message);
+      }
+    } catch (err) {
+      console.error("Error transferring fund:", err);
+      alert("Error executing fund transfer.");
     }
-
-    const newTx = {
-      id: Date.now(),
-      user: formData.name || selectedUser.name,
-      fromUser: "Super Admin",
-      credits: `₹${amt.toFixed(2)}`,
-      creditType: fundType === "Actual" ? "Actual Balance" : "Virtual / Oversell",
-      transferDate: new Date().toLocaleString(),
-      remarks: fundRemarks || "Admin Credit Addition",
-    };
-
-    setTransactions((prev) => [newTx, ...prev]);
-    alert(`${fundType} Balance of ₹${amt} transferred successfully!`);
-    setShowFundModal(false);
-    setFundAmount("");
-    setFundRemarks("");
   };
 
   return (
@@ -488,18 +512,20 @@ export default function UserManagementPage() {
                     </td>
                   </tr>
                 ) : (
-                  transactions.map((tx) => (
+                  transactions.map((tx: any) => (
                     <tr key={tx.id} className="hover:bg-gray-50 text-gray-700 font-medium">
-                      <td className="p-3 font-bold text-gray-800">{tx.user}</td>
-                      <td className="p-3">{tx.fromUser}</td>
-                      <td className="p-3 font-bold text-emerald-600">{tx.credits}</td>
+                      <td className="p-3 font-bold text-gray-800">{formData.name || selectedUser.name}</td>
+                      <td className="p-3">Super Admin</td>
+                      <td className="p-3 font-bold text-emerald-600">₹{tx.amount.toFixed(2)}</td>
                       <td className="p-3">
                         <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
-                          {tx.creditType}
+                          {tx.type}
                         </span>
                       </td>
-                      <td className="p-3 font-mono text-[11px] text-gray-500">{tx.transferDate}</td>
-                      <td className="p-3 text-gray-600">{tx.remarks}</td>
+                      <td className="p-3 font-mono text-[11px] text-gray-500">
+                        {new Date(tx.createdAt).toLocaleString()}
+                      </td>
+                      <td className="p-3 text-gray-600">{tx.description}</td>
                     </tr>
                   ))
                 )}

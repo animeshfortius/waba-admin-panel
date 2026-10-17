@@ -65,7 +65,7 @@ export async function POST(req: Request) {
         password: hashedPassword,
         role: assignedRole,
         phone: phone || "",
-        expiryDate: expiryDate ? new Date(expiryDate) : null,
+        expiryDate: expiryDate || null,
       },
     });
 

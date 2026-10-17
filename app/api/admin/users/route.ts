@@ -2,6 +2,31 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
+// 1. Browser me URL kholne par saare users dikhane ke liye (GET Request)
+export async function GET() {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        phone: true,
+        createdAt: true,
+      },
+    });
+
+    return NextResponse.json({ success: true, users }, { status: 200 });
+  } catch (error: any) {
+    console.error("Error fetching users:", error);
+    return NextResponse.json(
+      { success: false, error: error.message || "Internal Server Error" },
+      { status: 500 }
+    );
+  }
+}
+
+// 2. Naya User Create karne ke liye (POST Request)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -40,7 +65,7 @@ export async function POST(req: Request) {
         password: hashedPassword,
         role: assignedRole,
         phone: phone || "",
-        expiryDate: expiryDate || null,
+        expiryDate: expiryDate ? new Date(expiryDate) : null,
       },
     });
 

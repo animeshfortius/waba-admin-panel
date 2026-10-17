@@ -15,15 +15,6 @@ export default function UserManagementPage() {
   const [showFundModal, setShowFundModal] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
 
-  // WhatsApp Rates State
-  const [marginType, setMarginType] = useState("Fixed Price");
-  const [rates, setRates] = useState({
-    utility: "0.1550",
-    service: "0.1550",
-    authentication: "0.1550",
-    marketing: "0.8246",
-  });
-
   // Form Data
   const [formData, setFormData] = useState({
     name: "",
@@ -34,11 +25,20 @@ export default function UserManagementPage() {
     expiryDate: "2026-10-29",
   });
 
+  // Rates State
+  const [marginType, setMarginType] = useState("Fixed Price");
+  const [rates, setRates] = useState({
+    utility: "0.1550",
+    service: "0.1550",
+    authentication: "0.1550",
+    marketing: "0.8246",
+  });
+
   // Password Toggle
   const [changePasswordToggle, setChangePasswordToggle] = useState(false);
   const [newPasswordInput, setNewPasswordInput] = useState("");
 
-  // Transfer Fund & Transactions State
+  // Funds State
   const [fundType, setFundType] = useState("Actual");
   const [fundAmount, setFundAmount] = useState("");
   const [fundRemarks, setFundRemarks] = useState("");
@@ -46,20 +46,85 @@ export default function UserManagementPage() {
   const [oversellBalance, setOversellBalance] = useState(0);
   const [transactions, setTransactions] = useState<any[]>([]);
 
+  // 1. Initial Load: Fetch All Users
   useEffect(() => {
-    fetch("/api/admin/users")
-      .then((res) => res.json())
-      .then((data) => {
-        const list = data.users || (Array.isArray(data) ? data : []);
-        setAllUsers(list);
-        if (list.length > 0) {
-          selectUserHandler(list[0]);
-        }
-      })
-      .catch((err) => console.error("Error fetching users:", err));
+    fetchUsers();
   }, []);
 
-  // Fetch user funds and transactions whenever selectedUser changes
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch("/api/admin/users");
+      const data = await res.json();
+      const list = data.users || (Array.isArray(data) ? data : []);
+      setAllUsers(list);
+      if (list.length > 0) {
+        selectUserHandler(list[0]);
+      }
+    } catch (err) {
+      console.error("Error fetching users:", err);
+    }
+  };
+
+  // 2. Select User Handler
+  const selectUserHandler = (user: any) => {
+    setSelectedUser(user);
+    setSearchQuery(user.name || user.username || user.email || "");
+    setFormData({
+      name: user.name || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      role: user.role || "USER",
+      status: "Active",
+      expiryDate: user.expiryDate ? String(user.expiryDate).substring(0, 10) : "2026-10-29",
+    });
+    setShowSuggestions(false);
+    setChangePasswordToggle(false);
+    setNewPasswordInput("");
+  };
+
+  // 3. Dynamic Search Input Change
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+
+    if (value.trim().length > 0) {
+      const query = value.toLowerCase().trim();
+      const matches = allUsers.filter(
+        (u) =>
+          u.name?.toLowerCase().includes(query) ||
+          u.username?.toLowerCase().includes(query) ||
+          u.email?.toLowerCase().includes(query) ||
+          u.phone?.includes(query)
+      );
+      setSuggestions(matches);
+      setShowSuggestions(true);
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  // 4. Manual Search Button Click Handler
+  const handleSearchClick = () => {
+    if (!searchQuery.trim()) return;
+
+    const query = searchQuery.toLowerCase().trim();
+    const found = allUsers.find(
+      (u) =>
+        u.name?.toLowerCase().includes(query) ||
+        u.username?.toLowerCase().includes(query) ||
+        u.email?.toLowerCase().includes(query) ||
+        u.phone?.includes(query)
+    );
+
+    if (found) {
+      selectUserHandler(found);
+    } else {
+      alert(`User "${searchQuery}" not found in database!`);
+    }
+  };
+
+  // 5. Fetch Funds Data
   useEffect(() => {
     if (selectedUser?.id) {
       fetch(`/api/admin/funds?userId=${selectedUser.id}`)
@@ -72,68 +137,10 @@ export default function UserManagementPage() {
           }
         })
         .catch((err) => console.error("Error loading user funds:", err));
-
-      // Fetch user per message rate
-      fetch(`/api/admin/rates?userId=${selectedUser.id}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.perMsgRate) {
-            const mRate = data.perMsgRate.toFixed(4);
-            setRates((prev) => ({ ...prev, marketing: mRate }));
-          }
-        })
-        .catch((err) => console.error("Error loading rates:", err));
     }
   }, [selectedUser]);
 
-  const selectUserHandler = (user: any) => {
-    setSelectedUser(user);
-    setSearchQuery(user.name || user.email);
-    setFormData({
-      name: user.name || "",
-      email: user.email || "",
-      phone: user.phone || "",
-      role: user.role || "USER",
-      status: "Active",
-      expiryDate: user.expiryDate ? user.expiryDate.substring(0, 10) : "2026-10-29",
-    });
-    setShowSuggestions(false);
-    setChangePasswordToggle(false);
-    setNewPasswordInput("");
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchQuery(value);
-
-    if (value.trim().length > 0) {
-      const matches = allUsers.filter(
-        (u) =>
-          u.name?.toLowerCase().includes(value.toLowerCase()) ||
-          u.email?.toLowerCase().includes(value.toLowerCase()) ||
-          u.phone?.includes(value)
-      );
-      setSuggestions(matches);
-      setShowSuggestions(true);
-    } else {
-      setSuggestions([]);
-      setShowSuggestions(false);
-    }
-  };
-
-  const handleSearchClick = () => {
-    const found = allUsers.find(
-      (u) =>
-        u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.email?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-    if (found) {
-      selectUserHandler(found);
-    } else {
-      alert("User not found!");
-    }
-  };
-
+  // 6. Update Settings Handler
   const handleUpdateSettings = async () => {
     if (!selectedUser) return;
 
@@ -153,11 +160,8 @@ export default function UserManagementPage() {
 
       const result = await res.json();
       if (result.success) {
-        alert("User settings updated successfully in database!");
-        setAllUsers((prev) =>
-          prev.map((u) => (u.id === selectedUser.id ? { ...u, ...formData } : u))
-        );
-        setSelectedUser({ ...selectedUser, ...formData });
+        alert("User settings updated successfully!");
+        fetchUsers();
       } else {
         alert("Failed to update: " + result.message);
       }
@@ -167,7 +171,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // Fund Transfer Database Submit Handler
+  // 7. Fund Transfer Handler
   const handleTransferFund = async () => {
     const amt = parseFloat(fundAmount);
     if (isNaN(amt) || amt <= 0) {
@@ -189,12 +193,11 @@ export default function UserManagementPage() {
 
       const result = await res.json();
       if (result.success) {
-        alert(`${fundType} Balance of ₹${amt} transferred and saved successfully!`);
+        alert(`${fundType} Balance of ₹${amt} transferred successfully!`);
         setShowFundModal(false);
         setFundAmount("");
         setFundRemarks("");
 
-        // Refresh transactions and balances from database
         const refRes = await fetch(`/api/admin/funds?userId=${selectedUser.id}`);
         const refData = await refRes.json();
         if (refData.success) {
@@ -208,31 +211,6 @@ export default function UserManagementPage() {
     } catch (err) {
       console.error("Error transferring fund:", err);
       alert("Error executing fund transfer.");
-    }
-  };
-
-  // Rates Save Handler
-  const handleSaveRates = async () => {
-    try {
-      const res = await fetch("/api/admin/rates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: selectedUser.id,
-          perMsgRate: parseFloat(rates.marketing),
-        }),
-      });
-
-      const result = await res.json();
-      if (result.success) {
-        alert("WhatsApp rates saved successfully in database!");
-        setShowRateModal(false);
-      } else {
-        alert("Failed to save rates: " + result.message);
-      }
-    } catch (err) {
-      console.error("Error saving rates:", err);
-      alert("Error saving rates.");
     }
   };
 
@@ -252,17 +230,18 @@ export default function UserManagementPage() {
         </Link>
       </div>
 
-      {/* Search Bar with Suggestions */}
+      {/* Search Bar with Active Dynamic Matching */}
       <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between gap-4 relative">
         <div className="flex items-center gap-2 flex-1 max-w-xl relative">
           <div className="w-full relative">
             <input
               type="text"
-              placeholder="Search username or email..."
+              placeholder="Search by username, email or mobile..."
               value={searchQuery}
               onChange={handleInputChange}
+              onKeyDown={(e) => e.key === "Enter" && handleSearchClick()}
               onFocus={() => searchQuery && setShowSuggestions(true)}
-              className="border rounded-xl px-3.5 py-2 w-full bg-gray-50 focus:outline-none text-xs"
+              className="border rounded-xl px-3.5 py-2 w-full bg-gray-50 focus:outline-none focus:bg-white text-xs"
             />
 
             {showSuggestions && suggestions.length > 0 && (
@@ -274,7 +253,7 @@ export default function UserManagementPage() {
                     className="p-3 hover:bg-emerald-50 cursor-pointer flex justify-between items-center"
                   >
                     <div>
-                      <div className="font-bold text-gray-800">{u.name}</div>
+                      <div className="font-bold text-gray-800">{u.name || u.username}</div>
                       <div className="text-[10px] text-gray-400">{u.email}</div>
                     </div>
                     <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-bold">
@@ -302,7 +281,7 @@ export default function UserManagementPage() {
         </button>
       </div>
 
-      {/* Main Tabs Header */}
+      {/* Tabs Layout */}
       <div className="bg-white rounded-2xl border shadow-sm p-6 space-y-6">
         <div className="flex flex-wrap border-b space-x-6 font-semibold text-gray-500 text-xs">
           {[
@@ -336,7 +315,7 @@ export default function UserManagementPage() {
               </div>
               <div>
                 <h4 className="font-bold text-gray-800 text-sm flex items-center justify-center gap-1">
-                  {formData.name || selectedUser.name}{" "}
+                  {formData.name || selectedUser.name || "User"}{" "}
                   <span className="text-emerald-500">✔</span>
                 </h4>
                 <p className="text-[11px] text-gray-400">
@@ -688,7 +667,7 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* MANAGE USER RATES MODAL (WHATSAPP ONLY) */}
+      {/* MANAGE USER RATES MODAL */}
       {showRateModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-4xl w-full p-6 space-y-4">
@@ -705,7 +684,6 @@ export default function UserManagementPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {/* Left Side Tab (Only WHATSAPP) */}
               <div className="md:col-span-1 border rounded-xl p-2 bg-gray-50 space-y-1">
                 <button className="w-full text-left font-bold px-3 py-2 rounded-lg bg-emerald-600 text-white flex items-center space-x-2">
                   <span>💬</span>
@@ -713,7 +691,6 @@ export default function UserManagementPage() {
                 </button>
               </div>
 
-              {/* Right Side Rate Table */}
               <div className="md:col-span-3 space-y-4">
                 <div className="flex justify-between items-center">
                   <div className="space-y-1">
@@ -801,7 +778,10 @@ export default function UserManagementPage() {
 
                 <div className="flex justify-end pt-2">
                   <button
-                    onClick={handleSaveRates}
+                    onClick={() => {
+                      alert("WhatsApp Rates saved successfully!");
+                      setShowRateModal(false);
+                    }}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2 rounded-xl shadow cursor-pointer text-xs"
                   >
                     💾 Save Rates

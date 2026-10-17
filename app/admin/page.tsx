@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function AdminDashboardPage() {
   const [activeSection, setActiveSection] = useState<string>("hub");
@@ -17,25 +17,27 @@ export default function AdminDashboardPage() {
   // Site Branding Tabs State
   const [activeBrandingTab, setActiveBrandingTab] = useState<string>("domain");
 
-  // Sample Data States
-  const [clients] = useState([
-    {
-      id: 1,
-      clientName: "agent1",
-      phone: "918888888888",
-      email: "agent1@gmail.com",
-      plan: "Enterprise",
-      status: "Active",
-    },
-    {
-      id: 2,
-      clientName: "Acme Corp",
-      phone: "919876543210",
-      email: "acme@gmail.com",
-      plan: "Standard",
-      status: "Active",
-    },
-  ]);
+  // Database se live users laane ke liye state
+  const [clients, setClients] = useState([]);
+
+  useEffect(() => {
+    fetch("/api/admin/users")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          const formattedClients = data.users.map((u: any) => ({
+            id: u.id,
+            clientName: u.name,
+            phone: u.phone || "N/A",
+            email: u.email,
+            plan: u.role || "USER",
+            status: "Active",
+          }));
+          setClients(formattedClients);
+        }
+      })
+      .catch((err) => console.error("Error fetching users:", err));
+  }, []);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-2 text-xs">
@@ -415,7 +417,7 @@ export default function AdminDashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {clients.map((c) => (
+              {clients.map((c: any) => (
                 <tr key={c.id} className="hover:bg-gray-50">
                   <td className="p-3.5 font-bold">{c.clientName}</td>
                   <td className="p-3.5 font-mono">+{c.phone}</td>
@@ -763,147 +765,6 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ORIGINAL ADD USER MODAL (CONNECTED TO BACKEND API) */}
-      {showAddUserModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 text-xs relative max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-sm text-gray-800">Add New User / Reseller</h3>
-              <button
-                onClick={() => setShowAddUserModal(false)}
-                className="text-gray-400 hover:text-gray-600 font-bold text-base cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                const name = formData.get("name") as string;
-                const email = formData.get("email") as string;
-                const password = formData.get("password") as string;
-                const role = formData.get("role") as string;
-                const phone = formData.get("phone") as string;
-
-                try {
-                  const res = await fetch("/api/admin/users", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name, email, password, role, phone }),
-                  });
-                  const data = await res.json();
-                  if (data.success) {
-                    alert("User successfully created and saved to database!");
-                    setShowAddUserModal(false);
-                    window.location.reload();
-                  } else {
-                    alert("Error: " + data.error);
-                  }
-                } catch (err) {
-                  console.error(err);
-                  alert("Something went wrong!");
-                }
-              }}
-              className="space-y-3"
-            >
-              <div>
-                <label className="block font-semibold text-gray-600 mb-1">Account Type</label>
-                <select name="role" className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-medium">
-                  <option value="RESELLER">Reseller Account</option>
-                  <option value="USER">Direct User Account</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-600 mb-1">Full Name / User Name</label>
-                <input
-                  type="text"
-                  name="name"
-                  required
-                  placeholder="Enter User Name"
-                  className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-600 mb-1">Password</label>
-                <input
-                  type="password"
-                  name="password"
-                  required
-                  placeholder="Enter Password"
-                  className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-600 mb-1">Mobile Number</label>
-                <div className="flex">
-                  <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 bg-gray-100 text-gray-500 font-mono">
-                    +91
-                  </span>
-                  <input
-                    type="text"
-                    name="phone"
-                    required
-                    placeholder="Enter Mobile Number"
-                    className="w-full border rounded-r-lg p-2.5 bg-gray-50 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-600 mb-1">Mail Id</label>
-                <input
-                  type="email"
-                  name="email"
-                  required
-                  placeholder="Enter Email Address"
-                  className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-600 mb-1">Account Expiry Date</label>
-                <input
-                  type="date"
-                  name="expiryDate"
-                  className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-600 mb-1">Select Products</label>
-                <input
-                  type="text"
-                  readOnly
-                  value="WhatsApp"
-                  className="w-full border rounded-lg p-2 bg-gray-100 text-gray-500"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowAddUserModal(false)}
-                  className="border px-4 py-2 rounded-xl text-gray-600 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-emerald-600 text-white font-bold px-5 py-2 rounded-xl cursor-pointer hover:bg-emerald-700"
-                >
-                  Save User
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

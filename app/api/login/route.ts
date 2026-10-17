@@ -12,25 +12,35 @@ export async function POST(req: Request) {
       );
     }
 
-    const trimmedUsername = username.trim();
-    const trimmedPassword = password.trim();
+    const inputUser = username.trim();
+    const inputPass = password.trim();
 
-    // 1. Search ONLY by username
-    const user = await prisma.user.findFirst({
+    // 1. Search user by username or email (case-insensitive)
+    let user = await prisma.user.findFirst({
       where: {
-        username: trimmedUsername,
+        OR: [
+          { username: { equals: inputUser, mode: "insensitive" } },
+          { email: { equals: inputUser, mode: "insensitive" } },
+        ],
       },
     });
 
-    // 2. Check if user exists and password matches
-    if (!user || user.password !== trimmedPassword) {
+    // 2. Fallback: If logging in as 'admin' and not found in DB, check for any SUPER_ADMIN
+    if (!user && inputUser.toLowerCase() === "admin") {
+      user = await prisma.user.findFirst({
+        where: { role: "SUPER_ADMIN" },
+      });
+    }
+
+    // 3. Verify user and password
+    if (!user || user.password !== inputPass) {
       return NextResponse.json(
         { success: false, message: "Invalid username or password" },
         { status: 401 }
       );
     }
 
-    // 3. Successful Login Response
+    // 4. Successful Login
     const response = NextResponse.json({
       success: true,
       message: "Login successful",
@@ -46,7 +56,7 @@ export async function POST(req: Request) {
     response.cookies.set("userId", user.id, {
       httpOnly: true,
       path: "/",
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 60 * 60 * 24 * 7, // 7 days
     });
 
     return response;

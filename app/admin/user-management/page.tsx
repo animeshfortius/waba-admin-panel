@@ -29,9 +29,13 @@ export default function UserManagementPage() {
   const [changePasswordToggle, setChangePasswordToggle] = useState(false);
   const [newPasswordInput, setNewPasswordInput] = useState("");
 
-  // Transfer Fund State
+  // Transfer Fund & Transactions State
   const [fundType, setFundType] = useState("Actual");
   const [fundAmount, setFundAmount] = useState("");
+  const [fundRemarks, setFundRemarks] = useState("");
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [oversellBalance, setOversellBalance] = useState(0);
+  const [transactions, setTransactions] = useState<any[]>([]);
 
   useEffect(() => {
     fetch("/api/admin/users")
@@ -60,6 +64,11 @@ export default function UserManagementPage() {
     setShowSuggestions(false);
     setChangePasswordToggle(false);
     setNewPasswordInput("");
+
+    // Reset balances & transactions per selected user (mock initial state)
+    setWalletBalance(0);
+    setOversellBalance(0);
+    setTransactions([]);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,6 +134,37 @@ export default function UserManagementPage() {
       console.error("Error updating user:", err);
       alert("Error updating user settings.");
     }
+  };
+
+  // Fund Transfer Submit Handler
+  const handleTransferFund = () => {
+    const amt = parseFloat(fundAmount);
+    if (isNaN(amt) || amt <= 0) {
+      alert("Please enter a valid transfer amount!");
+      return;
+    }
+
+    if (fundType === "Actual") {
+      setWalletBalance((prev) => prev + amt);
+    } else {
+      setOversellBalance((prev) => prev + amt);
+    }
+
+    const newTx = {
+      id: Date.now(),
+      user: formData.name || selectedUser.name,
+      fromUser: "Super Admin",
+      credits: `₹${amt.toFixed(2)}`,
+      creditType: fundType === "Actual" ? "Actual Balance" : "Virtual / Oversell",
+      transferDate: new Date().toLocaleString(),
+      remarks: fundRemarks || "Admin Credit Addition",
+    };
+
+    setTransactions((prev) => [newTx, ...prev]);
+    alert(`${fundType} Balance of ₹${amt} transferred successfully!`);
+    setShowFundModal(false);
+    setFundAmount("");
+    setFundRemarks("");
   };
 
   return (
@@ -419,11 +459,11 @@ export default function UserManagementPage() {
               </div>
               <div className="flex space-x-3 font-bold">
                 <span className="bg-purple-100 text-purple-800 px-3 py-1.5 rounded-xl border">
-                  Wallet Balance: ₹0.00
+                  Wallet Balance: ₹{walletBalance.toFixed(2)}
                 </span>
                 {formData.role === "RESELLER" && (
                   <span className="bg-slate-100 text-slate-800 px-3 py-1.5 rounded-xl border">
-                    Oversell Wallet Balance: ₹0.00
+                    Oversell Wallet Balance: ₹{oversellBalance.toFixed(2)}
                   </span>
                 )}
               </div>
@@ -440,12 +480,29 @@ export default function UserManagementPage() {
                   <th className="p-3">REMARKS</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-gray-400">
-                    No data found
-                  </td>
-                </tr>
+              <tbody className="divide-y">
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-gray-400">
+                      No data found
+                    </td>
+                  </tr>
+                ) : (
+                  transactions.map((tx) => (
+                    <tr key={tx.id} className="hover:bg-gray-50 text-gray-700 font-medium">
+                      <td className="p-3 font-bold text-gray-800">{tx.user}</td>
+                      <td className="p-3">{tx.fromUser}</td>
+                      <td className="p-3 font-bold text-emerald-600">{tx.credits}</td>
+                      <td className="p-3">
+                        <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+                          {tx.creditType}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono text-[11px] text-gray-500">{tx.transferDate}</td>
+                      <td className="p-3 text-gray-600">{tx.remarks}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -514,7 +571,6 @@ export default function UserManagementPage() {
                 className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-medium"
               >
                 <option value="Actual">Actual Balance</option>
-                {/* Virtual/Oversell option ONLY for RESELLER */}
                 {formData.role === "RESELLER" && (
                   <option value="Virtual">Virtual / Oversell Balance</option>
                 )}
@@ -528,17 +584,24 @@ export default function UserManagementPage() {
                 placeholder="Enter amount to transfer"
                 value={fundAmount}
                 onChange={(e) => setFundAmount(e.target.value)}
+                className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-mono"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-gray-600 font-semibold">Remarks / Note</label>
+              <input
+                type="text"
+                placeholder="Enter remarks (e.g. Monthly Topup)"
+                value={fundRemarks}
+                onChange={(e) => setFundRemarks(e.target.value)}
                 className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
               />
             </div>
 
             <div className="flex justify-end space-x-3 pt-3 border-t">
               <button
-                onClick={() => {
-                  alert(`${fundType} Balance of ₹${fundAmount} Transferred Successfully!`);
-                  setShowFundModal(false);
-                  setFundAmount("");
-                }}
+                onClick={handleTransferFund}
                 className="bg-emerald-600 text-white font-bold px-6 py-2 rounded-xl cursor-pointer"
               >
                 Save

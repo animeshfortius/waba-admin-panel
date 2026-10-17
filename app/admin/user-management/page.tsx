@@ -15,6 +15,15 @@ export default function UserManagementPage() {
   const [showFundModal, setShowFundModal] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
 
+  // WhatsApp Rates State
+  const [marginType, setMarginType] = useState("Fixed Price");
+  const [rates, setRates] = useState({
+    utility: "0.1550",
+    service: "0.1550",
+    authentication: "0.1550",
+    marketing: "0.8246",
+  });
+
   // Form Data
   const [formData, setFormData] = useState({
     name: "",
@@ -63,6 +72,17 @@ export default function UserManagementPage() {
           }
         })
         .catch((err) => console.error("Error loading user funds:", err));
+
+      // Fetch user per message rate
+      fetch(`/api/admin/rates?userId=${selectedUser.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.perMsgRate) {
+            const mRate = data.perMsgRate.toFixed(4);
+            setRates((prev) => ({ ...prev, marketing: mRate }));
+          }
+        })
+        .catch((err) => console.error("Error loading rates:", err));
     }
   }, [selectedUser]);
 
@@ -188,6 +208,31 @@ export default function UserManagementPage() {
     } catch (err) {
       console.error("Error transferring fund:", err);
       alert("Error executing fund transfer.");
+    }
+  };
+
+  // Rates Save Handler
+  const handleSaveRates = async () => {
+    try {
+      const res = await fetch("/api/admin/rates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          perMsgRate: parseFloat(rates.marketing),
+        }),
+      });
+
+      const result = await res.json();
+      if (result.success) {
+        alert("WhatsApp rates saved successfully in database!");
+        setShowRateModal(false);
+      } else {
+        alert("Failed to save rates: " + result.message);
+      }
+    } catch (err) {
+      console.error("Error saving rates:", err);
+      alert("Error saving rates.");
     }
   };
 
@@ -638,6 +683,131 @@ export default function UserManagementPage() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MANAGE USER RATES MODAL (WHATSAPP ONLY) */}
+      {showRateModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-sm text-gray-800">
+                Manage Rates - {formData.name || selectedUser?.name}
+              </h3>
+              <button
+                onClick={() => setShowRateModal(false)}
+                className="text-gray-400 hover:text-gray-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {/* Left Side Tab (Only WHATSAPP) */}
+              <div className="md:col-span-1 border rounded-xl p-2 bg-gray-50 space-y-1">
+                <button className="w-full text-left font-bold px-3 py-2 rounded-lg bg-emerald-600 text-white flex items-center space-x-2">
+                  <span>💬</span>
+                  <span>WHATSAPP</span>
+                </button>
+              </div>
+
+              {/* Right Side Rate Table */}
+              <div className="md:col-span-3 space-y-4">
+                <div className="flex justify-between items-center">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-semibold text-gray-500">Margin Type</label>
+                    <select
+                      value={marginType}
+                      onChange={(e) => setMarginType(e.target.value)}
+                      className="border rounded-lg p-2 bg-gray-50 font-medium text-xs focus:outline-none"
+                    >
+                      <option>Fixed Price</option>
+                      <option>Percentage Margin</option>
+                    </select>
+                  </div>
+                  <div className="text-[10px] text-rose-500 font-bold">
+                    Selling price cannot be set less than 50% of My Rate
+                  </div>
+                </div>
+
+                <div className="border rounded-xl overflow-hidden">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-500 uppercase border-b font-bold text-[10px]">
+                        <th className="p-2.5">COUNTRY INFO</th>
+                        <th className="p-2.5">CHANNEL TYPE</th>
+                        <th className="p-2.5">MY RATE / UNIT</th>
+                        <th className="p-2.5">SELLING RATE / UNIT</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y font-medium">
+                      <tr>
+                        <td className="p-2.5">🇮🇳 (91) INDIA - IN</td>
+                        <td className="p-2.5">Utility</td>
+                        <td className="p-2.5 text-blue-600 font-bold">0.1350</td>
+                        <td className="p-2.5">
+                          <input
+                            type="text"
+                            value={rates.utility}
+                            onChange={(e) => setRates({ ...rates, utility: e.target.value })}
+                            className="border rounded px-2 py-1 w-24 bg-white font-mono focus:outline-none"
+                          />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5">🇮🇳 (91) INDIA - IN</td>
+                        <td className="p-2.5">Service</td>
+                        <td className="p-2.5 text-blue-600 font-bold">0.1350</td>
+                        <td className="p-2.5">
+                          <input
+                            type="text"
+                            value={rates.service}
+                            onChange={(e) => setRates({ ...rates, service: e.target.value })}
+                            className="border rounded px-2 py-1 w-24 bg-white font-mono focus:outline-none"
+                          />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5">🇮🇳 (91) INDIA - IN</td>
+                        <td className="p-2.5">Authentication</td>
+                        <td className="p-2.5 text-blue-600 font-bold">0.1350</td>
+                        <td className="p-2.5">
+                          <input
+                            type="text"
+                            value={rates.authentication}
+                            onChange={(e) => setRates({ ...rates, authentication: e.target.value })}
+                            className="border rounded px-2 py-1 w-24 bg-white font-mono focus:outline-none"
+                          />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5">🇮🇳 (91) INDIA - IN</td>
+                        <td className="p-2.5">Marketing</td>
+                        <td className="p-2.5 text-blue-600 font-bold">0.8046</td>
+                        <td className="p-2.5">
+                          <input
+                            type="text"
+                            value={rates.marketing}
+                            onChange={(e) => setRates({ ...rates, marketing: e.target.value })}
+                            className="border rounded px-2 py-1 w-24 bg-white font-mono focus:outline-none"
+                          />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={handleSaveRates}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2 rounded-xl shadow cursor-pointer text-xs"
+                  >
+                    💾 Save Rates
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

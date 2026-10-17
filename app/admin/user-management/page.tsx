@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function UserManagementPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -14,6 +16,11 @@ export default function UserManagementPage() {
   // Modals
   const [showFundModal, setShowFundModal] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
+  const [showWhitelistModal, setShowWhitelistModal] = useState(false);
+
+  // Whitelist State
+  const [whitelistNumberInput, setWhitelistNumberInput] = useState("");
+  const [whitelistNumbers, setWhitelistNumbers] = useState<string[]>([]);
 
   // Form Data
   const [formData, setFormData] = useState({
@@ -155,7 +162,31 @@ export default function UserManagementPage() {
     }
   }, [selectedUser]);
 
-  // 6. Save All Rates Handler
+  // 6. LOGIN AS USER (Impersonation Handler)
+  const handleLoginAsUser = async () => {
+    if (!selectedUser?.id) return;
+
+    try {
+      const res = await fetch("/api/admin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: selectedUser.id }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert(`Logging in as ${selectedUser.name || selectedUser.username}... Redirecting to user panel.`);
+        router.push(data.redirectUrl || "/dashboard");
+      } else {
+        alert("Failed to login as user: " + data.message);
+      }
+    } catch (err) {
+      console.error("Error impersonating user:", err);
+      alert("Error logging in as user.");
+    }
+  };
+
+  // 7. Save All Rates Handler
   const handleSaveRates = async () => {
     if (!selectedUser?.id) return;
 
@@ -195,7 +226,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // 7. Update User Profile Settings
+  // 8. Update User Profile Settings
   const handleUpdateSettings = async () => {
     if (!selectedUser) return;
 
@@ -226,7 +257,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // 8. Transfer Funds
+  // 9. Transfer Funds
   const handleTransferFund = async () => {
     const amt = parseFloat(fundAmount);
     if (isNaN(amt) || amt <= 0) {
@@ -652,19 +683,66 @@ export default function UserManagementPage() {
 
           {/* SEE MORE TAB */}
           {activeTab === "seemore" && (
-            <div className="flex space-x-4">
-              <button
-                onClick={() => alert(`Logging in as ${formData.name}...`)}
-                className="bg-slate-800 text-white font-bold px-5 py-2.5 rounded-xl cursor-pointer"
-              >
-                🔑 Login As User
-              </button>
-              <button
-                onClick={() => alert("Whitelist numbers modal")}
-                className="border border-blue-300 text-blue-700 font-bold px-5 py-2.5 rounded-xl cursor-pointer"
-              >
-                🛡️ Manage WhiteList Number
-              </button>
+            <div className="space-y-6">
+              <div className="flex space-x-4">
+                <button
+                  onClick={handleLoginAsUser}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl cursor-pointer shadow flex items-center gap-1.5"
+                >
+                  🔑 Login As User
+                </button>
+                <button
+                  onClick={() => setShowWhitelistModal(true)}
+                  className="border border-emerald-300 text-emerald-700 font-bold px-5 py-2.5 rounded-xl cursor-pointer hover:bg-emerald-50"
+                >
+                  🛡️ Manage WhiteList Number
+                </button>
+              </div>
+
+              {/* Whitelist Numbers Table View */}
+              <div className="border rounded-2xl p-4 bg-gray-50/50 space-y-3">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-bold text-gray-700">Whitelisted Numbers</h4>
+                  <button
+                    onClick={() => setShowWhitelistModal(true)}
+                    className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[11px] font-bold"
+                  >
+                    + Add Number
+                  </button>
+                </div>
+
+                <table className="w-full text-left border-collapse bg-white rounded-xl border">
+                  <thead>
+                    <tr className="bg-gray-100 text-gray-500 uppercase border-b text-[10px]">
+                      <th className="p-2.5">NUMBER</th>
+                      <th className="p-2.5 text-right">ACTION</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y font-mono">
+                    {whitelistNumbers.length === 0 ? (
+                      <tr>
+                        <td colSpan={2} className="p-4 text-center text-gray-400 font-sans">
+                          No Whitelisted numbers found
+                        </td>
+                      </tr>
+                    ) : (
+                      whitelistNumbers.map((num, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="p-2.5">{num}</td>
+                          <td className="p-2.5 text-right font-sans">
+                            <button
+                              onClick={() => setWhitelistNumbers(whitelistNumbers.filter((_, i) => i !== idx))}
+                              className="text-rose-600 font-bold text-[11px]"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -850,6 +928,65 @@ export default function UserManagementPage() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MANAGE WHITELIST NUMBER MODAL */}
+      {showWhitelistModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-sm text-gray-800">Add WhiteList Number</h3>
+              <button
+                onClick={() => setShowWhitelistModal(false)}
+                className="text-gray-400 hover:text-gray-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-gray-600 font-semibold">WhiteList Number</label>
+              <input
+                type="text"
+                placeholder="Enter Number (e.g. 9979958788, 8878999799)"
+                value={whitelistNumberInput}
+                onChange={(e) => setWhitelistNumberInput(e.target.value)}
+                className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none text-xs font-mono"
+              />
+              <span className="text-[10px] text-gray-400">ex. 9979958788, 8878999799, 7787799899</span>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-gray-600 font-semibold">Bulk Upload</label>
+              <input
+                type="file"
+                className="w-full border rounded-lg p-1.5 text-xs bg-gray-50 cursor-pointer"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-3 border-t">
+              <button
+                onClick={() => {
+                  if (whitelistNumberInput.trim()) {
+                    setWhitelistNumbers([...whitelistNumbers, whitelistNumberInput.trim()]);
+                    setWhitelistNumberInput("");
+                    setShowWhitelistModal(false);
+                    alert("Whitelist numbers saved successfully!");
+                  }
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2 rounded-xl text-xs shadow cursor-pointer"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setShowWhitelistModal(false)}
+                className="border px-6 py-2 rounded-xl text-xs cursor-pointer text-gray-600 hover:bg-gray-50"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

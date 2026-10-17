@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// 1. GET: User ke saare WhatsApp rates fetch karne ke liye
+// 1. GET: Fetch user's message rate
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -16,21 +16,18 @@ export async function GET(req: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        perMsgRate: true, // Marketing rate
-        utilityRate: true,
-        serviceRate: true,
-        authRate: true,
-      } as any,
+      select: { perMsgRate: true },
     });
+
+    const currentRate = user?.perMsgRate ?? 0.8046;
 
     return NextResponse.json({
       success: true,
       rates: {
-        utility: (user as any)?.utilityRate ?? 0.1550,
-        service: (user as any)?.serviceRate ?? 0.1550,
-        authentication: (user as any)?.authRate ?? 0.1550,
-        marketing: user?.perMsgRate ?? 0.8046,
+        utility: currentRate,
+        service: currentRate,
+        authentication: currentRate,
+        marketing: currentRate,
       },
     });
   } catch (error: any) {
@@ -42,7 +39,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST: Chaaron rates ko Neon PostgreSQL Database me save karne ke liye
+// 2. POST: Save message rate to database
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -55,26 +52,23 @@ export async function POST(req: Request) {
       );
     }
 
-    const updatedData: any = {
-      perMsgRate: parseFloat(rates.marketing),
-    };
-
-    if (rates.utility !== undefined) updatedData.utilityRate = parseFloat(rates.utility);
-    if (rates.service !== undefined) updatedData.serviceRate = parseFloat(rates.service);
-    if (rates.authentication !== undefined) updatedData.authRate = parseFloat(rates.authentication);
+    // Since schema has perMsgRate, we use marketing rate (or any of the rates provided)
+    const newRate = parseFloat(rates.marketing || rates.utility || 0.8046);
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: updatedData,
+      data: {
+        perMsgRate: newRate,
+      },
     });
 
     return NextResponse.json({
       success: true,
-      message: "All WhatsApp rates updated successfully in database!",
+      message: "Rates updated successfully in database!",
       rates: {
-        utility: (updatedUser as any)?.utilityRate ?? rates.utility,
-        service: (updatedUser as any)?.serviceRate ?? rates.service,
-        authentication: (updatedUser as any)?.authRate ?? rates.authentication,
+        utility: updatedUser.perMsgRate,
+        service: updatedUser.perMsgRate,
+        authentication: updatedUser.perMsgRate,
         marketing: updatedUser.perMsgRate,
       },
     });

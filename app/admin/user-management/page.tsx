@@ -10,6 +10,10 @@ export default function UserManagementPage() {
   const [loading, setLoading] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
 
+  // Password change states
+  const [changePasswordToggle, setChangePasswordToggle] = useState(false);
+  const [newPasswordInput, setNewPasswordInput] = useState("");
+
   // Fetch users on load
   useEffect(() => {
     fetch("/api/admin/users")
@@ -36,6 +40,8 @@ export default function UserManagementPage() {
     );
     if (found) {
       setSelectedUser(found);
+      setChangePasswordToggle(false);
+      setNewPasswordInput("");
     } else {
       alert("User not found!");
     }
@@ -181,16 +187,74 @@ export default function UserManagementPage() {
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block font-semibold text-gray-600">Password</label>
-                  <input
-                    type="password"
-                    defaultValue="************************"
-                    className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
-                  />
+                {/* Password Management Section with Toggle */}
+                <div className="space-y-2 md:col-span-2 border p-4 rounded-xl bg-gray-50/50">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="font-semibold text-gray-700">Password Management</label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={changePasswordToggle}
+                        onChange={(e) => setChangePasswordToggle(e.target.checked)}
+                        className="toggle toggle-success"
+                      />
+                      <span className="text-xs font-bold text-gray-600">Change Password?</span>
+                    </label>
+                  </div>
+
+                  {changePasswordToggle ? (
+                    <div className="space-y-2">
+                      <input
+                        type="password"
+                        placeholder="Enter new secure password"
+                        value={newPasswordInput}
+                        onChange={(e) => setNewPasswordInput(e.target.value)}
+                        className="w-full border rounded-lg p-2.5 bg-white focus:outline-none font-mono"
+                      />
+                      <button
+                        onClick={async () => {
+                          if (!newPasswordInput) {
+                            alert("Please enter a new password!");
+                            return;
+                          }
+                          try {
+                            const res = await fetch("/api/admin/update-password", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                userId: selectedUser.id,
+                                newPassword: newPasswordInput,
+                              }),
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              alert("Password successfully updated and saved in database!");
+                              setNewPasswordInput("");
+                              setChangePasswordToggle(false);
+                            } else {
+                              alert("Failed: " + data.message);
+                            }
+                          } catch (err) {
+                            console.error(err);
+                            alert("Error updating password");
+                          }
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs shadow cursor-pointer"
+                      >
+                        💾 Save New Password
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      type="password"
+                      disabled
+                      defaultValue="************************"
+                      className="w-full border rounded-lg p-2.5 bg-gray-100 text-gray-400 font-mono"
+                    />
+                  )}
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-1 md:col-span-2">
                   <label className="block font-semibold text-gray-600">Email Id</label>
                   <input
                     type="email"

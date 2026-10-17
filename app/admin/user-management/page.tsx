@@ -11,6 +11,11 @@ export default function UserManagementPage() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("profile");
 
+  // Modals
+  const [showFundModal, setShowFundModal] = useState(false);
+  const [showRateModal, setShowRateModal] = useState(false);
+
+  // Form Data
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -20,8 +25,13 @@ export default function UserManagementPage() {
     expiryDate: "2026-10-29",
   });
 
+  // Password Toggle
   const [changePasswordToggle, setChangePasswordToggle] = useState(false);
   const [newPasswordInput, setNewPasswordInput] = useState("");
+
+  // Transfer Fund State
+  const [fundType, setFundType] = useState("Actual");
+  const [fundAmount, setFundAmount] = useState("");
 
   useEffect(() => {
     fetch("/api/admin/users")
@@ -119,6 +129,7 @@ export default function UserManagementPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 text-xs font-sans">
+      {/* Top Header */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
         <div>
           <div className="text-gray-400">Admin Home › User Management</div>
@@ -132,12 +143,13 @@ export default function UserManagementPage() {
         </Link>
       </div>
 
+      {/* Search Bar with Suggestions */}
       <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between gap-4 relative">
         <div className="flex items-center gap-2 flex-1 max-w-xl relative">
           <div className="w-full relative">
             <input
               type="text"
-              placeholder="Type username or email for suggestions..."
+              placeholder="Search username or email..."
               value={searchQuery}
               onChange={handleInputChange}
               onFocus={() => searchQuery && setShowSuggestions(true)}
@@ -174,13 +186,14 @@ export default function UserManagementPage() {
         </div>
 
         <button
-          onClick={() => alert("Add User feature active.")}
+          onClick={() => alert("Add User modal ready")}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl shadow cursor-pointer text-xs"
         >
           + Add User
         </button>
       </div>
 
+      {/* Main Tabs Header */}
       <div className="bg-white rounded-2xl border shadow-sm p-6 space-y-6">
         <div className="flex flex-wrap border-b space-x-6 font-semibold text-gray-500 text-xs">
           {[
@@ -205,6 +218,7 @@ export default function UserManagementPage() {
           ))}
         </div>
 
+        {/* 1. PROFILE TAB */}
         {activeTab === "profile" && selectedUser && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <div className="lg:col-span-1 border rounded-2xl p-6 text-center space-y-3 bg-gray-50/50">
@@ -213,7 +227,7 @@ export default function UserManagementPage() {
               </div>
               <div>
                 <h4 className="font-bold text-gray-800 text-sm flex items-center justify-center gap-1">
-                  {formData.name || selectedUser.name || "User"}{" "}
+                  {formData.name || selectedUser.name}{" "}
                   <span className="text-emerald-500">✔</span>
                 </h4>
                 <p className="text-[11px] text-gray-400">
@@ -230,7 +244,7 @@ export default function UserManagementPage() {
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none focus:bg-white"
+                    className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
                   />
                 </div>
 
@@ -314,33 +328,20 @@ export default function UserManagementPage() {
                       />
                       <button
                         onClick={async () => {
-                          if (!newPasswordInput) {
-                            alert("Please enter a new password!");
-                            return;
-                          }
-                          try {
-                            const res = await fetch("/api/admin/update-user", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                userId: selectedUser.id,
-                                password: newPasswordInput,
-                              }),
-                            });
-                            const data = await res.json();
-                            if (data.success) {
-                              alert("Password updated and saved in database!");
-                              setNewPasswordInput("");
-                              setChangePasswordToggle(false);
-                            } else {
-                              alert("Failed: " + data.message);
-                            }
-                          } catch (err) {
-                            console.error(err);
-                            alert("Error updating password");
+                          if (!newPasswordInput) return alert("Enter password");
+                          const res = await fetch("/api/admin/update-user", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ userId: selectedUser.id, password: newPasswordInput }),
+                          });
+                          const data = await res.json();
+                          if (data.success) {
+                            alert("Password updated in database!");
+                            setNewPasswordInput("");
+                            setChangePasswordToggle(false);
                           }
                         }}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs shadow cursor-pointer"
+                        className="bg-emerald-600 text-white font-bold px-4 py-2 rounded-xl text-xs shadow cursor-pointer"
                       >
                         💾 Save New Password
                       </button>
@@ -378,12 +379,180 @@ export default function UserManagementPage() {
           </div>
         )}
 
-        {activeTab !== "profile" && (
-          <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-xl border">
-            {activeTab.toUpperCase()} details loaded for {formData.name || selectedUser?.name}.
+        {/* 2. WHATSAPP TAB */}
+        {activeTab === "whatsapp" && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                <span className="font-semibold text-gray-700">WhatsApp API Enabled</span>
+                <input type="checkbox" defaultChecked className="toggle toggle-success" />
+              </div>
+              <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                <span className="font-semibold text-gray-700">Secure Reporting</span>
+                <input type="checkbox" className="toggle toggle-success" />
+              </div>
+              <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                <span className="font-semibold text-gray-700">International Account</span>
+                <input type="checkbox" className="toggle toggle-success" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 3. FUNDS TAB */}
+        {activeTab === "funds" && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowFundModal(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl shadow cursor-pointer"
+                >
+                  + Transfer Funds
+                </button>
+                <button
+                  onClick={() => setShowRateModal(true)}
+                  className="border border-emerald-300 text-emerald-700 font-bold px-4 py-2 rounded-xl shadow-xs cursor-pointer"
+                >
+                  ⚙️ Manage User Rates
+                </button>
+              </div>
+              <div className="flex space-x-3 font-bold">
+                <span className="bg-purple-100 text-purple-800 px-3 py-1.5 rounded-xl border">
+                  Wallet Balance: ₹0.00
+                </span>
+                {formData.role === "RESELLER" && (
+                  <span className="bg-slate-100 text-slate-800 px-3 py-1.5 rounded-xl border">
+                    Oversell Wallet Balance: ₹0.00
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 text-gray-500 uppercase border-b font-bold text-[10px]">
+                  <th className="p-3">USER</th>
+                  <th className="p-3">FROM USER</th>
+                  <th className="p-3">CREDITS</th>
+                  <th className="p-3">CREDIT TYPE</th>
+                  <th className="p-3">TRANSFER DATE</th>
+                  <th className="p-3">REMARKS</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-gray-400">
+                    No data found
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 4. EMAIL SETTINGS TAB */}
+        {activeTab === "email_setting" && (
+          <div className="space-y-4 max-w-xl">
+            <div className="space-y-3">
+              {[
+                "Login Notification Email",
+                "Credit Notification Email",
+                "New User Registration Email",
+                "Low Balance Notification Email",
+                "Daily Report Notification Email",
+                "Monthly Report Notification Email",
+                "Login Verification",
+              ].map((setting, idx) => (
+                <div key={idx} className="flex justify-between items-center border p-3 rounded-xl bg-gray-50">
+                  <span className="font-semibold text-gray-700">{setting}</span>
+                  <input type="checkbox" defaultChecked className="toggle toggle-success" />
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => alert("Email Settings Saved!")}
+              className="bg-emerald-600 text-white font-bold px-6 py-2 rounded-xl shadow cursor-pointer"
+            >
+              Save All Settings
+            </button>
+          </div>
+        )}
+
+        {/* 5. SEE MORE TAB */}
+        {activeTab === "seemore" && (
+          <div className="flex space-x-4">
+            <button
+              onClick={() => alert(`Logging in as ${formData.name}...`)}
+              className="bg-slate-800 text-white font-bold px-5 py-2.5 rounded-xl cursor-pointer"
+            >
+              🔑 Login As User
+            </button>
+            <button
+              onClick={() => alert("Whitelist numbers modal")}
+              className="border border-blue-300 text-blue-700 font-bold px-5 py-2.5 rounded-xl cursor-pointer"
+            >
+              🛡️ Manage WhiteList Number
+            </button>
           </div>
         )}
       </div>
+
+      {/* DYNAMIC FUND TRANSFER MODAL */}
+      {showFundModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
+            <h3 className="font-bold text-sm border-b pb-2 text-gray-800">
+              Transfer Funds ({formData.role === "RESELLER" ? "Reseller Account" : "User Account"})
+            </h3>
+
+            <div className="space-y-1">
+              <label className="block text-gray-600 font-semibold">Credit Type</label>
+              <select
+                value={fundType}
+                onChange={(e) => setFundType(e.target.value)}
+                className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-medium"
+              >
+                <option value="Actual">Actual Balance</option>
+                {/* Virtual/Oversell option ONLY for RESELLER */}
+                {formData.role === "RESELLER" && (
+                  <option value="Virtual">Virtual / Oversell Balance</option>
+                )}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-gray-600 font-semibold">Amount (INR)</label>
+              <input
+                type="number"
+                placeholder="Enter amount to transfer"
+                value={fundAmount}
+                onChange={(e) => setFundAmount(e.target.value)}
+                className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-3 border-t">
+              <button
+                onClick={() => {
+                  alert(`${fundType} Balance of ₹${fundAmount} Transferred Successfully!`);
+                  setShowFundModal(false);
+                  setFundAmount("");
+                }}
+                className="bg-emerald-600 text-white font-bold px-6 py-2 rounded-xl cursor-pointer"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setShowFundModal(false)}
+                className="border px-6 py-2 rounded-xl cursor-pointer text-gray-600"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

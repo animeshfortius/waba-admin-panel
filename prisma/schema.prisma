@@ -16,14 +16,16 @@ enum Role {
 model User {
   id             String   @id @default(uuid())
   name           String
-  username       String?  @unique // Yahan '?' lagakar optional kar diya gaya hai
+  username       String?  @unique
   email          String   @unique
   password       String
+  phone          String?
+  expiryDate     String?
   role           Role     @default(USER)
-  
+
   walletBalance  Float    @default(0.0)
-  actualBalance  Float    @default(0.0) // Reseller ke liye Actual Balance
-  virtualBalance Float    @default(0.0) // Reseller aur User ke liye Virtual Balance
+  actualBalance  Float    @default(0.0)
+  virtualBalance Float    @default(0.0)
   perMsgRate     Float    @default(0.80)
 
   createdById    String?
@@ -32,7 +34,7 @@ model User {
 
   transactions   WalletTransaction[]
   wabaAccounts   WabaAccount[]
-  
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -42,19 +44,19 @@ model WalletTransaction {
   userId      String
   user        User     @relation(fields: [userId], references: [id])
   amount      Float
-  type        String   
+  type        String
   description String
   createdAt   DateTime @default(now())
 }
 
 model WabaAccount {
-  id              String   @id @default(uuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id])
-  wabaId          String   @unique
-  phoneNumberId   String
-  displayPhone    String
-  accessToken     String
-  status          String   @default("ACTIVE")
-  createdAt       DateTime @default(now())
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  wabaId        String   @unique
+  phoneNumberId String
+  displayPhone  String
+  accessToken   String
+  status        String   @default("ACTIVE")
+  createdAt     DateTime @default(now())
 }

@@ -1,39 +1,59 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import bcrypt from "bcryptjs";
 
 export async function POST(req: Request) {
   try {
-    const { name, username, email, password, role, createdById, walletBalance, perMsgRate } = await req.json();
+    const body = await req.json();
+    const { name, email, password, role, phone, expiryDate } = body;
 
-    // 1. Check if username already exists
-    const existingUsername = await prisma.user.findUnique({ where: { username } });
-    if (existingUsername) {
-      return NextResponse.json({ error: "Username already exists" }, { status: 400 });
+    if (!name || !email || !password) {
+      return NextResponse.json(
+        { success: false, error: "Name, email, and password are required" },
+        { status: 400 }
+      );
     }
 
-    // 2. Check if email already exists
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
+
     if (existingUser) {
-      return NextResponse.json({ error: "Email already exists" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "User with this email already exists" },
+        { status: 400 }
+      );
     }
 
-    // 3. Create new user with username
+    // Hash the password using bcryptjs
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Role mapping to match Prisma Enum (RESELLER or USER)
+    const assignedRole = role === "RESELLER" ? "RESELLER" : "USER";
+
+    // Create user in Neon PostgreSQL database
     const newUser = await prisma.user.create({
       data: {
         name,
-        username, // Yahan username add kar diya gaya hai
         email,
-        password,
-        role: role as "RESELLER" | "USER",
-        createdById,
-        walletBalance: walletBalance ? parseFloat(walletBalance) : 0,
-        perMsgRate: perMsgRate ? parseFloat(perMsgRate) : 0.80,
+        password: hashedPassword,
+        role: assignedRole,
+        phone: phone || "",
+        expiryDate: expiryDate || null,
       },
     });
 
-    return NextResponse.json({ success: true, user: newUser }, { status: 201 });
-  } catch (error) {
-    console.error("Create user error:", error);
-    return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      message: "User created successfully",
+      user: { id: newUser.id, name: newUser.name, email: newUser.email },
+    });
+  } catch (error: any) {
+    console.error("Error creating user:", error);
+    return NextResponse.json(
+      { success: false, error: error.message || "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }

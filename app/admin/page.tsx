@@ -767,12 +767,12 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* ADD NEW USER MODAL (EXACT SCREENSHOT REPLICATED) */}
+      {/* ORIGINAL ADD USER MODAL (CONNECTED TO BACKEND API) */}
       {showAddUserModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-xs relative">
-            <div className="flex justify-between items-center border-b pb-2">
-              <span className="font-bold text-gray-800 text-sm">Add User</span>
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 text-xs relative max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-sm text-gray-800">Add New User / Reseller</h3>
               <button
                 onClick={() => setShowAddUserModal(false)}
                 className="text-gray-400 hover:text-gray-600 font-bold text-base cursor-pointer"
@@ -781,118 +781,129 @@ export default function AdminDashboardPage() {
               </button>
             </div>
 
-            <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-1">
-              {/* User Name */}
-              <div className="space-y-1">
-                <label className="block font-semibold text-gray-600">User Name</label>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const name = formData.get("name") as string;
+                const email = formData.get("email") as string;
+                const password = formData.get("password") as string;
+                const role = formData.get("role") as string;
+                const phone = formData.get("phone") as string;
+
+                try {
+                  const res = await fetch("/api/admin/users", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name, email, password, role, phone }),
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    alert("User successfully created and saved to database!");
+                    setShowAddUserModal(false);
+                    window.location.reload();
+                  } else {
+                    alert("Error: " + data.error);
+                  }
+                } catch (err) {
+                  console.error(err);
+                  alert("Something went wrong!");
+                }
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Account Type</label>
+                <select name="role" className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-medium">
+                  <option value="RESELLER">Reseller Account</option>
+                  <option value="USER">Direct User Account</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Full Name / User Name</label>
                 <input
                   type="text"
+                  name="name"
+                  required
                   placeholder="Enter User Name"
                   className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
                 />
               </div>
 
-              {/* Password with Eye Toggle */}
-              <div className="space-y-1">
-                <label className="block font-semibold text-gray-600">Password</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Enter Password"
-                    className="w-full border rounded-lg p-2.5 pr-8 bg-gray-50 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600"
-                  >
-                    👁️
-                  </button>
-                </div>
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Password</label>
+                <input
+                  type="password"
+                  name="password"
+                  required
+                  placeholder="Enter Password"
+                  className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
+                />
               </div>
 
-              {/* Mobile Number */}
-              <div className="space-y-1">
-                <label className="block font-semibold text-gray-600">Mobile Number</label>
-                <div className="flex border rounded-lg overflow-hidden bg-gray-50">
-                  <span className="px-3 py-2.5 bg-gray-100 text-gray-500 font-medium border-r flex items-center space-x-1">
-                    <span>🇮🇳</span>
-                    <span>+91</span>
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Mobile Number</label>
+                <div className="flex">
+                  <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 bg-gray-100 text-gray-500 font-mono">
+                    +91
                   </span>
                   <input
                     type="text"
+                    name="phone"
+                    required
                     placeholder="Enter Mobile Number"
-                    className="w-full p-2.5 bg-transparent focus:outline-none"
+                    className="w-full border rounded-r-lg p-2.5 bg-gray-50 focus:outline-none"
                   />
                 </div>
               </div>
 
-              {/* Mail Id */}
-              <div className="space-y-1">
-                <label className="block font-semibold text-gray-600">Mail Id</label>
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Mail Id</label>
                 <input
                   type="email"
+                  name="email"
+                  required
                   placeholder="Enter Email Address"
                   className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
                 />
               </div>
 
-              {/* Account Expiry Date */}
-              <div className="space-y-1">
-                <label className="block font-semibold text-gray-600">Account Expiry Date</label>
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Account Expiry Date</label>
                 <input
                   type="date"
-                  className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none text-gray-600 font-medium"
+                  name="expiryDate"
+                  className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
                 />
               </div>
 
-              {/* Account Type Dropdown */}
-              <div className="space-y-1">
-                <label className="block font-semibold text-gray-600">Account Type</label>
-                <select className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-medium">
-                  <option value="">Select Account Type</option>
-                  <option value="reseller">Reseller</option>
-                  <option value="user">User</option>
-                  <option value="manager">Manager</option>
-                  <option value="agent">Agent</option>
-                </select>
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Select Products</label>
+                <input
+                  type="text"
+                  readOnly
+                  value="WhatsApp"
+                  className="w-full border rounded-lg p-2 bg-gray-100 text-gray-500"
+                />
               </div>
 
-              {/* Select Products Dropdown */}
-              <div className="space-y-1">
-                <label className="block font-semibold text-gray-600">Select Products</label>
-                <div className="border rounded-lg p-2 bg-gray-50 space-y-2">
-                  <input
-                    type="text"
-                    placeholder="Search & select products..."
-                    className="w-full border rounded p-1.5 text-xs bg-white focus:outline-none"
-                  />
-                  <div className="flex items-center space-x-2 pt-1 border-t">
-                    <input type="checkbox" id="whatsapp_product" defaultChecked className="rounded text-emerald-600" />
-                    <label htmlFor="whatsapp_product" className="font-medium text-gray-700 cursor-pointer">WhatsApp</label>
-                  </div>
-                </div>
+              <div className="flex justify-end space-x-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowAddUserModal(false)}
+                  className="border px-4 py-2 rounded-xl text-gray-600 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-600 text-white font-bold px-5 py-2 rounded-xl cursor-pointer hover:bg-emerald-700"
+                >
+                  Save User
+                </button>
               </div>
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex justify-center space-x-3 pt-3 border-t">
-              <button
-                onClick={() => {
-                  alert("User added successfully!");
-                  setShowAddUserModal(false);
-                }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2 rounded-xl shadow cursor-pointer"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => setShowAddUserModal(false)}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-6 py-2 rounded-xl border cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
+            </form>
           </div>
         </div>
       )}

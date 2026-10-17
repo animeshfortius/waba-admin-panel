@@ -65,7 +65,7 @@ export async function POST(req: Request) {
         password: hashedPassword,
         role: assignedRole,
         phone: phone || "",
-        expiryDate: expiryDate || null,git add .
+        expiryDate: expiryDate ? new Date(expiryDate) : null,
       },
     });
 
@@ -80,34 +80,5 @@ export async function POST(req: Request) {
       { success: false, error: error.message || "Internal Server Error" },
       { status: 500 }
     );
-  }
-}
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs"; // Agar bcrypt use ho raha hai, nahi toh plain/hashed password
-
-const prisma = new PrismaClient();
-
-export async function POST(req: Request) {
-  try {
-    const { userId, newPassword } = await req.json();
-
-    if (!userId || !newPassword) {
-      return NextResponse.json({ success: false, message: "User ID and new password are required." }, { status: 400 });
-    }
-
-    // Password ko secure hash karna (optional agar plain text save karna ho toh seedha password daal sakte hain)
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    // Database me user ka password update karna
-    await prisma.user.update({
-      where: { id: userId },
-      data: { password: hashedPassword },
-    });
-
-    return NextResponse.json({ success: true, message: "Password updated successfully in database!" });
-  } catch (error) {
-    console.error("Error updating password:", error);
-    return NextResponse.json({ success: false, message: "Internal Server Error" }, { status: 500 });
   }
 }

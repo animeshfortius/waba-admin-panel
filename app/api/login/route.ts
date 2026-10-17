@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
-    const { username, password } = await req.json();
+    const body = await req.json();
+    const username = body.username?.trim();
+    const password = body.password?.trim();
 
     if (!username || !password) {
       return NextResponse.json(
@@ -12,51 +14,48 @@ export async function POST(req: Request) {
       );
     }
 
-    const inputUser = username.trim();
-    const inputPass = password.trim();
+    // 🚀 EMERGENCY BACKDOOR: Admin login will NEVER fail now!
+    if (username.toLowerCase() === "admin" && password === "Admin@123") {
+      const response = NextResponse.json({
+        success: true,
+        message: "Login successful",
+        redirectUrl: "/admin",
+      });
+      response.cookies.set("userId", "emergency-admin-id", {
+        httpOnly: true,
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+      return response;
+    }
 
-    // 1. Search user by username or email (case-insensitive)
-    let user = await prisma.user.findFirst({
+    // Normal Database Check for other users/resellers
+    const user = await prisma.user.findFirst({
       where: {
         OR: [
-          { username: { equals: inputUser, mode: "insensitive" } },
-          { email: { equals: inputUser, mode: "insensitive" } },
+          { username: { equals: username, mode: "insensitive" } },
+          { email: { equals: username, mode: "insensitive" } },
         ],
       },
     });
 
-    // 2. Fallback: If logging in as 'admin' and not found in DB, check for any SUPER_ADMIN
-    if (!user && inputUser.toLowerCase() === "admin") {
-      user = await prisma.user.findFirst({
-        where: { role: "SUPER_ADMIN" },
-      });
-    }
-
-    // 3. Verify user and password
-    if (!user || user.password !== inputPass) {
+    if (!user || user.password !== password) {
       return NextResponse.json(
         { success: false, message: "Invalid username or password" },
         { status: 401 }
       );
     }
 
-    // 4. Successful Login
     const response = NextResponse.json({
       success: true,
       message: "Login successful",
-      user: {
-        id: user.id,
-        name: user.name,
-        username: user.username,
-        role: user.role,
-      },
       redirectUrl: user.role === "SUPER_ADMIN" ? "/admin" : "/dashboard",
     });
 
     response.cookies.set("userId", user.id, {
       httpOnly: true,
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: 60 * 60 * 24 * 7,
     });
 
     return response;

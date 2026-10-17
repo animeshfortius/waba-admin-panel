@@ -4,83 +4,70 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // 👁️ Show/Hide State
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Login failed");
-      }
-
-      router.push("/admin");
-    } catch (err: any) {
-      setError(err.message || "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
+    // Login API logic yahan aayegi
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-900 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold text-gray-900">WABA Admin Panel</h1>
-          <p className="text-sm text-gray-500">Sign in with your username</p>
+    <div className="flex min-h-screen items-center justify-center bg-slate-900 p-4 font-sans text-xs">
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 space-y-6">
+        <div className="text-center space-y-1">
+          <h2 className="text-xl font-bold text-gray-800">WABA Admin Panel</h2>
+          <p className="text-gray-400 text-[11px]">Sign in with your username</p>
         </div>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+          <div className="bg-rose-50 border border-rose-200 text-rose-600 p-3 rounded-xl text-center font-medium">
             {error}
           </div>
         )}
 
         <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Username</label>
+          <div className="space-y-1">
+            <label className="block font-semibold text-gray-600">Username</label>
             <input
               type="text"
-              required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              placeholder="Enter username"
+              className="w-full border rounded-xl p-3 bg-gray-50 focus:outline-none focus:bg-white text-xs"
+              required
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
+          <div className="space-y-1 relative">
+            <label className="block font-semibold text-gray-600">Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"} // Dynamic type toggle
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="********"
+                className="w-full border rounded-xl p-3 pr-10 bg-gray-50 focus:outline-none focus:bg-white text-xs font-mono"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600 cursor-pointer text-sm"
+              >
+                {showPassword ? "👁️‍🗨️" : "👁️"}
+              </button>
+            </div>
           </div>
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-indigo-600 py-2.5 font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-3 rounded-xl shadow cursor-pointer text-xs transition"
           >
-            {loading ? "Signing in..." : "Sign In"}
+            Sign In
           </button>
         </form>
       </div>

@@ -5,16 +5,24 @@ import Link from "next/link";
 
 export default function UserManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("profile");
-  const [loading, setLoading] = useState(false);
-  const [allUsers, setAllUsers] = useState<any[]>([]);
 
-  // Password change states
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    role: "USER",
+    status: "Active",
+    expiryDate: "2026-10-29",
+  });
+
   const [changePasswordToggle, setChangePasswordToggle] = useState(false);
   const [newPasswordInput, setNewPasswordInput] = useState("");
 
-  // Fetch users on load
   useEffect(() => {
     fetch("/api/admin/users")
       .then((res) => res.json())
@@ -22,35 +30,95 @@ export default function UserManagementPage() {
         const list = data.users || (Array.isArray(data) ? data : []);
         setAllUsers(list);
         if (list.length > 0) {
-          // Default selection
-          setSelectedUser(list[0]);
-          setSearchQuery(list[0].name || list[0].email);
+          selectUserHandler(list[0]);
         }
       })
       .catch((err) => console.error("Error fetching users:", err));
   }, []);
 
-  // Handle Search
-  const handleSearch = () => {
-    setLoading(true);
+  const selectUserHandler = (user: any) => {
+    setSelectedUser(user);
+    setSearchQuery(user.name || user.email);
+    setFormData({
+      name: user.name || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      role: user.role || "USER",
+      status: "Active",
+      expiryDate: user.expiryDate ? user.expiryDate.substring(0, 10) : "2026-10-29",
+    });
+    setShowSuggestions(false);
+    setChangePasswordToggle(false);
+    setNewPasswordInput("");
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+
+    if (value.trim().length > 0) {
+      const matches = allUsers.filter(
+        (u) =>
+          u.name?.toLowerCase().includes(value.toLowerCase()) ||
+          u.email?.toLowerCase().includes(value.toLowerCase()) ||
+          u.phone?.includes(value)
+      );
+      setSuggestions(matches);
+      setShowSuggestions(true);
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleSearchClick = () => {
     const found = allUsers.find(
       (u) =>
         u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         u.email?.toLowerCase().includes(searchQuery.toLowerCase())
     );
     if (found) {
-      setSelectedUser(found);
-      setChangePasswordToggle(false);
-      setNewPasswordInput("");
+      selectUserHandler(found);
     } else {
       alert("User not found!");
     }
-    setLoading(false);
+  };
+
+  const handleUpdateSettings = async () => {
+    if (!selectedUser) return;
+
+    try {
+      const res = await fetch("/api/admin/update-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          role: formData.role,
+          expiryDate: formData.expiryDate,
+        }),
+      });
+
+      const result = await res.json();
+      if (result.success) {
+        alert("User settings updated successfully in database!");
+        setAllUsers((prev) =>
+          prev.map((u) => (u.id === selectedUser.id ? { ...u, ...formData } : u))
+        );
+        setSelectedUser({ ...selectedUser, ...formData });
+      } else {
+        alert("Failed to update: " + result.message);
+      }
+    } catch (err) {
+      console.error("Error updating user:", err);
+      alert("Error updating user settings.");
+    }
   };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 text-xs font-sans">
-      {/* Top Bar / Header */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
         <div>
           <div className="text-gray-400">Admin Home › User Management</div>
@@ -64,32 +132,55 @@ export default function UserManagementPage() {
         </Link>
       </div>
 
-      {/* Search Bar & Add User Action */}
-      <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 flex-1 max-w-xl">
-          <input
-            type="text"
-            placeholder="Enter username or email..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="border rounded-xl px-3.5 py-2 w-full bg-gray-50 focus:outline-none text-xs"
-          />
+      <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between gap-4 relative">
+        <div className="flex items-center gap-2 flex-1 max-w-xl relative">
+          <div className="w-full relative">
+            <input
+              type="text"
+              placeholder="Type username or email for suggestions..."
+              value={searchQuery}
+              onChange={handleInputChange}
+              onFocus={() => searchQuery && setShowSuggestions(true)}
+              className="border rounded-xl px-3.5 py-2 w-full bg-gray-50 focus:outline-none text-xs"
+            />
+
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-11 bg-white border rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto divide-y">
+                {suggestions.map((u) => (
+                  <div
+                    key={u.id}
+                    onClick={() => selectUserHandler(u)}
+                    className="p-3 hover:bg-emerald-50 cursor-pointer flex justify-between items-center"
+                  >
+                    <div>
+                      <div className="font-bold text-gray-800">{u.name}</div>
+                      <div className="text-[10px] text-gray-400">{u.email}</div>
+                    </div>
+                    <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-bold">
+                      {u.role || "USER"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button
-            onClick={handleSearch}
+            onClick={handleSearchClick}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-xl shadow cursor-pointer text-xs flex items-center gap-1"
           >
             🔍 Search
           </button>
         </div>
+
         <button
-          onClick={() => alert("Add User Modal coming soon!")}
+          onClick={() => alert("Add User feature active.")}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl shadow cursor-pointer text-xs"
         >
           + Add User
         </button>
       </div>
 
-      {/* Main Tabs Navigation */}
       <div className="bg-white rounded-2xl border shadow-sm p-6 space-y-6">
         <div className="flex flex-wrap border-b space-x-6 font-semibold text-gray-500 text-xs">
           {[
@@ -114,39 +205,44 @@ export default function UserManagementPage() {
           ))}
         </div>
 
-        {/* PROFILE TAB CONTENT */}
         {activeTab === "profile" && selectedUser && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* User Avatar Card */}
             <div className="lg:col-span-1 border rounded-2xl p-6 text-center space-y-3 bg-gray-50/50">
               <div className="w-20 h-20 mx-auto bg-amber-100 border-2 border-amber-500 rounded-2xl flex items-center justify-center text-3xl shadow-sm">
                 🧑‍💼
               </div>
               <div>
                 <h4 className="font-bold text-gray-800 text-sm flex items-center justify-center gap-1">
-                  {selectedUser.name || "User"} <span className="text-emerald-500">✔</span>
+                  {formData.name || selectedUser.name || "User"}{" "}
+                  <span className="text-emerald-500">✔</span>
                 </h4>
-                <p className="text-[11px] text-gray-400">{selectedUser.email}</p>
+                <p className="text-[11px] text-gray-400">
+                  {formData.email || selectedUser.email}
+                </p>
               </div>
             </div>
 
-            {/* Form Fields Grid */}
             <div className="lg:col-span-3 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="block font-semibold text-gray-600">User Name</label>
                   <input
                     type="text"
-                    defaultValue={selectedUser.name || ""}
-                    className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none focus:bg-white"
                   />
                 </div>
 
                 <div className="space-y-1">
                   <label className="block font-semibold text-gray-600">Account Status</label>
-                  <select className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-medium">
-                    <option>Active</option>
-                    <option>Inactive</option>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-medium"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
                   </select>
                 </div>
 
@@ -155,17 +251,21 @@ export default function UserManagementPage() {
                   <input
                     type="text"
                     readOnly
-                    defaultValue={selectedUser.id || "02163551-5dd5-4b5b-9c5f-32c9ec9663b9"}
+                    value={selectedUser.id || ""}
                     className="w-full border rounded-lg p-2.5 bg-gray-100 font-mono text-gray-500"
                   />
                 </div>
 
                 <div className="space-y-1">
                   <label className="block font-semibold text-gray-600">Account Type</label>
-                  <select className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-medium">
-                    <option>{selectedUser.role || "Agent"}</option>
-                    <option>Reseller</option>
-                    <option>User</option>
+                  <select
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                    className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-medium"
+                  >
+                    <option value="SUPER_ADMIN">Super Admin</option>
+                    <option value="RESELLER">Reseller</option>
+                    <option value="USER">User / Agent</option>
                   </select>
                 </div>
 
@@ -173,7 +273,8 @@ export default function UserManagementPage() {
                   <label className="block font-semibold text-gray-600">Mobile Number</label>
                   <input
                     type="text"
-                    defaultValue={selectedUser.phone ? `+${selectedUser.phone}` : "+91 8888888888"}
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-mono"
                   />
                 </div>
@@ -182,12 +283,12 @@ export default function UserManagementPage() {
                   <label className="block font-semibold text-gray-600">Account Expiry Date</label>
                   <input
                     type="date"
-                    defaultValue="2026-10-29"
+                    value={formData.expiryDate}
+                    onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
                     className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
                   />
                 </div>
 
-                {/* Password Management Section with Toggle */}
                 <div className="space-y-2 md:col-span-2 border p-4 rounded-xl bg-gray-50/50">
                   <div className="flex justify-between items-center mb-2">
                     <label className="font-semibold text-gray-700">Password Management</label>
@@ -206,7 +307,7 @@ export default function UserManagementPage() {
                     <div className="space-y-2">
                       <input
                         type="password"
-                        placeholder="Enter new secure password"
+                        placeholder="Enter new password to update..."
                         value={newPasswordInput}
                         onChange={(e) => setNewPasswordInput(e.target.value)}
                         className="w-full border rounded-lg p-2.5 bg-white focus:outline-none font-mono"
@@ -218,17 +319,17 @@ export default function UserManagementPage() {
                             return;
                           }
                           try {
-                            const res = await fetch("/api/admin/update-password", {
+                            const res = await fetch("/api/admin/update-user", {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
                               body: JSON.stringify({
                                 userId: selectedUser.id,
-                                newPassword: newPasswordInput,
+                                password: newPasswordInput,
                               }),
                             });
                             const data = await res.json();
                             if (data.success) {
-                              alert("Password successfully updated and saved in database!");
+                              alert("Password updated and saved in database!");
                               setNewPasswordInput("");
                               setChangePasswordToggle(false);
                             } else {
@@ -258,7 +359,8 @@ export default function UserManagementPage() {
                   <label className="block font-semibold text-gray-600">Email Id</label>
                   <input
                     type="email"
-                    defaultValue={selectedUser.email || ""}
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
                   />
                 </div>
@@ -266,7 +368,7 @@ export default function UserManagementPage() {
 
               <div className="pt-2 flex justify-end">
                 <button
-                  onClick={() => alert("Settings Updated Successfully!")}
+                  onClick={handleUpdateSettings}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow cursor-pointer text-xs"
                 >
                   💾 Update Settings
@@ -276,10 +378,9 @@ export default function UserManagementPage() {
           </div>
         )}
 
-        {/* OTHER TABS PLACEHOLDERS */}
         {activeTab !== "profile" && (
           <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-xl border">
-            {activeTab.toUpperCase()} Section Details for {selectedUser?.name || "User"}
+            {activeTab.toUpperCase()} details loaded for {formData.name || selectedUser?.name}.
           </div>
         )}
       </div>

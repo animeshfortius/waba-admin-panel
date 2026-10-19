@@ -30,11 +30,15 @@ export default function StatusAnalyticsChart() {
   }, []);
 
   if (!mounted) {
-    return <div className="h-72 w-full flex items-center justify-center text-gray-400 text-xs">Loading Analytics...</div>;
+    return (
+      <div style={{ width: "100%", height: "320px", display: "flex", alignItems: "center", justifyContent: "center" }} className="text-gray-400 text-xs">
+        Loading Analytics...
+      </div>
+    );
   }
 
   return (
-    <div className="h-80 w-full pt-4">
+    <div style={{ width: "100%", height: "320px" }} className="pt-4">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={analyticsData}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />

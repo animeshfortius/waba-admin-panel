@@ -11,43 +11,37 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    try {
-      // Emergency backdoor direct frontend check for instant login
-      if (username.trim().toLowerCase() === "admin" && password === "Admin@123") {
-        router.push("/admin");
-        return;
-      }
-
-      const res = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (err) {
-        throw new Error("Invalid server response format");
-      }
-
-      if (res.ok && data.success) {
-        router.push(data.redirectUrl || "/admin");
-      } else {
-        setError(data.message || "Invalid username or password");
-        setLoading(false);
-      }
-    } catch (err: any) {
-      console.error("Login error:", err);
-      setError(err.message || "Connection failed. Please try again.");
-      setLoading(false);
+    // Instant Direct Navigation Bypass for Admin
+    if (username.trim().toLowerCase() === "admin" && password === "Admin@123") {
+      window.location.href = "/admin";
+      return;
     }
+
+    // For other users
+    fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (res.ok && data.success) {
+          window.location.href = data.redirectUrl || "/admin";
+        } else {
+          setError(data.message || "Invalid username or password");
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Login error:", err);
+        setError("Connection failed. Please try again.");
+        setLoading(false);
+      });
   };
 
   return (
@@ -77,7 +71,7 @@ export default function LoginPage() {
             />
           </div>
 
-          <div className="space-y-1 relative">
+      <div className="space-y-1 relative">
             <label className="block font-semibold text-gray-600">Password</label>
             <div className="relative">
               <input

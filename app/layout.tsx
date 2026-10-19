@@ -1,21 +1,35 @@
+"use client";
+
 import LogoutButton from "@/components/LogoutButton";
-import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
-
-export const metadata: Metadata = {
-  title: "WABA Admin & SaaS Panel",
-  description: "Multi-tenant WhatsApp Business API Platform",
-};
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  
+  // Check if current page is login page
+  const isLoginPage = pathname === "/login";
+
+  // Agar Login Page hai, toh Bina Sidebar / Header ke clean view dikhao
+  if (isLoginPage) {
+    return (
+      <html lang="en">
+        <body className={`${inter.className} bg-gray-50 text-gray-900`}>
+          {children}
+        </body>
+      </html>
+    );
+  }
+
+  // Baki saare pages (Dashboard, Admin, etc.) par Sidebar & Header dikhao
   return (
     <html lang="en">
       <body className={`${inter.className} bg-gray-50 text-gray-900`}>
@@ -80,19 +94,16 @@ export default function RootLayout({
               </div>
 
               <div className="flex items-center space-x-6">
-                {/* Direct Link to Admin */}
                 <a href="/admin" className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-1.5 rounded-lg text-sm font-medium border transition flex items-center space-x-1.5 cursor-pointer">
                   <span>🛠️</span>
                   <span>Admin</span>
                 </a>
 
-                {/* Wallet Balance Widget */}
                 <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3.5 py-1.5 rounded-lg text-sm font-semibold flex items-center space-x-1.5">
                   <span>💰 Wallet:</span>
                   <span>₹24,500</span>
                 </div>
 
-                {/* Right Profile & Logout Section */}
                 <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">
                   <Link href="/profile" className="flex items-center space-x-3 hover:opacity-80 transition cursor-pointer">
                     <div className="text-right">
@@ -104,7 +115,6 @@ export default function RootLayout({
                     </div>
                   </Link>
 
-                  {/* FI Avatar ke bagal me Logout Button */}
                   <LogoutButton />
                 </div>
               </div>

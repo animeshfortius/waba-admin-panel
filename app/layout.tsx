@@ -107,7 +107,7 @@ export default function RootLayout({
                   </div>
                   <div className="flex items-center gap-2 text-xs border-t border-emerald-200/80 pt-0.5 mt-0.5">
                     <span className="font-semibold text-gray-500 text-[10px] uppercase">Virtual:</span>
-                    <span className="font-bold text-purple-700 font-mono text-xs">Unlimited (∞)</span>
+                    <span className="font-bold text-purple-700 font-mono text-xs">₹1,234,567,890.00</span>
                   </div>
                 </div>
 

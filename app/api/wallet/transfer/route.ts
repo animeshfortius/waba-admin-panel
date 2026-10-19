@@ -15,18 +15,26 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { targetUserId, amount, confirmPassword, type } = body;
+    const { targetUserId, amount, confirmPassword, type } = body; 
 
     const transferAmount = parseFloat(amount);
-    const actionType = type === "DEBIT" ? "DEBIT" : "CREDIT";
 
-    if (!targetUserId || !transferAmount || transferAmount <= 0 || !confirmPassword) {
+    // Agar modal se type nahi aaya, toh amount ke sign (+/-) se decide kar lo
+    let actionType = type;
+    if (!actionType) {
+      actionType = transferAmount < 0 ? "DEBIT" : "CREDIT";
+    }
+
+    const absoluteAmount = Math.abs(transferAmount);
+
+    if (!targetUserId || isNaN(absoluteAmount) || absoluteAmount <= 0 || !confirmPassword) {
       return NextResponse.json(
-        { success: false, message: "Invalid parameters or missing password" },
+        { success: false, message: "Valid target user ID, non-zero amount, and password are required." },
         { status: 400 }
       );
     }
 
+    // 1. Fetch Sender
     let sender = null;
     if (loggedInUserId === "emergency-admin-id" || loggedInUserId === "admin-fallback-id") {
       sender = {
@@ -46,6 +54,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 2. Verify Password
     if (sender.password !== confirmPassword.trim()) {
       return NextResponse.json(
         { success: false, message: "Incorrect account password. Transaction failed!" },
@@ -53,6 +62,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 3. Fetch Target User
     const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
     if (!targetUser) {
       return NextResponse.json(
@@ -61,6 +71,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 4. Role Hierarchy & Validation
     if (sender.role === "RESELLER") {
       if (targetUser.createdById !== sender.id) {
         return NextResponse.json(
@@ -69,7 +80,7 @@ export async function POST(req: Request) {
         );
       }
 
-      if (actionType === "CREDIT" && sender.virtualBalance < transferAmount) {
+      if (actionType === "CREDIT" && sender.virtualBalance < absoluteAmount) {
         return NextResponse.json(
           { success: false, message: "Insufficient Virtual Balance in your reseller account." },
           { status: 400 }
@@ -82,36 +93,37 @@ export async function POST(req: Request) {
       );
     }
 
-    if (actionType === "DEBIT" && targetUser.virtualBalance < transferAmount) {
+    if (actionType === "DEBIT" && targetUser.virtualBalance < absoluteAmount) {
       return NextResponse.json(
-        { success: false, message: `Target account only has ₹${targetUser.virtualBalance} Virtual Balance.` },
+        { success: false, message: `Target account only has ₹${targetUser.virtualBalance} Virtual Balance. Cannot deduct more than available.` },
         { status: 400 }
       );
     }
 
+    // 5. Execute Transaction
     await prisma.$transaction(async (tx) => {
       if (actionType === "CREDIT") {
         await tx.user.update({
           where: { id: targetUserId },
-          data: { virtualBalance: { increment: transferAmount } },
+          data: { virtualBalance: { increment: absoluteAmount } },
         });
 
         if (sender.role === "RESELLER") {
           await tx.user.update({
             where: { id: sender.id },
-            data: { virtualBalance: { decrement: transferAmount } },
+            data: { virtualBalance: { decrement: absoluteAmount } },
           });
         }
       } else {
         await tx.user.update({
           where: { id: targetUserId },
-          data: { virtualBalance: { decrement: transferAmount } },
+          data: { virtualBalance: { decrement: absoluteAmount } },
         });
 
         if (sender.role === "RESELLER") {
           await tx.user.update({
             where: { id: sender.id },
-            data: { virtualBalance: { increment: transferAmount } },
+            data: { virtualBalance: { increment: absoluteAmount } },
           });
         }
       }
@@ -119,7 +131,7 @@ export async function POST(req: Request) {
       await tx.walletTransaction.create({
         data: {
           userId: targetUserId,
-          amount: transferAmount,
+          amount: absoluteAmount,
           type: actionType === "CREDIT" ? "VIRTUAL_CREDIT" : "VIRTUAL_DEBIT",
           description: `Virtual balance ${actionType === "CREDIT" ? "added" : "deducted"} by ${sender.role === "SUPER_ADMIN" ? "Admin" : "Reseller"}`,
         },
@@ -128,7 +140,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `Successfully ${actionType === "CREDIT" ? "added" : "deducted"} ₹${transferAmount.toFixed(2)} Virtual Balance`,
+      message: `Successfully ${actionType === "CREDIT" ? "added" : "deducted"} ₹${absoluteAmount.toFixed(2)} Virtual Balance`,
     });
   } catch (error: any) {
     console.error("Transfer API Error:", error);

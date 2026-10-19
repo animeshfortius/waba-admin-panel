@@ -48,7 +48,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Verify Password
+    // 2. Verify Sender Password
     if (sender.password !== confirmPassword.trim()) {
       return NextResponse.json(
         { success: false, message: "Incorrect account password. Transaction failed!" },
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4. Role Hierarchy & Validation
+    // 4. Role Hierarchy & Rules
     if (sender.role === "RESELLER") {
       if (targetUser.createdById !== sender.id) {
         return NextResponse.json(
@@ -74,6 +74,7 @@ export async function POST(req: Request) {
         );
       }
 
+      // Agar Reseller credit kar raha hai, toh check karo ki uske paas sufficient virtual balance hai ya nahi
       if (actionType === "CREDIT" && sender.virtualBalance < absoluteAmount) {
         return NextResponse.json(
           { success: false, message: "Insufficient Virtual Balance in your reseller account." },
@@ -87,6 +88,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // Debit par check karein ki Target User ke paas utna balance hai ya nahi
     if (actionType === "DEBIT" && targetUser.virtualBalance < absoluteAmount) {
       return NextResponse.json(
         { success: false, message: `Target account only has ₹${targetUser.virtualBalance} Virtual Balance. Cannot deduct more than available.` },
@@ -94,14 +96,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5. Execute Transaction
+    // 5. Execute Transaction (Admin ke case me admin ka balance minus nahi hoga)
     await prisma.$transaction(async (tx) => {
       if (actionType === "CREDIT") {
+        // Target user ke virtual balance ko badhao
         await tx.user.update({
           where: { id: targetUserId },
           data: { virtualBalance: { increment: absoluteAmount } },
         });
 
+        // Agar bhejne wala Reseller hai, toh uske virtual balance se minus karo. 
+        // Agar Admin hai, toh Admin ka balance minus nahi hoga (unlimited/static).
         if (sender.role === "RESELLER") {
           await tx.user.update({
             where: { id: sender.id },
@@ -109,6 +114,7 @@ export async function POST(req: Request) {
           });
         }
       } else {
+        // Debit / Minus logic
         await tx.user.update({
           where: { id: targetUserId },
           data: { virtualBalance: { decrement: absoluteAmount } },
@@ -122,6 +128,7 @@ export async function POST(req: Request) {
         }
       }
 
+      // Record transaction
       await tx.walletTransaction.create({
         data: {
           userId: targetUserId,

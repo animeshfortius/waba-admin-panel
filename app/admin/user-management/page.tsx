@@ -18,6 +18,18 @@ export default function UserManagementPage() {
   const [showFundModal, setShowFundModal] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
   const [showWhitelistModal, setShowWhitelistModal] = useState(false);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+
+  // New User Form State (Without Select Products)
+  const [newUserData, setNewUserData] = useState({
+    username: "",
+    password: "",
+    phone: "",
+    email: "",
+    expiryDate: "",
+    role: "USER",
+  });
+  const [addUserLoading, setAddUserLoading] = useState(false);
 
   // Whitelist State
   const [whitelistNumberInput, setWhitelistNumberInput] = useState("");
@@ -215,6 +227,33 @@ export default function UserManagementPage() {
     }
   };
 
+  // 8. Create New User Handler
+  const handleCreateUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddUserLoading(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newUserData),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("User created successfully!");
+        setShowAddUserModal(false);
+        setNewUserData({ username: "", password: "", phone: "", email: "", expiryDate: "", role: "USER" });
+        fetchUsers();
+      } else {
+        alert(data.message || "Failed to create user");
+      }
+    } catch (err) {
+      console.error("Error creating user:", err);
+      alert("Network error while creating user.");
+    } finally {
+      setAddUserLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 text-xs font-sans">
       {/* Header */}
@@ -275,7 +314,7 @@ export default function UserManagementPage() {
         </div>
 
         <button
-          onClick={() => alert("Add User modal ready")}
+          onClick={() => setShowAddUserModal(true)}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl shadow cursor-pointer text-xs"
         >
           + Add User
@@ -679,6 +718,109 @@ export default function UserManagementPage() {
             }
           }}
         />
+      )}
+
+      {/* ADD USER MODAL (Without Select Products) */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-lg font-bold text-gray-800">Add New User</h3>
+              <button onClick={() => setShowAddUserModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
+            </div>
+
+            <form onSubmit={handleCreateUserSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-600">User Name</label>
+                <input
+                  type="text"
+                  placeholder="Enter User Name"
+                  value={newUserData.username}
+                  onChange={(e) => setNewUserData({ ...newUserData, username: e.target.value })}
+                  className="w-full border rounded-xl p-3 text-xs mt-1 bg-gray-50 focus:outline-none focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600">Password</label>
+                <input
+                  type="password"
+                  placeholder="Enter Password"
+                  value={newUserData.password}
+                  onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
+                  className="w-full border rounded-xl p-3 text-xs mt-1 bg-gray-50 focus:outline-none focus:border-emerald-500 font-mono"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600">Mobile Number</label>
+                <input
+                  type="text"
+                  placeholder="Enter Mobile Number"
+                  value={newUserData.phone}
+                  onChange={(e) => setNewUserData({ ...newUserData, phone: e.target.value })}
+                  className="w-full border rounded-xl p-3 text-xs mt-1 bg-gray-50 focus:outline-none focus:border-emerald-500 font-mono"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600">Mail Id</label>
+                <input
+                  type="email"
+                  placeholder="Enter Email Address"
+                  value={newUserData.email}
+                  onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
+                  className="w-full border rounded-xl p-3 text-xs mt-1 bg-gray-50 focus:outline-none focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600">Account Expiry Date</label>
+                <input
+                  type="date"
+                  value={newUserData.expiryDate}
+                  onChange={(e) => setNewUserData({ ...newUserData, expiryDate: e.target.value })}
+                  className="w-full border rounded-xl p-3 text-xs mt-1 bg-gray-50 focus:outline-none focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600">Account Type</label>
+                <select
+                  value={newUserData.role}
+                  onChange={(e) => setNewUserData({ ...newUserData, role: e.target.value })}
+                  className="w-full border rounded-xl p-3 text-xs mt-1 bg-gray-50 focus:outline-none focus:border-emerald-500 font-medium"
+                >
+                  <option value="USER">User / Agent</option>
+                  <option value="RESELLER">Reseller</option>
+                  <option value="SUPER_ADMIN">Super Admin</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowAddUserModal(false)}
+                  className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-200"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={addUserLoading}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 shadow-md"
+                >
+                  {addUserLoading ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

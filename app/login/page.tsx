@@ -21,7 +21,7 @@ export default function LoginPage() {
 
     if (cleanUser === "admin" && cleanPass === "Admin@123") {
       document.cookie = "userId=admin-fallback-id; path=/; max-age=604800";
-      window.location.href = "/admin";
+      window.location.href = "/dashboard"; // 👈 Yahan /admin se /dashboard kar diya
       return;
     }
 
@@ -33,7 +33,7 @@ export default function LoginPage() {
       .then(async (res) => {
         const data = await res.json();
         if (res.ok && data.success) {
-          window.location.href = data.redirectUrl || "/admin";
+          window.location.href = data.redirectUrl || "/dashboard"; // 👈 Yahan bhi fallback /admin se /dashboard kar diya
         } else {
           setError(data.message || "Invalid username or password");
           setLoading(false);

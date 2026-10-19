@@ -15,8 +15,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { targetUserId, amount, confirmPassword, type } = body; 
-    // type: 'CREDIT' (Add) ya 'DEBIT' (Minus)
+    const { targetUserId, amount, confirmPassword, type } = body;
 
     const transferAmount = parseFloat(amount);
     const actionType = type === "DEBIT" ? "DEBIT" : "CREDIT";
@@ -28,7 +27,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Fetch Sender (Logged-in User / Admin / Reseller)
     let sender = null;
     if (loggedInUserId === "emergency-admin-id" || loggedInUserId === "admin-fallback-id") {
       sender = {
@@ -48,7 +46,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Verify Sender Password
     if (sender.password !== confirmPassword.trim()) {
       return NextResponse.json(
         { success: false, message: "Incorrect account password. Transaction failed!" },
@@ -56,7 +53,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Fetch Target User
     const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
     if (!targetUser) {
       return NextResponse.json(
@@ -65,7 +61,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4. Role Hierarchy & Rules
     if (sender.role === "RESELLER") {
       if (targetUser.createdById !== sender.id) {
         return NextResponse.json(
@@ -74,7 +69,6 @@ export async function POST(req: Request) {
         );
       }
 
-      // Agar Reseller user ko CREDIT kar raha hai, toh Reseller ke paas sufficient Virtual Balance hona chahiye
       if (actionType === "CREDIT" && sender.virtualBalance < transferAmount) {
         return NextResponse.json(
           { success: false, message: "Insufficient Virtual Balance in your reseller account." },
@@ -88,24 +82,20 @@ export async function POST(req: Request) {
       );
     }
 
-    // Debit par check karein ki Target User ke paas utna Virtual Balance hai ya nahi
     if (actionType === "DEBIT" && targetUser.virtualBalance < transferAmount) {
       return NextResponse.json(
-        { success: false, message: `Target account only has ₹${targetUser.virtualBalance} Virtual Balance. Cannot deduct more than available.` },
+        { success: false, message: `Target account only has ₹${targetUser.virtualBalance} Virtual Balance.` },
         { status: 400 }
       );
     }
 
-    // 5. Execute Virtual Balance Transaction
     await prisma.$transaction(async (tx) => {
       if (actionType === "CREDIT") {
-        // Target ko Add karein
         await tx.user.update({
           where: { id: targetUserId },
           data: { virtualBalance: { increment: transferAmount } },
         });
 
-        // Reseller se Deduct karein (Admin unlimited/static hai)
         if (sender.role === "RESELLER") {
           await tx.user.update({
             where: { id: sender.id },
@@ -113,13 +103,11 @@ export async function POST(req: Request) {
           });
         }
       } else {
-        // Target se Minus karein
         await tx.user.update({
           where: { id: targetUserId },
           data: { virtualBalance: { decrement: transferAmount } },
         });
 
-        // Reseller ne Minus kiya hai toh wo balance Reseller account me wapas Add karein
         if (sender.role === "RESELLER") {
           await tx.user.update({
             where: { id: sender.id },
@@ -128,7 +116,6 @@ export async function POST(req: Request) {
         }
       }
 
-      // Record transaction
       await tx.walletTransaction.create({
         data: {
           userId: targetUserId,
@@ -141,7 +128,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `Successfully ${actionType === "CREDIT" ? "added" : "deducted"} ₹${transferAmount.toFixed(2)} Virtual Balance ${actionType === "CREDIT" ? "to" : "from"} ${targetUser.name || targetUser.username}`,
+      message: `Successfully ${actionType === "CREDIT" ? "added" : "deducted"} ₹${transferAmount.toFixed(2)} Virtual Balance`,
     });
   } catch (error: any) {
     console.error("Transfer API Error:", error);

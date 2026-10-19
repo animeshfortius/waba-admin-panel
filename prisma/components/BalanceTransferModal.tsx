@@ -13,6 +13,7 @@ export default function BalanceTransferModal({
 }) {
   const [targetUserId, setTargetUserId] = useState("");
   const [amount, setAmount] = useState("");
+  const [actionType, setActionType] = useState<"CREDIT" | "DEBIT">("CREDIT");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -29,7 +30,8 @@ export default function BalanceTransferModal({
         body: JSON.stringify({ 
           targetUserId, 
           amount: parseFloat(amount), 
-          confirmPassword 
+          confirmPassword,
+          type: actionType
         }),
       });
       const data = await res.json();
@@ -39,7 +41,7 @@ export default function BalanceTransferModal({
         onSuccess();
         onClose();
       } else {
-        setError(data.message || "Transfer failed");
+        setError(data.message || "Transaction failed");
       }
     } catch (err) {
       setError("Network error. Please try again.");
@@ -52,7 +54,7 @@ export default function BalanceTransferModal({
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
         <div className="flex justify-between items-center border-b pb-3">
-          <h3 className="text-lg font-bold text-gray-800">Transfer Virtual Balance</h3>
+          <h3 className="text-lg font-bold text-gray-800">Manage Virtual Balance</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
         </div>
         
@@ -63,6 +65,32 @@ export default function BalanceTransferModal({
         )}
 
         <form onSubmit={handleTransfer} className="space-y-4">
+          {/* Action Type Toggle: Add (+) / Deduct (-) */}
+          <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setActionType("CREDIT")}
+              className={`py-2 text-xs font-bold rounded-lg transition ${
+                actionType === "CREDIT" 
+                  ? "bg-emerald-600 text-white shadow" 
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              ➕ Add Balance (Credit)
+            </button>
+            <button
+              type="button"
+              onClick={() => setActionType("DEBIT")}
+              className={`py-2 text-xs font-bold rounded-lg transition ${
+                actionType === "DEBIT" 
+                  ? "bg-rose-600 text-white shadow" 
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              ➖ Deduct Balance (Debit)
+            </button>
+          </div>
+
           <div>
             <label className="text-xs font-semibold text-gray-600">Select Account</label>
             <select 
@@ -81,7 +109,9 @@ export default function BalanceTransferModal({
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-gray-600">Transfer Amount (₹)</label>
+            <label className="text-xs font-semibold text-gray-600">
+              {actionType === "CREDIT" ? "Amount to Add (₹)" : "Amount to Deduct (₹)"}
+            </label>
             <input 
               type="number" 
               step="0.01" 
@@ -94,7 +124,7 @@ export default function BalanceTransferModal({
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-gray-600">Your Account Password</label>
+            <label className="text-xs font-semibold text-gray-600">Your Account Password (Required)</label>
             <input 
               type="password" 
               value={confirmPassword} 
@@ -116,9 +146,16 @@ export default function BalanceTransferModal({
             <button 
               type="submit" 
               disabled={loading}
-              className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-md"
+              className={`px-5 py-2.5 text-white rounded-xl text-xs font-bold disabled:opacity-50 shadow-md ${
+                actionType === "CREDIT" 
+                  ? "bg-emerald-600 hover:bg-emerald-700" 
+                  : "bg-rose-600 hover:bg-rose-700"
+              }`}
             >
-              {loading ? "Processing..." : "Transfer Virtual Balance"}
+              {loading 
+                ? "Processing..." 
+                : actionType === "CREDIT" ? "Credit Virtual Balance" : "Debit Virtual Balance"
+              }
             </button>
           </div>
         </form>

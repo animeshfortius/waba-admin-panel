@@ -15,9 +15,11 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { targetUserId, amount, confirmPassword } = body;
+    const { targetUserId, amount, confirmPassword, type } = body; 
+    // type: 'CREDIT' (Add) ya 'DEBIT' (Minus)
 
     const transferAmount = parseFloat(amount);
+    const actionType = type === "DEBIT" ? "DEBIT" : "CREDIT";
 
     if (!targetUserId || !transferAmount || transferAmount <= 0 || !confirmPassword) {
       return NextResponse.json(
@@ -49,7 +51,7 @@ export async function POST(req: Request) {
     // 2. Verify Sender Password
     if (sender.password !== confirmPassword.trim()) {
       return NextResponse.json(
-        { success: false, message: "Incorrect account password. Transfer failed!" },
+        { success: false, message: "Incorrect account password. Transaction failed!" },
         { status: 403 }
       );
     }
@@ -63,18 +65,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4. Role Hierarchy & Balance Check
+    // 4. Role Hierarchy & Rules
     if (sender.role === "RESELLER") {
-      // Reseller can ONLY transfer to users created by them
       if (targetUser.createdById !== sender.id) {
         return NextResponse.json(
-          { success: false, message: "Unauthorized: You can only transfer balance to your assigned users." },
+          { success: false, message: "Unauthorized: You can only manage balance for your assigned users." },
           { status: 403 }
         );
       }
 
-      // Check if Reseller has enough Virtual Balance
-      if (sender.virtualBalance < transferAmount) {
+      // Agar Reseller user ko CREDIT kar raha hai, toh Reseller ke paas sufficient Virtual Balance hona chahiye
+      if (actionType === "CREDIT" && sender.virtualBalance < transferAmount) {
         return NextResponse.json(
           { success: false, message: "Insufficient Virtual Balance in your reseller account." },
           { status: 400 }
@@ -82,25 +83,49 @@ export async function POST(req: Request) {
       }
     } else if (sender.role !== "SUPER_ADMIN") {
       return NextResponse.json(
-        { success: false, message: "Regular users are not allowed to transfer balance." },
+        { success: false, message: "Regular users are not allowed to manage balance." },
         { status: 403 }
       );
     }
 
-    // 5. Execute Virtual Balance Update & Record Transaction
-    await prisma.$transaction(async (tx) => {
-      // Credit Target User's Virtual Balance
-      await tx.user.update({
-        where: { id: targetUserId },
-        data: { virtualBalance: { increment: transferAmount } },
-      });
+    // Debit par check karein ki Target User ke paas utna Virtual Balance hai ya nahi
+    if (actionType === "DEBIT" && targetUser.virtualBalance < transferAmount) {
+      return NextResponse.json(
+        { success: false, message: `Target account only has ₹${targetUser.virtualBalance} Virtual Balance. Cannot deduct more than available.` },
+        { status: 400 }
+      );
+    }
 
-      // Debit Reseller Virtual Balance (SUPER_ADMIN balance never decreases)
-      if (sender.role === "RESELLER") {
+    // 5. Execute Virtual Balance Transaction
+    await prisma.$transaction(async (tx) => {
+      if (actionType === "CREDIT") {
+        // Target ko Add karein
         await tx.user.update({
-          where: { id: sender.id },
+          where: { id: targetUserId },
+          data: { virtualBalance: { increment: transferAmount } },
+        });
+
+        // Reseller se Deduct karein (Admin unlimited/static hai)
+        if (sender.role === "RESELLER") {
+          await tx.user.update({
+            where: { id: sender.id },
+            data: { virtualBalance: { decrement: transferAmount } },
+          });
+        }
+      } else {
+        // Target se Minus karein
+        await tx.user.update({
+          where: { id: targetUserId },
           data: { virtualBalance: { decrement: transferAmount } },
         });
+
+        // Reseller ne Minus kiya hai toh wo balance Reseller account me wapas Add karein
+        if (sender.role === "RESELLER") {
+          await tx.user.update({
+            where: { id: sender.id },
+            data: { virtualBalance: { increment: transferAmount } },
+          });
+        }
       }
 
       // Record transaction
@@ -108,15 +133,15 @@ export async function POST(req: Request) {
         data: {
           userId: targetUserId,
           amount: transferAmount,
-          type: "VIRTUAL_CREDIT",
-          description: `Virtual balance transferred from ${sender.role === "SUPER_ADMIN" ? "Admin" : "Reseller"}`,
+          type: actionType === "CREDIT" ? "VIRTUAL_CREDIT" : "VIRTUAL_DEBIT",
+          description: `Virtual balance ${actionType === "CREDIT" ? "added" : "deducted"} by ${sender.role === "SUPER_ADMIN" ? "Admin" : "Reseller"}`,
         },
       });
     });
 
     return NextResponse.json({
       success: true,
-      message: `Successfully transferred ₹${transferAmount.toFixed(2)} Virtual Balance to ${targetUser.name || targetUser.username}`,
+      message: `Successfully ${actionType === "CREDIT" ? "added" : "deducted"} ₹${transferAmount.toFixed(2)} Virtual Balance ${actionType === "CREDIT" ? "to" : "from"} ${targetUser.name || targetUser.username}`,
     });
   } catch (error: any) {
     console.error("Transfer API Error:", error);

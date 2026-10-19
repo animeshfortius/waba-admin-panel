@@ -20,7 +20,7 @@ export default function UserManagementPage() {
   const [showWhitelistModal, setShowWhitelistModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
 
-  // New User Form State (Without Select Products)
+  // New User Form State (Without Super Admin & Select Products)
   const [newUserData, setNewUserData] = useState({
     username: "",
     password: "",
@@ -720,7 +720,7 @@ export default function UserManagementPage() {
         />
       )}
 
-      {/* ADD USER MODAL (Without Select Products) */}
+      {/* ADD USER MODAL (Without Super Admin & Select Products) */}
       {showAddUserModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -798,7 +798,6 @@ export default function UserManagementPage() {
                 >
                   <option value="USER">User / Agent</option>
                   <option value="RESELLER">Reseller</option>
-                  <option value="SUPER_ADMIN">Super Admin</option>
                 </select>
               </div>
 

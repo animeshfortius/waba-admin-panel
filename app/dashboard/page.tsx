@@ -1,17 +1,17 @@
 import LogoutButton from "@/components/LogoutButton";
+import StatusAnalyticsChart from "@/components/StatusAnalyticsChart"; // Yeh niche client component banayenge
 
 export default async function DashboardPage() {
-  // Mock ya session se fetch kiya hua user object (Aap apne auth ke mutabiq adjust kar sakte hain)
   const user = {
     name: "Admin",
-    role: "SUPER_ADMIN", // ya "RESELLER" ya "USER"
+    role: "SUPER_ADMIN", 
     actualBalance: 0,
     virtualBalance: 0,
     walletBalance: 0,
   };
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-8 max-w-6xl mx-auto space-y-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <LogoutButton />
@@ -44,6 +44,19 @@ export default async function DashboardPage() {
             <p className="text-3xl font-bold text-gray-600">₹{user.walletBalance || user.virtualBalance}</p>
           </div>
         )}
+      </div>
+
+      {/* Graphical Status Analytics Chart Section */}
+      <div className="bg-white p-6 rounded-xl border shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-bold text-gray-800">Status Analytics</h3>
+          <span className="text-xs text-gray-500 font-medium bg-gray-50 px-3 py-1 rounded-lg border">
+            📅 Oct 13, 2026 - Oct 19, 2026
+          </span>
+        </div>
+
+        {/* Chart Component Render */}
+        <StatusAnalyticsChart />
       </div>
     </div>
   );

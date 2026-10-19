@@ -18,18 +18,12 @@ export async function POST(req: Request) {
     const { targetUserId, amount, confirmPassword, type } = body; 
 
     const transferAmount = parseFloat(amount);
-
-    // Agar modal se type nahi aaya, toh amount ke sign (+/-) se decide kar lo
-    let actionType = type;
-    if (!actionType) {
-      actionType = transferAmount < 0 ? "DEBIT" : "CREDIT";
-    }
-
+    let actionType = type || (transferAmount < 0 ? "DEBIT" : "CREDIT");
     const absoluteAmount = Math.abs(transferAmount);
 
     if (!targetUserId || isNaN(absoluteAmount) || absoluteAmount <= 0 || !confirmPassword) {
       return NextResponse.json(
-        { success: false, message: "Valid target user ID, non-zero amount, and password are required." },
+        { success: false, message: "Valid target user ID, amount, and password are required." },
         { status: 400 }
       );
     }

@@ -47,9 +47,6 @@ export default function UserManagementPage() {
   const [newPasswordInput, setNewPasswordInput] = useState("");
 
   // Funds State
-  const [fundType, setFundType] = useState("Actual");
-  const [fundAmount, setFundAmount] = useState("");
-  const [fundRemarks, setFundRemarks] = useState("");
   const [walletBalance, setWalletBalance] = useState(0);
   const [oversellBalance, setOversellBalance] = useState(0);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -187,47 +184,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // 7. Save All Rates Handler
-  const handleSaveRates = async () => {
-    if (!selectedUser?.id) return;
-
-    try {
-      const res = await fetch("/api/admin/rates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: selectedUser.id,
-          rates: {
-            utility: rates.utility,
-            service: rates.service,
-            authentication: rates.authentication,
-            marketing: rates.marketing,
-          },
-        }),
-      });
-
-      const result = await res.json();
-      if (result.success) {
-        alert("All WhatsApp rates updated and saved in database successfully!");
-        if (result.rates) {
-          setRates({
-            utility: String(result.rates.utility),
-            service: String(result.rates.service),
-            authentication: String(result.rates.authentication),
-            marketing: String(result.rates.marketing),
-          });
-        }
-        setShowRateModal(false);
-      } else {
-        alert("Failed to save rates: " + result.message);
-      }
-    } catch (err) {
-      console.error("Error saving rates:", err);
-      alert("Error saving rates to database.");
-    }
-  };
-
-  // 8. Update User Profile Settings
+  // 7. Update User Profile Settings
   const handleUpdateSettings = async () => {
     if (!selectedUser) return;
 
@@ -255,49 +212,6 @@ export default function UserManagementPage() {
     } catch (err) {
       console.error("Error updating user:", err);
       alert("Error updating user settings.");
-    }
-  };
-
-  // 9. Transfer Funds
-  const handleTransferFund = async () => {
-    const amt = parseFloat(fundAmount);
-    if (isNaN(amt)) {
-      alert("Please enter a valid amount!");
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/admin/funds", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: selectedUser.id,
-          amount: amt,
-          creditType: fundType,
-          remarks: fundRemarks || "Admin Credit Addition",
-        }),
-      });
-
-      const result = await res.json();
-      if (result.success) {
-        alert(`${fundType} Balance of ₹${amt} transferred successfully!`);
-        setShowFundModal(false);
-        setFundAmount("");
-        setFundRemarks("");
-
-        const refRes = await fetch(`/api/admin/funds?userId=${selectedUser.id}`);
-        const refData = await refRes.json();
-        if (refData.success) {
-          setWalletBalance(refData.actualBalance || 0);
-          setOversellBalance(refData.virtualBalance || 0);
-          setTransactions(refData.transactions || []);
-        }
-      } else {
-        alert("Failed to transfer: " + result.message);
-      }
-    } catch (err) {
-      console.error("Error transferring fund:", err);
-      alert("Error executing fund transfer.");
     }
   };
 
@@ -747,64 +661,24 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* FUND TRANSFER MODAL */}
+      {/* NEW SECURE BALANCE TRANSFER MODAL */}
       {showFundModal && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
-            <h3 className="font-bold text-sm border-b pb-2 text-gray-800">
-              Transfer Funds ({formData.role === "RESELLER" ? "Reseller Account" : "User Account"})
-            </h3>
-
-            <div className="space-y-1">
-              <label className="block text-gray-600 font-semibold">Credit Type</label>
-              <select
-                value={fundType}
-                onChange={(e) => setFundType(e.target.value)}
-                className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-medium"
-              >
-                <option value="Actual">Actual Balance</option>
-                <option value="Virtual">Virtual / Oversell Balance</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-gray-600 font-semibold">Amount (INR)</label>
-              <input
-                type="number"
-                placeholder="Enter amount to transfer"
-                value={fundAmount}
-                onChange={(e) => setFundAmount(e.target.value)}
-                className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-mono"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-gray-600 font-semibold">Remarks / Note</label>
-              <input
-                type="text"
-                placeholder="Enter remarks (e.g. Monthly Topup)"
-                value={fundRemarks}
-                onChange={(e) => setFundRemarks(e.target.value)}
-                className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
-              />
-            </div>
-
-            <div className="flex justify-end space-x-2 pt-2 border-t">
-              <button
-                onClick={handleTransferFund}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow cursor-pointer"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => setShowFundModal(false)}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <BalanceTransferModal
+          users={selectedUser ? [selectedUser] : allUsers}
+          onClose={() => setShowFundModal(false)}
+          onSuccess={async () => {
+            setShowFundModal(false);
+            if (selectedUser?.id) {
+              const refRes = await fetch(`/api/admin/funds?userId=${selectedUser.id}`);
+              const refData = await refRes.json();
+              if (refData.success) {
+                setWalletBalance(refData.actualBalance || 0);
+                setOversellBalance(refData.virtualBalance || 0);
+                setTransactions(refData.transactions || []);
+              }
+            }
+          }}
+        />
       )}
     </div>
   );

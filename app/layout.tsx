@@ -43,7 +43,7 @@ export default function RootLayout({
             </div>
 
             <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto text-sm font-medium">
-              <Link href="/" className="flex items-center space-x-3 px-4 py-2.5 rounded-lg bg-emerald-600 text-white">
+              <Link href="/dashboard" className="flex items-center space-x-3 px-4 py-2.5 rounded-lg bg-emerald-600 text-white">
                 <span>🏠</span>
                 <span>Dashboard</span>
               </Link>
@@ -99,9 +99,16 @@ export default function RootLayout({
                   <span>Admin</span>
                 </a>
 
-                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3.5 py-1.5 rounded-lg text-sm font-semibold flex items-center space-x-1.5">
-                  <span>💰 Wallet:</span>
-                  <span>₹24,500</span>
+                {/* Updated Double Balance Box (Actual Upper, Virtual Lower) */}
+                <div className="bg-emerald-50 border border-emerald-200 px-3.5 py-1 rounded-xl flex flex-col text-right shadow-sm justify-center">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-semibold text-gray-500 text-[10px] uppercase">Actual:</span>
+                    <span className="font-bold text-emerald-700 font-mono text-xs">₹1,234,567,890.00</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs border-t border-emerald-200/80 pt-0.5 mt-0.5">
+                    <span className="font-semibold text-gray-500 text-[10px] uppercase">Virtual:</span>
+                    <span className="font-bold text-purple-700 font-mono text-xs">Unlimited (∞)</span>
+                  </div>
                 </div>
 
                 <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">

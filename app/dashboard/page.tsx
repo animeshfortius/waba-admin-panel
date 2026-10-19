@@ -1,5 +1,5 @@
 import LogoutButton from "@/components/LogoutButton";
-import StatusAnalyticsChart from "@/components/StatusAnalyticsChart"; // Yeh niche client component banayenge
+import StatusAnalyticsChart from "@/components/StatusAnalyticsChart";
 
 export default async function DashboardPage() {
   const user = {

@@ -1,4 +1,5 @@
 "use client";
+
 import BalanceTransferModal from "@/components/BalanceTransferModal";
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -260,7 +261,7 @@ export default function UserManagementPage() {
   // 9. Transfer Funds
   const handleTransferFund = async () => {
     const amt = parseFloat(fundAmount);
-    if (isNaN(amt) || amt <= 0) {
+    if (isNaN(amt)) {
       alert("Please enter a valid amount!");
       return;
     }
@@ -604,11 +605,9 @@ export default function UserManagementPage() {
                   <span className="bg-purple-100 text-purple-800 px-3 py-1.5 rounded-xl border">
                     Wallet Balance: ₹{walletBalance.toFixed(2)}
                   </span>
-                  {formData.role === "RESELLER" && (
-                    <span className="bg-slate-100 text-slate-800 px-3 py-1.5 rounded-xl border">
-                      Oversell Wallet Balance: ₹{oversellBalance.toFixed(2)}
-                    </span>
-                  )}
+                  <span className="bg-slate-100 text-slate-800 px-3 py-1.5 rounded-xl border">
+                    Virtual Balance: ₹{oversellBalance.toFixed(2)}
+                  </span>
                 </div>
               </div>
 
@@ -764,9 +763,7 @@ export default function UserManagementPage() {
                 className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-medium"
               >
                 <option value="Actual">Actual Balance</option>
-                {formData.role === "RESELLER" && (
-                  <option value="Virtual">Virtual / Oversell Balance</option>
-                )}
+                <option value="Virtual">Virtual / Oversell Balance</option>
               </select>
             </div>
 
@@ -792,198 +789,16 @@ export default function UserManagementPage() {
               />
             </div>
 
-            <div className="flex justify-end space-x-3 pt-3 border-t">
+            <div className="flex justify-end space-x-2 pt-2 border-t">
               <button
                 onClick={handleTransferFund}
-                className="bg-emerald-600 text-white font-bold px-6 py-2 rounded-xl cursor-pointer"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow cursor-pointer"
               >
                 Save
               </button>
               <button
                 onClick={() => setShowFundModal(false)}
-                className="border px-6 py-2 rounded-xl cursor-pointer text-gray-600"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MANAGE RATES MODAL */}
-      {showRateModal && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-sm text-gray-800">
-                Manage Rates - {formData.name || selectedUser?.name}
-              </h3>
-              <button
-                onClick={() => setShowRateModal(false)}
-                className="text-gray-400 hover:text-gray-600 font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="md:col-span-1 border rounded-xl p-2 bg-gray-50 space-y-1">
-                <button className="w-full text-left font-bold px-3 py-2 rounded-lg bg-emerald-600 text-white flex items-center space-x-2">
-                  <span>💬</span>
-                  <span>WHATSAPP</span>
-                </button>
-              </div>
-
-              <div className="md:col-span-3 space-y-4">
-                <div className="flex justify-between items-center">
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-semibold text-gray-500">Margin Type</label>
-                    <select
-                      value={marginType}
-                      onChange={(e) => setMarginType(e.target.value)}
-                      className="border rounded-lg p-2 bg-gray-50 font-medium text-xs focus:outline-none"
-                    >
-                      <option>Fixed Price</option>
-                      <option>Percentage Margin</option>
-                    </select>
-                  </div>
-                  <div className="text-[10px] text-rose-500 font-bold">
-                    Selling price cannot be set less than 50% of My Rate
-                  </div>
-                </div>
-
-                <div className="border rounded-xl overflow-hidden">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-gray-50 text-gray-500 uppercase border-b font-bold text-[10px]">
-                        <th className="p-2.5">COUNTRY INFO</th>
-                        <th className="p-2.5">CHANNEL TYPE</th>
-                        <th className="p-2.5">MY RATE / UNIT</th>
-                        <th className="p-2.5">SELLING RATE / UNIT</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y font-medium">
-                      <tr>
-                        <td className="p-2.5">🇮🇳 (91) INDIA - IN</td>
-                        <td className="p-2.5">Utility</td>
-                        <td className="p-2.5 text-blue-600 font-bold">0.1350</td>
-                        <td className="p-2.5">
-                          <input
-                            type="text"
-                            value={rates.utility}
-                            onChange={(e) => setRates({ ...rates, utility: e.target.value })}
-                            className="border rounded px-2 py-1 w-24 bg-white font-mono focus:outline-none"
-                          />
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5">🇮🇳 (91) INDIA - IN</td>
-                        <td className="p-2.5">Service</td>
-                        <td className="p-2.5 text-blue-600 font-bold">0.1350</td>
-                        <td className="p-2.5">
-                          <input
-                            type="text"
-                            value={rates.service}
-                            onChange={(e) => setRates({ ...rates, service: e.target.value })}
-                            className="border rounded px-2 py-1 w-24 bg-white font-mono focus:outline-none"
-                          />
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5">🇮🇳 (91) INDIA - IN</td>
-                        <td className="p-2.5">Authentication</td>
-                        <td className="p-2.5 text-blue-600 font-bold">0.1350</td>
-                        <td className="p-2.5">
-                          <input
-                            type="text"
-                            value={rates.authentication}
-                            onChange={(e) => setRates({ ...rates, authentication: e.target.value })}
-                            className="border rounded px-2 py-1 w-24 bg-white font-mono focus:outline-none"
-                          />
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5">🇮🇳 (91) INDIA - IN</td>
-                        <td className="p-2.5">Marketing</td>
-                        <td className="p-2.5 text-blue-600 font-bold">0.8046</td>
-                        <td className="p-2.5">
-                          <input
-                            type="text"
-                            value={rates.marketing}
-                            onChange={(e) => setRates({ ...rates, marketing: e.target.value })}
-                            className="border rounded px-2 py-1 w-24 bg-white font-mono focus:outline-none"
-                          />
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <button
-                    onClick={handleSaveRates}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2 rounded-xl shadow cursor-pointer text-xs"
-                  >
-                    💾 Save Rates
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MANAGE WHITELIST NUMBER MODAL */}
-      {showWhitelistModal && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
-            <div className="flex justify-between items-center border-b pb-2">
-              <h3 className="font-bold text-sm text-gray-800">Add WhiteList Number</h3>
-              <button
-                onClick={() => setShowWhitelistModal(false)}
-                className="text-gray-400 hover:text-gray-600 font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-gray-600 font-semibold">WhiteList Number</label>
-              <input
-                type="text"
-                placeholder="Enter Number (e.g. 9979958788, 8878999799)"
-                value={whitelistNumberInput}
-                onChange={(e) => setWhitelistNumberInput(e.target.value)}
-                className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none text-xs font-mono"
-              />
-              <span className="text-[10px] text-gray-400">ex. 9979958788, 8878999799, 7787799899</span>
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-gray-600 font-semibold">Bulk Upload</label>
-              <input
-                type="file"
-                className="w-full border rounded-lg p-1.5 text-xs bg-gray-50 cursor-pointer"
-              />
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-3 border-t">
-              <button
-                onClick={() => {
-                  if (whitelistNumberInput.trim()) {
-                    setWhitelistNumbers([...whitelistNumbers, whitelistNumberInput.trim()]);
-                    setWhitelistNumberInput("");
-                    setShowWhitelistModal(false);
-                    alert("Whitelist numbers saved successfully!");
-                  }
-                }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2 rounded-xl text-xs shadow cursor-pointer"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => setShowWhitelistModal(false)}
-                className="border px-6 py-2 rounded-xl text-xs cursor-pointer text-gray-600 hover:bg-gray-50"
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
               >
                 Close
               </button>

@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard }, // Yahan "/" se "/dashboard" kar diya hai
   { name: "Admin Panel", href: "/admin/admin-home", icon: ShieldAlert },
   { name: "Clients", href: "/clients", icon: Users },
   { name: "WABA Accounts", href: "/waba", icon: Radio },
@@ -57,7 +57,6 @@ export default function Sidebar() {
       </div>
 
       <div className="border-t border-slate-800 pt-4 px-2 flex flex-col gap-3">
-        {/* Logout Button yahan add ho gaya hai */}
         <LogoutButton />
         
         <div className="text-xs text-slate-500">

@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 
-export async function GET() {
-  const response = NextResponse.redirect(new URL("/login", process.env.NEXT_PUBLIC_APP_URL || "https://waba-admin-panel.onrender.com"));
+export async function GET(request: Request) {
+  // Login page ka URL set karein
+  const url = new URL("/login", request.url);
+  const response = NextResponse.redirect(url);
   
-  // Clear the userId cookie completely
+  // Server-side se HttpOnly 'userId' cookie ko turant expire/delete kar do
   response.cookies.set("userId", "", {
     httpOnly: true,
     path: "/",
-    expires: new Date(0), // Expire instantly
+    expires: new Date(0),
   });
 
   return response;

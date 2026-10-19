@@ -2,18 +2,13 @@
 
 export default function LogoutButton() {
   const handleLogout = () => {
-    // 1. Sabhi possible cookies (`userId` aur purani `token`) ko turant expire karein
-    document.cookie = "userId=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    document.cookie = "token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    
-    // 2. Local & Session storage clear karein
+    // Local storage clear karke seedha logout API par bhej do
     try {
       localStorage.clear();
       sessionStorage.clear();
     } catch (e) {}
 
-    // 3. Bina kisi delay ke direct login page par hard redirect karein
-    window.location.replace("/login");
+    window.location.href = "/api/logout";
   };
 
   return (

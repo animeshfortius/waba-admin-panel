@@ -19,7 +19,7 @@ export async function POST(req: Request) {
       const response = NextResponse.json({
         success: true,
         message: "Login successful",
-        redirectUrl: "/admin",
+        redirectUrl: "/dashboard",
       });
       response.cookies.set("userId", "emergency-admin-id", {
         httpOnly: true,
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     const response = NextResponse.json({
       success: true,
       message: "Login successful",
-      redirectUrl: user.role === "SUPER_ADMIN" ? "/admin" : "/dashboard",
+      redirectUrl: "/dashboard",
     });
 
     response.cookies.set("userId", user.id, {

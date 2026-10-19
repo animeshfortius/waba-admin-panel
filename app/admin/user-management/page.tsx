@@ -661,7 +661,7 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* NEW SECURE BALANCE TRANSFER MODAL */}
+      {/* SECURE BALANCE TRANSFER MODAL */}
       {showFundModal && (
         <BalanceTransferModal
           users={selectedUser ? [selectedUser] : allUsers}

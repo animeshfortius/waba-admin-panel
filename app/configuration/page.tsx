@@ -179,26 +179,25 @@ export default function ConfigPage() {
   const handleFacebookSignup = () => {
   setIsProcessing(true);
   
-  const appId = process.env.NEXT_PUBLIC_META_APP_ID; 
+  const appId = process.env.NEXT_PUBLIC_META_APP_ID;
   const redirectUri = encodeURIComponent("https://waba.fortius.in/facebook/callback");
 
   const fbPopup = window.open(
-    `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=https://waba.fortius.in/facebook/callback&scope=whatsapp_business_management`,
+    `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=whatsapp_business_management`,
     "FacebookLogin",
     "width=600,height=700,top=100,left=200"
   );
-};
 
-    setTimeout(() => {
-      if (fbPopup && !fbPopup.closed) {
-        fbPopup.close();
-      }
-      setIsProcessing(false);
-      setShowFacebookModal(false);
-      alert("Facebook Embedded Signup completed! Connecting channel...");
-      setActiveSection("waba_channels");
-    }, 3000);
-  };
+  setTimeout(() => {
+    if (fbPopup && !fbPopup.closed) {
+      fbPopup.close();
+    }
+    setIsProcessing(false);
+    setShowFacebookModal(false);
+    alert("Facebook Embedded Signup completed! Connecting channel...");
+    setActiveSection("waba_channels");
+  }, 3000);
+};
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-2">

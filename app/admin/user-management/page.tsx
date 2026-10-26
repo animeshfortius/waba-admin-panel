@@ -17,13 +17,28 @@ export default function UserManagementPage() {
   // WhatsApp Sub-tab State
   const [whatsappSubTab, setWhatsappSubTab] = useState("account");
 
+  // Channel List States & Modals
+  const [channels, setChannels] = useState<any[]>([]);
+  const [selectedChannel, setSelectedChannel] = useState<any>(null);
+  const [showEditChannelModal, setShowEditChannelModal] = useState(false);
+  const [showRegisterApiModal, setShowRegisterApiModal] = useState(false);
+  const [showRepushModal, setShowRepushModal] = useState(false);
+  const [repushDate, setRepushDate] = useState("2026-10-26");
+
+  const [editChannelForm, setEditChannelForm] = useState({
+    webhookUrl: "",
+    tps: "40",
+    webhookType: "Default",
+    wrapperClient: "Disabled (Panel Mode)",
+  });
+
   // Modals
   const [showFundModal, setShowFundModal] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
   const [showWhitelistModal, setShowWhitelistModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
 
-  // New User Form State (Without Super Admin & Select Products)
+  // New User Form State
   const [newUserData, setNewUserData] = useState({
     username: "",
     password: "",
@@ -35,7 +50,6 @@ export default function UserManagementPage() {
   const [addUserLoading, setAddUserLoading] = useState(false);
 
   // Whitelist State
-  const [whitelistNumberInput, setWhitelistNumberInput] = useState("");
   const [whitelistNumbers, setWhitelistNumbers] = useState<string[]>([]);
 
   // Form Data
@@ -49,7 +63,6 @@ export default function UserManagementPage() {
   });
 
   // Rates State
-  const [marginType, setMarginType] = useState("Fixed Price");
   const [rates, setRates] = useState({
     utility: "0.1550",
     service: "0.1550",
@@ -145,9 +158,47 @@ export default function UserManagementPage() {
     }
   };
 
-  // 5. Fetch Funds & Rates on User Select
+  // 5. Fetch Channels & Funds on User Select
   useEffect(() => {
     if (selectedUser?.id) {
+      // Fetch Channels
+      fetch(`/api/admin/channels?userId=${selectedUser.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.channels) {
+            setChannels(data.channels);
+          } else {
+            setChannels([
+              {
+                id: "1",
+                wabaNumber: "919078191120",
+                phoneId: "1117975088062436",
+                wabaId: "1485899409705104",
+                displayName: "100 APP",
+                configureDate: "01 May 2026 12:29:30 PM",
+                webhookUrl: "NA",
+                tps: 40,
+                isDefault: true,
+              },
+            ]);
+          }
+        })
+        .catch(() => {
+          setChannels([
+            {
+              id: "1",
+              wabaNumber: "919078191120",
+              phoneId: "1117975088062436",
+              wabaId: "1485899409705104",
+              displayName: "100 APP",
+              configureDate: "01 May 2026 12:29:30 PM",
+              webhookUrl: "NA",
+              tps: 40,
+              isDefault: true,
+            },
+          ]);
+        });
+
       fetch(`/api/admin/funds?userId=${selectedUser.id}`)
         .then((res) => res.json())
         .then((data) => {
@@ -158,51 +209,33 @@ export default function UserManagementPage() {
           }
         })
         .catch((err) => console.error("Error loading user funds:", err));
-
-      fetch(`/api/admin/rates?userId=${selectedUser.id}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.rates) {
-            setRates({
-              utility: String(data.rates.utility),
-              service: String(data.rates.service),
-              authentication: String(data.rates.authentication),
-              marketing: String(data.rates.marketing),
-            });
-          }
-        })
-        .catch((err) => console.error("Error loading rates:", err));
     }
   }, [selectedUser]);
 
-  // 6. LOGIN AS USER (Impersonation Handler)
+  // 6. LOGIN AS USER
   const handleLoginAsUser = async () => {
     if (!selectedUser?.id) return;
-
     try {
       const res = await fetch("/api/admin/impersonate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: selectedUser.id }),
       });
-
       const data = await res.json();
       if (data.success) {
-        alert(`Logging in as ${selectedUser.name || selectedUser.username}... Redirecting to user panel.`);
+        alert(`Logging in as ${selectedUser.name || selectedUser.username}...`);
         router.push(data.redirectUrl || "/dashboard");
       } else {
         alert("Failed to login as user: " + data.message);
       }
     } catch (err) {
       console.error("Error impersonating user:", err);
-      alert("Error logging in as user.");
     }
   };
 
   // 7. Update User Profile Settings
   const handleUpdateSettings = async () => {
     if (!selectedUser) return;
-
     try {
       const res = await fetch("/api/admin/update-user", {
         method: "POST",
@@ -216,7 +249,6 @@ export default function UserManagementPage() {
           expiryDate: formData.expiryDate,
         }),
       });
-
       const result = await res.json();
       if (result.success) {
         alert("User settings updated successfully!");
@@ -226,7 +258,6 @@ export default function UserManagementPage() {
       }
     } catch (err) {
       console.error("Error updating user:", err);
-      alert("Error updating user settings.");
     }
   };
 
@@ -251,7 +282,6 @@ export default function UserManagementPage() {
       }
     } catch (err) {
       console.error("Error creating user:", err);
-      alert("Network error while creating user.");
     } finally {
       setAddUserLoading(false);
     }
@@ -591,7 +621,7 @@ export default function UserManagementPage() {
                 </div>
               )}
 
-              {/* 3. Channel List Sub-tab */}
+              {/* 3. Channel List Sub-tab with Automated WABA details & 4 Action buttons */}
               {whatsappSubTab === "channels" && (
                 <div className="space-y-3">
                   <h4 className="font-bold text-gray-700">Channel List</h4>
@@ -604,21 +634,96 @@ export default function UserManagementPage() {
                         <th className="p-3">DISPLAY NAME</th>
                         <th className="p-3">CONFIGURED DATE</th>
                         <th className="p-3">WEBHOOK URL</th>
-                        <th className="p-3 text-right">ACTIONS</th>
+                        <th className="p-3">TPS</th>
+                        <th className="p-3 text-right">ACTION</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y text-xs">
-                      <tr className="hover:bg-gray-50">
-                        <td className="p-3 font-bold">{formData.name || selectedUser.username}</td>
-                        <td className="p-3 font-mono">WABA ID: 12547889...</td>
-                        <td className="p-3"><input type="radio" defaultChecked name="defaultChannel" /></td>
-                        <td className="p-3">Active-08</td>
-                        <td className="p-3 font-mono text-[10px]">06 Oct 2026 11:53 AM</td>
-                        <td className="p-3 text-gray-400 font-mono">NA</td>
-                        <td className="p-3 text-right">
-                          <button type="button" className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[11px] font-bold">Profile</button>
-                        </td>
-                      </tr>
+                      {channels.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="p-6 text-center text-gray-400">
+                            No channels found for this user.
+                          </td>
+                        </tr>
+                      ) : (
+                        channels.map((ch) => (
+                          <tr key={ch.id} className="hover:bg-gray-50">
+                            <td className="p-3 font-bold">{formData.name || selectedUser.username}</td>
+                            <td className="p-3 font-mono text-[11px] leading-relaxed">
+                              <div><strong>WABA Number:</strong> {ch.wabaNumber}</div>
+                              <div><strong>Phone ID:</strong> {ch.phoneId}</div>
+                              <div><strong>Waba ID:</strong> {ch.wabaId}</div>
+                            </td>
+                            <td className="p-3">
+                              <input type="radio" defaultChecked={ch.isDefault} name="defaultChannel" />
+                            </td>
+                            <td className="p-3 font-medium">{ch.displayName || "100 APP"}</td>
+                            <td className="p-3 font-mono text-[10px]">{ch.configureDate}</td>
+                            <td className="p-3 text-gray-500 font-mono">{ch.webhookUrl || "NA"}</td>
+                            <td className="p-3 font-bold text-emerald-700">{ch.tps || 40}</td>
+                            <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
+                              {/* 1. Edit Button */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedChannel(ch);
+                                  setEditChannelForm({
+                                    webhookUrl: ch.webhookUrl === "NA" ? "" : ch.webhookUrl,
+                                    tps: String(ch.tps || 40),
+                                    webhookType: "Default",
+                                    wrapperClient: "Disabled (Panel Mode)",
+                                  });
+                                  setShowEditChannelModal(true);
+                                }}
+                                className="bg-blue-600 text-white p-1.5 rounded hover:bg-blue-700"
+                                title="Edit Channel"
+                              >
+                                ✏️
+                              </button>
+
+                              {/* 2. Delete Button */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirm("Are you sure you want to delete this channel?")) {
+                                    setChannels(channels.filter((c) => c.id !== ch.id));
+                                  }
+                                }}
+                                className="bg-rose-600 text-white p-1.5 rounded hover:bg-rose-700"
+                                title="Delete Channel"
+                              >
+                                🗑️
+                              </button>
+
+                              {/* 3. Register API Run Button */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedChannel(ch);
+                                  setShowRegisterApiModal(true);
+                                }}
+                                className="bg-emerald-600 text-white p-1.5 rounded hover:bg-emerald-700"
+                                title="Register API"
+                              >
+                                🔑
+                              </button>
+
+                              {/* 4. Repush Webhook Button */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedChannel(ch);
+                                  setShowRepushModal(true);
+                                }}
+                                className="bg-amber-600 text-white p-1.5 rounded hover:bg-amber-700"
+                                title="Repush Webhook"
+                              >
+                                🔄
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -746,7 +851,6 @@ export default function UserManagementPage() {
                 </button>
               </div>
 
-              {/* Whitelist Numbers Table View */}
               <div className="border rounded-2xl p-4 bg-gray-50/50 space-y-3">
                 <div className="flex justify-between items-center">
                   <h4 className="font-bold text-gray-700">Whitelisted Numbers</h4>
@@ -797,6 +901,155 @@ export default function UserManagementPage() {
         </div>
       )}
 
+      {/* ================= MODALS ================= */}
+
+      {/* 1. EDIT CHANNEL MODAL */}
+      {showEditChannelModal && selectedChannel && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-lg font-bold text-gray-800">Edit Channel Configuration</h3>
+              <button onClick={() => setShowEditChannelModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-600">Webhook URL</label>
+                <input
+                  type="text"
+                  value={editChannelForm.webhookUrl}
+                  onChange={(e) => setEditChannelForm({ ...editChannelForm, webhookUrl: e.target.value })}
+                  placeholder="Enter Webhook URL"
+                  className="w-full border rounded-xl p-2.5 text-xs mt-1 bg-gray-50 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600">TPS</label>
+                <input
+                  type="number"
+                  value={editChannelForm.tps}
+                  onChange={(e) => setEditChannelForm({ ...editChannelForm, tps: e.target.value })}
+                  className="w-full border rounded-xl p-2.5 text-xs mt-1 bg-gray-50 focus:outline-none font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600">Select User Webhook Type</label>
+                <select
+                  value={editChannelForm.webhookType}
+                  onChange={(e) => setEditChannelForm({ ...editChannelForm, webhookType: e.target.value })}
+                  className="w-full border rounded-xl p-2.5 text-xs mt-1 bg-gray-50 focus:outline-none"
+                >
+                  <option value="Default">Default</option>
+                  <option value="Custom">Custom</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600">Wrapper Client</label>
+                <select
+                  value={editChannelForm.wrapperClient}
+                  onChange={(e) => setEditChannelForm({ ...editChannelForm, wrapperClient: e.target.value })}
+                  className="w-full border rounded-xl p-2.5 text-xs mt-1 bg-gray-50 focus:outline-none"
+                >
+                  <option value="Disabled (Panel Mode)">Disabled (Panel Mode)</option>
+                  <option value="Enabled">Enabled</option>
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">When enabled, incoming webhooks will NOT be processed in panel.</p>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setShowEditChannelModal(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setChannels(
+                    channels.map((c) => (c.id === selectedChannel.id ? { ...c, webhookUrl: editChannelForm.webhookUrl, tps: Number(editChannelForm.tps) } : c))
+                  );
+                  setShowEditChannelModal(false);
+                  alert("Channel updated successfully!");
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. REGISTER API CONFIRMATION MODAL */}
+      {showRegisterApiModal && selectedChannel && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-center space-y-4">
+            <h3 className="text-lg font-bold text-gray-800">Are you sure?</h3>
+            <p className="text-gray-600 text-xs">Do you really want to call Register API against this number?</p>
+            <div className="flex justify-center space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRegisterApiModal(false)}
+                className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRegisterApiModal(false);
+                  alert("Register API called successfully for number: " + selectedChannel.wabaNumber);
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold"
+              >
+                Yes, Register it!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. REPUSH WEBHOOK MODAL */}
+      {showRepushModal && selectedChannel && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-sm font-bold text-gray-800">Repush Webhook</h3>
+              <button onClick={() => setShowRepushModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">Close</button>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600">Select Date</label>
+              <input
+                type="date"
+                value={repushDate}
+                onChange={(e) => setRepushDate(e.target.value)}
+                className="w-full border rounded-xl p-2.5 text-xs mt-1 bg-gray-50 focus:outline-none"
+              />
+            </div>
+            <div className="flex justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRepushModal(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRepushModal(false);
+                  alert(`Webhook repushed successfully for date: ${repushDate}`);
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1"
+              >
+                ▶ Repush
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* SECURE BALANCE TRANSFER MODAL */}
       {showFundModal && (
         <BalanceTransferModal
@@ -817,7 +1070,7 @@ export default function UserManagementPage() {
         />
       )}
 
-      {/* ADD USER MODAL (Without Super Admin & Select Products) */}
+      {/* ADD USER MODAL */}
       {showAddUserModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">

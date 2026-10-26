@@ -14,6 +14,9 @@ export default function UserManagementPage() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("profile");
 
+  // WhatsApp Sub-tab State
+  const [whatsappSubTab, setWhatsappSubTab] = useState("account");
+
   // Modals
   const [showFundModal, setShowFundModal] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
@@ -306,6 +309,7 @@ export default function UserManagementPage() {
           </div>
 
           <button
+            type="button"
             onClick={handleSearchClick}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-xl shadow cursor-pointer text-xs flex items-center gap-1"
           >
@@ -314,6 +318,7 @@ export default function UserManagementPage() {
         </div>
 
         <button
+          type="button"
           onClick={() => setShowAddUserModal(true)}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl shadow cursor-pointer text-xs"
         >
@@ -343,6 +348,7 @@ export default function UserManagementPage() {
             ].map((tab) => (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveTab(tab.id)}
                 className={`pb-3 border-b-2 transition cursor-pointer ${
                   activeTab === tab.id
@@ -464,6 +470,7 @@ export default function UserManagementPage() {
                           className="w-full border rounded-lg p-2.5 bg-white focus:outline-none font-mono"
                         />
                         <button
+                          type="button"
                           onClick={async () => {
                             if (!newPasswordInput) return alert("Enter password");
                             const res = await fetch("/api/admin/update-user", {
@@ -506,6 +513,7 @@ export default function UserManagementPage() {
 
                 <div className="pt-2 flex justify-end">
                   <button
+                    type="button"
                     onClick={handleUpdateSettings}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow cursor-pointer text-xs"
                   >
@@ -522,18 +530,21 @@ export default function UserManagementPage() {
               {/* WhatsApp Sub-navigation */}
               <div className="flex space-x-4 border-b pb-3 text-xs font-semibold">
                 <button
+                  type="button"
                   onClick={() => setWhatsappSubTab("account")}
                   className={`pb-1 border-b-2 cursor-pointer ${whatsappSubTab === "account" ? "border-emerald-600 text-emerald-700 font-bold" : "border-transparent text-gray-500"}`}
                 >
                   Account Settings
                 </button>
                 <button
+                  type="button"
                   onClick={() => setWhatsappSubTab("message")}
                   className={`pb-1 border-b-2 cursor-pointer ${whatsappSubTab === "message" ? "border-emerald-600 text-emerald-700 font-bold" : "border-transparent text-gray-500"}`}
                 >
                   Message Management
                 </button>
                 <button
+                  type="button"
                   onClick={() => setWhatsappSubTab("channels")}
                   className={`pb-1 border-b-2 cursor-pointer ${whatsappSubTab === "channels" ? "border-emerald-600 text-emerald-700 font-bold" : "border-transparent text-gray-500"}`}
                 >
@@ -605,7 +616,7 @@ export default function UserManagementPage() {
                         <td className="p-3 font-mono text-[10px]">06 Oct 2026 11:53 AM</td>
                         <td className="p-3 text-gray-400 font-mono">NA</td>
                         <td className="p-3 text-right">
-                          <button className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[11px] font-bold">Profile</button>
+                          <button type="button" className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[11px] font-bold">Profile</button>
                         </td>
                       </tr>
                     </tbody>
@@ -621,12 +632,14 @@ export default function UserManagementPage() {
               <div className="flex justify-between items-center border-b pb-3">
                 <div className="flex space-x-3">
                   <button
+                    type="button"
                     onClick={() => setShowFundModal(true)}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl shadow cursor-pointer"
                   >
                     + Transfer Funds
                   </button>
                   <button
+                    type="button"
                     onClick={() => setShowRateModal(true)}
                     className="border border-emerald-300 text-emerald-700 font-bold px-4 py-2 rounded-xl shadow-xs cursor-pointer"
                   >
@@ -704,6 +717,7 @@ export default function UserManagementPage() {
                 ))}
               </div>
               <button
+                type="button"
                 onClick={() => alert("Email Settings Saved!")}
                 className="bg-emerald-600 text-white font-bold px-6 py-2 rounded-xl shadow cursor-pointer"
               >
@@ -717,12 +731,14 @@ export default function UserManagementPage() {
             <div className="space-y-6">
               <div className="flex space-x-4">
                 <button
+                  type="button"
                   onClick={handleLoginAsUser}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl cursor-pointer shadow flex items-center gap-1.5"
                 >
                   🔑 Login As User
                 </button>
                 <button
+                  type="button"
                   onClick={() => setShowWhitelistModal(true)}
                   className="border border-emerald-300 text-emerald-700 font-bold px-5 py-2.5 rounded-xl cursor-pointer hover:bg-emerald-50"
                 >
@@ -735,6 +751,7 @@ export default function UserManagementPage() {
                 <div className="flex justify-between items-center">
                   <h4 className="font-bold text-gray-700">Whitelisted Numbers</h4>
                   <button
+                    type="button"
                     onClick={() => setShowWhitelistModal(true)}
                     className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[11px] font-bold"
                   >
@@ -762,6 +779,7 @@ export default function UserManagementPage() {
                           <td className="p-2.5">{num}</td>
                           <td className="p-2.5 text-right font-sans">
                             <button
+                              type="button"
                               onClick={() => setWhitelistNumbers(whitelistNumbers.filter((_, i) => i !== idx))}
                               className="text-rose-600 font-bold text-[11px]"
                             >
@@ -805,7 +823,7 @@ export default function UserManagementPage() {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b pb-3">
               <h3 className="text-lg font-bold text-gray-800">Add New User</h3>
-              <button onClick={() => setShowAddUserModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
+              <button type="button" onClick={() => setShowAddUserModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
             </div>
 
             <form onSubmit={handleCreateUserSubmit} className="space-y-4">

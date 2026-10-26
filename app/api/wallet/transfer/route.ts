@@ -15,11 +15,12 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { targetUserId, amount, confirmPassword, type } = body; 
+    const { targetUserId, amount, confirmPassword, type, balanceType } = body; 
 
     const transferAmount = parseFloat(amount);
     let actionType = type || (transferAmount < 0 ? "DEBIT" : "CREDIT");
     const absoluteAmount = Math.abs(transferAmount);
+    const selectedBalanceType = balanceType === "ACTUAL" ? "ACTUAL" : "VIRTUAL";
 
     if (!targetUserId || isNaN(absoluteAmount) || absoluteAmount <= 0 || !confirmPassword) {
       return NextResponse.json(
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
         role: "SUPER_ADMIN",
         password: "Admin@123",
         virtualBalance: 999999999,
+        actualBalance: 999999999,
       };
     } else {
       sender = await prisma.user.findUnique({ where: { id: loggedInUserId } });
@@ -65,6 +67,14 @@ export async function POST(req: Request) {
       );
     }
 
+    // Only Reseller can be assigned ACTUAL balance, normal users only virtual
+    if (selectedBalanceType === "ACTUAL" && targetUser.role !== "RESELLER") {
+      return NextResponse.json(
+        { success: false, message: "Actual balance can only be managed for Reseller accounts." },
+        { status: 400 }
+      );
+    }
+
     // 4. Role Hierarchy & Rules
     if (sender.role === "RESELLER") {
       if (targetUser.createdById !== sender.id) {
@@ -74,8 +84,8 @@ export async function POST(req: Request) {
         );
       }
 
-      // Agar Reseller credit kar raha hai, toh check karo ki uske paas sufficient virtual balance hai ya nahi
-      if (actionType === "CREDIT" && sender.virtualBalance < absoluteAmount) {
+      // Reseller can only use VIRTUAL balance to give to their users
+      if (actionType === "CREDIT" && (sender.virtualBalance || 0) < absoluteAmount) {
         return NextResponse.json(
           { success: false, message: "Insufficient Virtual Balance in your reseller account." },
           { status: 400 }
@@ -88,25 +98,31 @@ export async function POST(req: Request) {
       );
     }
 
-    // Debit par check karein ki Target User ke paas utna balance hai ya nahi
-    if (actionType === "DEBIT" && targetUser.virtualBalance < absoluteAmount) {
+    // Debit validation check
+    const currentTargetBalance = selectedBalanceType === "ACTUAL" ? (targetUser.actualBalance || 0) : (targetUser.virtualBalance || 0);
+    if (actionType === "DEBIT" && currentTargetBalance < absoluteAmount) {
       return NextResponse.json(
-        { success: false, message: `Target account only has ₹${targetUser.virtualBalance} Virtual Balance. Cannot deduct more than available.` },
+        { success: false, message: `Target account only has ₹${currentTargetBalance} ${selectedBalanceType} Balance. Cannot deduct more than available.` },
         { status: 400 }
       );
     }
 
-    // 5. Execute Transaction (Admin ke case me admin ka balance minus nahi hoga)
+    // 5. Execute Transaction
     await prisma.$transaction(async (tx) => {
       if (actionType === "CREDIT") {
-        // Target user ke virtual balance ko badhao
-        await tx.user.update({
-          where: { id: targetUserId },
-          data: { virtualBalance: { increment: absoluteAmount } },
-        });
+        if (selectedBalanceType === "ACTUAL") {
+          await tx.user.update({
+            where: { id: targetUserId },
+            data: { actualBalance: { increment: absoluteAmount } },
+          });
+        } else {
+          await tx.user.update({
+            where: { id: targetUserId },
+            data: { virtualBalance: { increment: absoluteAmount } },
+          });
+        }
 
-        // Agar bhejne wala Reseller hai, toh uske virtual balance se minus karo. 
-        // Agar Admin hai, toh Admin ka balance minus nahi hoga (unlimited/static).
+        // If reseller is crediting
         if (sender.role === "RESELLER") {
           await tx.user.update({
             where: { id: sender.id },
@@ -115,10 +131,17 @@ export async function POST(req: Request) {
         }
       } else {
         // Debit / Minus logic
-        await tx.user.update({
-          where: { id: targetUserId },
-          data: { virtualBalance: { decrement: absoluteAmount } },
-        });
+        if (selectedBalanceType === "ACTUAL") {
+          await tx.user.update({
+            where: { id: targetUserId },
+            data: { actualBalance: { decrement: absoluteAmount } },
+          });
+        } else {
+          await tx.user.update({
+            where: { id: targetUserId },
+            data: { virtualBalance: { decrement: absoluteAmount } },
+          });
+        }
 
         if (sender.role === "RESELLER") {
           await tx.user.update({
@@ -133,15 +156,15 @@ export async function POST(req: Request) {
         data: {
           userId: targetUserId,
           amount: absoluteAmount,
-          type: actionType === "CREDIT" ? "VIRTUAL_CREDIT" : "VIRTUAL_DEBIT",
-          description: `Virtual balance ${actionType === "CREDIT" ? "added" : "deducted"} by ${sender.role === "SUPER_ADMIN" ? "Admin" : "Reseller"}`,
+          type: `${selectedBalanceType}_${actionType}`,
+          description: `${selectedBalanceType} balance ${actionType === "CREDIT" ? "added" : "deducted"} by ${sender.role === "SUPER_ADMIN" ? "Admin" : "Reseller"}`,
         },
       });
     });
 
     return NextResponse.json({
       success: true,
-      message: `Successfully ${actionType === "CREDIT" ? "added" : "deducted"} ₹${absoluteAmount.toFixed(2)} Virtual Balance`,
+      message: `Successfully ${actionType === "CREDIT" ? "added" : "deducted"} ₹${absoluteAmount.toFixed(2)} ${selectedBalanceType} Balance`,
     });
   } catch (error: any) {
     console.error("Transfer API Error:", error);

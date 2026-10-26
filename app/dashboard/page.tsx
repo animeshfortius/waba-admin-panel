@@ -11,7 +11,6 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import LogoutButton from "@/components/LogoutButton";
 
 const analyticsData = [
   { date: "Oct 13", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
@@ -32,21 +31,6 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 font-sans bg-gray-50 min-h-screen">
-      {/* Top Header Bar */}
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
-        <div className="flex items-center space-x-3">
-          <div className="text-xs bg-gray-100 border px-3 py-1.5 rounded-lg text-gray-700 font-semibold">
-            IP: 171.50.181.171
-          </div>
-        </div>
-        <div className="flex items-center space-x-3">
-          <div className="text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-lg font-semibold">
-            Wallet: ₹24,500
-          </div>
-          <LogoutButton />
-        </div>
-      </div>
-
       {/* Top 4 Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Total Sent */}

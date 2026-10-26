@@ -518,21 +518,100 @@ export default function UserManagementPage() {
 
           {/* WHATSAPP TAB */}
           {activeTab === "whatsapp" && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
-                  <span className="font-semibold text-gray-700">WhatsApp API Enabled</span>
-                  <input type="checkbox" defaultChecked className="toggle toggle-success" />
-                </div>
-                <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
-                  <span className="font-semibold text-gray-700">Secure Reporting</span>
-                  <input type="checkbox" className="toggle toggle-success" />
-                </div>
-                <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
-                  <span className="font-semibold text-gray-700">International Account</span>
-                  <input type="checkbox" className="toggle toggle-success" />
-                </div>
+            <div className="space-y-6">
+              {/* WhatsApp Sub-navigation */}
+              <div className="flex space-x-4 border-b pb-3 text-xs font-semibold">
+                <button
+                  onClick={() => setWhatsappSubTab("account")}
+                  className={`pb-1 border-b-2 cursor-pointer ${whatsappSubTab === "account" ? "border-emerald-600 text-emerald-700 font-bold" : "border-transparent text-gray-500"}`}
+                >
+                  Account Settings
+                </button>
+                <button
+                  onClick={() => setWhatsappSubTab("message")}
+                  className={`pb-1 border-b-2 cursor-pointer ${whatsappSubTab === "message" ? "border-emerald-600 text-emerald-700 font-bold" : "border-transparent text-gray-500"}`}
+                >
+                  Message Management
+                </button>
+                <button
+                  onClick={() => setWhatsappSubTab("channels")}
+                  className={`pb-1 border-b-2 cursor-pointer ${whatsappSubTab === "channels" ? "border-emerald-600 text-emerald-700 font-bold" : "border-transparent text-gray-500"}`}
+                >
+                  Channel List
+                </button>
               </div>
+
+              {/* 1. Account Settings Sub-tab */}
+              {whatsappSubTab === "account" && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                      <span className="font-semibold text-gray-700">WhatsApp API Enabled</span>
+                      <input type="checkbox" defaultChecked className="toggle toggle-success" />
+                    </div>
+                    <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                      <span className="font-semibold text-gray-700">Secure Reporting</span>
+                      <input type="checkbox" className="toggle toggle-success" />
+                    </div>
+                    <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                      <span className="font-semibold text-gray-700">International Account</span>
+                      <input type="checkbox" className="toggle toggle-success" />
+                    </div>
+                    <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                      <span className="font-semibold text-gray-700">Chatbot Enabled</span>
+                      <input type="checkbox" defaultChecked className="toggle toggle-success" />
+                    </div>
+                    <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                      <span className="font-semibold text-gray-700">Agent Enabled</span>
+                      <input type="checkbox" className="toggle toggle-success" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Message Management Sub-tab */}
+              {whatsappSubTab === "message" && (
+                <div className="border rounded-xl p-4 bg-gray-50 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-bold text-gray-700">Sent Messages Management</h4>
+                    <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-1 rounded font-bold">Active</span>
+                  </div>
+                  <p className="text-gray-500 text-xs">View and manage message logs and delivery reports for this user.</p>
+                </div>
+              )}
+
+              {/* 3. Channel List Sub-tab */}
+              {whatsappSubTab === "channels" && (
+                <div className="space-y-3">
+                  <h4 className="font-bold text-gray-700">Channel List</h4>
+                  <table className="w-full text-left border-collapse bg-white rounded-xl border">
+                    <thead>
+                      <tr className="bg-gray-100 text-gray-500 uppercase border-b text-[10px]">
+                        <th className="p-3">USER NAME</th>
+                        <th className="p-3">WABA DETAILS</th>
+                        <th className="p-3">DEFAULT</th>
+                        <th className="p-3">DISPLAY NAME</th>
+                        <th className="p-3">CONFIGURED DATE</th>
+                        <th className="p-3">WEBHOOK URL</th>
+                        <th className="p-3 text-right">ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y text-xs">
+                      <tr className="hover:bg-gray-50">
+                        <td className="p-3 font-bold">{formData.name || selectedUser.username}</td>
+                        <td className="p-3 font-mono">WABA ID: 12547889...</td>
+                        <td className="p-3"><input type="radio" defaultChecked name="defaultChannel" /></td>
+                        <td className="p-3">Active-08</td>
+                        <td className="p-3 font-mono text-[10px]">06 Oct 2026 11:53 AM</td>
+                        <td className="p-3 text-gray-400 font-mono">NA</td>
+                        <td className="p-3 text-right">
+                          <button className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[11px] font-bold">Profile</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

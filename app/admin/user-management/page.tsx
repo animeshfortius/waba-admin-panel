@@ -416,7 +416,7 @@ export default function UserManagementPage() {
                     >
                       <option value="SUPER_ADMIN">Super Admin</option>
                       <option value="RESELLER">Reseller</option>
-                      <option value="USER">User / Agent</option>
+                      <option value="USER">User</option>
                     </select>
                   </div>
 

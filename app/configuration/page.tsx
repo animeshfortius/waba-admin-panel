@@ -177,12 +177,17 @@ export default function ConfigPage() {
   };
 
   const handleFacebookSignup = () => {
-    setIsProcessing(true);
-    const fbPopup = window.open(
-      "https://www.facebook.com/v18.0/dialog/oauth?client_id=meta_waba_app&redirect_uri=https://waba.fortius.in/facebook/callback&scope=whatsapp_business_management",
-      "FacebookLogin",
-      "width=600,height=700,top=100,left=200"
-    );
+  setIsProcessing(true);
+  
+  const appId = process.env.NEXT_PUBLIC_META_APP_ID; 
+  const redirectUri = encodeURIComponent("https://waba.fortius.in/facebook/callback");
+
+  const fbPopup = window.open(
+    `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=https://waba.fortius.in/facebook/callback&scope=whatsapp_business_management`,
+    "FacebookLogin",
+    "width=600,height=700,top=100,left=200"
+  );
+};
 
     setTimeout(() => {
       if (fbPopup && !fbPopup.closed) {

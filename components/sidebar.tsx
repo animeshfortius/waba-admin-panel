@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard }, // Yahan "/" se "/dashboard" kar diya hai
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Admin Panel", href: "/admin/admin-home", icon: ShieldAlert },
   { name: "Clients", href: "/clients", icon: Users },
   { name: "WABA Accounts", href: "/waba", icon: Radio },
@@ -37,14 +37,18 @@ export default function Sidebar() {
         <nav className="space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            // Dashboard ke liye exact match, baki sabke liye exact ya sub-route match
+            const isActive = item.href === "/dashboard" 
+              ? pathname === "/dashboard" 
+              : pathname === item.href || pathname?.startsWith(item.href + "/");
+
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive 
-                    ? "bg-emerald-600 text-white" 
+                    ? "bg-emerald-600 text-white font-bold shadow-md" 
                     : "text-slate-400 hover:text-white hover:bg-slate-800"
                 }`}
               >

@@ -213,7 +213,7 @@ export default function UserManagementPage() {
     }
   }, [selectedUser]);
 
-  // 6. LOGIN AS USER
+  // 6. LOGIN AS USER (FIXED: Using window.location.href for full hard reload)
   const handleLoginAsUser = async () => {
     if (!selectedUser?.id) return;
     try {
@@ -225,7 +225,7 @@ export default function UserManagementPage() {
       const data = await res.json();
       if (data.success) {
         alert(`Logging in as ${selectedUser.name || selectedUser.username}...`);
-        router.push(data.redirectUrl || "/dashboard");
+        window.location.href = data.redirectUrl || "/dashboard";
       } else {
         alert("Failed to login as user: " + data.message);
       }
@@ -554,7 +554,15 @@ export default function UserManagementPage() {
                   </div>
                 </div>
 
-                <div className="pt-2 flex justify-end">
+                {/* Profile Tab Action Buttons (Added Login as User here too) */}
+                <div className="pt-2 flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={handleLoginAsUser}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs flex items-center gap-1.5"
+                  >
+                    🚀 Login as User
+                  </button>
                   <button
                     type="button"
                     onClick={handleUpdateSettings}

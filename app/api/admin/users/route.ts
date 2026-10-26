@@ -9,6 +9,7 @@ export async function GET() {
       select: {
         id: true,
         name: true,
+        username: true,
         email: true,
         role: true,
         phone: true,
@@ -30,23 +31,30 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, email, password, role, phone, expiryDate } = body;
+    const { username, name, email, password, role, phone, expiryDate } = body;
 
-    if (!name || !email || !password) {
+    const finalUsername = username || name;
+
+    if (!finalUsername || !email || !password) {
       return NextResponse.json(
-        { success: false, error: "Name, email, and password are required" },
+        { success: false, error: "Username, email, and password are required" },
         { status: 400 }
       );
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
+    // Check if user already exists by email or username
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email },
+          { username: finalUsername },
+        ],
+      },
     });
 
     if (existingUser) {
       return NextResponse.json(
-        { success: false, error: "User with this email already exists" },
+        { success: false, error: "User with this email or username already exists" },
         { status: 400 }
       );
     }
@@ -60,7 +68,8 @@ export async function POST(req: Request) {
     // Create user in Neon PostgreSQL database
     const newUser = await prisma.user.create({
       data: {
-        name,
+        username: finalUsername,
+        name: finalUsername,
         email,
         password: hashedPassword,
         role: assignedRole,
@@ -72,7 +81,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       message: "User created successfully",
-      user: { id: newUser.id, name: newUser.name, email: newUser.email },
+      user: { id: newUser.id, username: newUser.username, email: newUser.email },
     });
   } catch (error: any) {
     console.error("Error creating user:", error);

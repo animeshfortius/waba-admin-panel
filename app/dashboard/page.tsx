@@ -115,7 +115,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Category Breakdown Cards (Marketing, Utility, Authentication) */}
+      {/* Category Breakdown Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Marketing */}
         <div className="bg-white p-5 rounded-xl border shadow-sm space-y-4">

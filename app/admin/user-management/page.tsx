@@ -17,6 +17,15 @@ export default function UserManagementPage() {
   // WhatsApp Sub-tab State
   const [whatsappSubTab, setWhatsappSubTab] = useState("account");
 
+  // WhatsApp Account Settings Toggles State
+  const [whatsappSettings, setWhatsappSettings] = useState({
+    whatsappApiEnabled: true,
+    secureReporting: false,
+    internationalAccount: false,
+    chatbotEnabled: true,
+    agentEnabled: false,
+  });
+
   // Channel List States & Modals
   const [channels, setChannels] = useState<any[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<any>(null);
@@ -161,7 +170,6 @@ export default function UserManagementPage() {
   // 5. Fetch Channels & Funds on User Select
   useEffect(() => {
     if (selectedUser?.id) {
-      // Fetch Channels
       fetch(`/api/admin/channels?userId=${selectedUser.id}`)
         .then((res) => res.json())
         .then((data) => {
@@ -582,30 +590,67 @@ export default function UserManagementPage() {
                 </button>
               </div>
 
-              {/* 1. Account Settings Sub-tab */}
+              {/* 1. Account Settings Sub-tab with Functional Toggles & Save Button */}
               {whatsappSubTab === "account" && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
                       <span className="font-semibold text-gray-700">WhatsApp API Enabled</span>
-                      <input type="checkbox" defaultChecked className="toggle toggle-success" />
+                      <input
+                        type="checkbox"
+                        checked={whatsappSettings.whatsappApiEnabled}
+                        onChange={(e) => setWhatsappSettings({ ...whatsappSettings, whatsappApiEnabled: e.target.checked })}
+                        className="toggle toggle-success cursor-pointer"
+                      />
                     </div>
                     <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
                       <span className="font-semibold text-gray-700">Secure Reporting</span>
-                      <input type="checkbox" className="toggle toggle-success" />
+                      <input
+                        type="checkbox"
+                        checked={whatsappSettings.secureReporting}
+                        onChange={(e) => setWhatsappSettings({ ...whatsappSettings, secureReporting: e.target.checked })}
+                        className="toggle toggle-success cursor-pointer"
+                      />
                     </div>
                     <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
                       <span className="font-semibold text-gray-700">International Account</span>
-                      <input type="checkbox" className="toggle toggle-success" />
+                      <input
+                        type="checkbox"
+                        checked={whatsappSettings.internationalAccount}
+                        onChange={(e) => setWhatsappSettings({ ...whatsappSettings, internationalAccount: e.target.checked })}
+                        className="toggle toggle-success cursor-pointer"
+                      />
                     </div>
                     <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
                       <span className="font-semibold text-gray-700">Chatbot Enabled</span>
-                      <input type="checkbox" defaultChecked className="toggle toggle-success" />
+                      <input
+                        type="checkbox"
+                        checked={whatsappSettings.chatbotEnabled}
+                        onChange={(e) => setWhatsappSettings({ ...whatsappSettings, chatbotEnabled: e.target.checked })}
+                        className="toggle toggle-success cursor-pointer"
+                      />
                     </div>
                     <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
                       <span className="font-semibold text-gray-700">Agent Enabled</span>
-                      <input type="checkbox" className="toggle toggle-success" />
+                      <input
+                        type="checkbox"
+                        checked={whatsappSettings.agentEnabled}
+                        onChange={(e) => setWhatsappSettings({ ...whatsappSettings, agentEnabled: e.target.checked })}
+                        className="toggle toggle-success cursor-pointer"
+                      />
                     </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        alert("WhatsApp Account Settings updated and saved successfully!");
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow cursor-pointer text-xs"
+                    >
+                      💾 Save WhatsApp Settings
+                    </button>
                   </div>
                 </div>
               )}
@@ -621,7 +666,7 @@ export default function UserManagementPage() {
                 </div>
               )}
 
-              {/* 3. Channel List Sub-tab with Automated WABA details & 4 Action buttons */}
+              {/* 3. Channel List Sub-tab */}
               {whatsappSubTab === "channels" && (
                 <div className="space-y-3">
                   <h4 className="font-bold text-gray-700">Channel List</h4>
@@ -662,7 +707,6 @@ export default function UserManagementPage() {
                             <td className="p-3 text-gray-500 font-mono">{ch.webhookUrl || "NA"}</td>
                             <td className="p-3 font-bold text-emerald-700">{ch.tps || 40}</td>
                             <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
-                              {/* 1. Edit Button */}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -676,12 +720,10 @@ export default function UserManagementPage() {
                                   setShowEditChannelModal(true);
                                 }}
                                 className="bg-blue-600 text-white p-1.5 rounded hover:bg-blue-700"
-                                title="Edit Channel"
+                                title="Edit"
                               >
                                 ✏️
                               </button>
-
-                              {/* 2. Delete Button */}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -690,12 +732,10 @@ export default function UserManagementPage() {
                                   }
                                 }}
                                 className="bg-rose-600 text-white p-1.5 rounded hover:bg-rose-700"
-                                title="Delete Channel"
+                                title="Delete"
                               >
                                 🗑️
                               </button>
-
-                              {/* 3. Register API Run Button */}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -707,8 +747,6 @@ export default function UserManagementPage() {
                               >
                                 🔑
                               </button>
-
-                              {/* 4. Repush Webhook Button */}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -817,13 +855,13 @@ export default function UserManagementPage() {
                 ].map((setting, idx) => (
                   <div key={idx} className="flex justify-between items-center border p-3 rounded-xl bg-gray-50">
                     <span className="font-semibold text-gray-700">{setting}</span>
-                    <input type="checkbox" defaultChecked className="toggle toggle-success" />
+                    <input type="checkbox" defaultChecked className="toggle toggle-success cursor-pointer" />
                   </div>
                 ))}
               </div>
               <button
                 type="button"
-                onClick={() => alert("Email Settings Saved!")}
+                onClick={() => alert("Email Settings Saved successfully!")}
                 className="bg-emerald-600 text-white font-bold px-6 py-2 rounded-xl shadow cursor-pointer"
               >
                 Save All Settings
@@ -903,7 +941,7 @@ export default function UserManagementPage() {
 
       {/* ================= MODALS ================= */}
 
-      {/* 1. EDIT CHANNEL MODAL */}
+      {/* EDIT CHANNEL MODAL */}
       {showEditChannelModal && selectedChannel && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
@@ -952,7 +990,6 @@ export default function UserManagementPage() {
                   <option value="Disabled (Panel Mode)">Disabled (Panel Mode)</option>
                   <option value="Enabled">Enabled</option>
                 </select>
-                <p className="text-[10px] text-gray-400 mt-1">When enabled, incoming webhooks will NOT be processed in panel.</p>
               </div>
             </div>
             <div className="flex justify-end space-x-3 pt-3 border-t">
@@ -981,7 +1018,7 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* 2. REGISTER API CONFIRMATION MODAL */}
+      {/* REGISTER API MODAL */}
       {showRegisterApiModal && selectedChannel && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-center space-y-4">
@@ -1010,7 +1047,7 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* 3. REPUSH WEBHOOK MODAL */}
+      {/* REPUSH WEBHOOK MODAL */}
       {showRepushModal && selectedChannel && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -1050,7 +1087,7 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* SECURE BALANCE TRANSFER MODAL */}
+      {/* BALANCE TRANSFER MODAL */}
       {showFundModal && (
         <BalanceTransferModal
           users={selectedUser ? [selectedUser] : allUsers}

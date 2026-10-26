@@ -26,14 +26,15 @@ export async function POST(req: Request) {
     // Response with redirect path to dashboard
     const response = NextResponse.json({
       success: true,
-      message: `Logged in as ${targetUser.name}`,
+      message: `Logged in as ${targetUser.name || targetUser.username}`,
       redirectUrl: "/dashboard",
     });
 
-    // Set impersonate session cookie
-    response.cookies.set("impersonatedUserId", targetUser.id, {
+    // FIX: Set main "userId" cookie to target user ID so the app recognizes them as logged in
+    response.cookies.set("userId", targetUser.id, {
       httpOnly: true,
       path: "/",
+      secure: process.env.NODE_ENV === "production",
     });
 
     return response;

@@ -57,6 +57,7 @@ export default function UserManagementPage() {
     role: "USER",
   });
   const [addUserLoading, setAddUserLoading] = useState(false);
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
 
   // Whitelist State
   const [whitelistNumbers, setWhitelistNumbers] = useState<string[]>([]);
@@ -69,14 +70,6 @@ export default function UserManagementPage() {
     role: "USER",
     status: "Active",
     expiryDate: "2026-10-29",
-  });
-
-  // Rates State
-  const [rates, setRates] = useState({
-    utility: "0.1550",
-    service: "0.1550",
-    authentication: "0.1550",
-    marketing: "0.8046",
   });
 
   // Password Toggle
@@ -151,7 +144,7 @@ export default function UserManagementPage() {
     if (found) {
       setSelectedUser(found);
       setFormData({
-        name: found.name || "",
+        name: found.name || found.username || "",
         email: found.email || "",
         phone: found.phone || "",
         role: found.role || "USER",
@@ -251,6 +244,7 @@ export default function UserManagementPage() {
         body: JSON.stringify({
           userId: selectedUser.id,
           name: formData.name,
+          username: formData.name,
           email: formData.email,
           phone: formData.phone,
           role: formData.role,
@@ -274,10 +268,20 @@ export default function UserManagementPage() {
     e.preventDefault();
     setAddUserLoading(true);
     try {
+      const payload = {
+        username: newUserData.username,
+        name: newUserData.username,
+        email: newUserData.email,
+        password: newUserData.password,
+        phone: newUserData.phone,
+        role: newUserData.role,
+        expiryDate: newUserData.expiryDate,
+      };
+
       const res = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newUserData),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -286,10 +290,11 @@ export default function UserManagementPage() {
         setNewUserData({ username: "", password: "", phone: "", email: "", expiryDate: "", role: "USER" });
         fetchUsers();
       } else {
-        alert(data.message || "Failed to create user");
+        alert(data.error || data.message || "Failed to create user");
       }
     } catch (err) {
       console.error("Error creating user:", err);
+      alert("Network error while creating user.");
     } finally {
       setAddUserLoading(false);
     }
@@ -334,7 +339,7 @@ export default function UserManagementPage() {
                     className="p-3 hover:bg-emerald-50 cursor-pointer flex justify-between items-center"
                   >
                     <div>
-                      <div className="font-bold text-gray-800">{u.name || u.username}</div>
+                      <div className="font-bold text-gray-800">{u.username || u.name}</div>
                       <div className="text-[10px] text-gray-400">{u.email}</div>
                     </div>
                     <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-bold">
@@ -370,7 +375,7 @@ export default function UserManagementPage() {
           <div className="text-4xl">🔍</div>
           <h3 className="text-sm font-bold text-gray-700">No User Selected</h3>
           <p className="text-gray-400 max-w-sm mx-auto">
-            Please search for a user or reseller by typing their name/email in the search box above and click Search.
+            Please search for a user or reseller by typing their username/email in the search box above and click Search.
           </p>
         </div>
       ) : (
@@ -408,7 +413,7 @@ export default function UserManagementPage() {
                 </div>
                 <div>
                   <h4 className="font-bold text-gray-800 text-sm flex items-center justify-center gap-1">
-                    {formData.name || selectedUser.name || "User"}{" "}
+                    {formData.name || selectedUser.username || "User"}{" "}
                     <span className="text-emerald-500">✔</span>
                   </h4>
                   <p className="text-[11px] text-gray-400">
@@ -590,7 +595,7 @@ export default function UserManagementPage() {
                 </button>
               </div>
 
-              {/* 1. Account Settings Sub-tab with Functional Toggles & Save Button */}
+              {/* 1. Account Settings Sub-tab */}
               {whatsappSubTab === "account" && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -644,9 +649,7 @@ export default function UserManagementPage() {
                   <div className="flex justify-end pt-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        alert("WhatsApp Account Settings updated and saved successfully!");
-                      }}
+                      onClick={() => alert("WhatsApp Account Settings saved successfully!")}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow cursor-pointer text-xs"
                     >
                       💾 Save WhatsApp Settings
@@ -820,7 +823,7 @@ export default function UserManagementPage() {
                   ) : (
                     transactions.map((tx: any) => (
                       <tr key={tx.id} className="hover:bg-gray-50 text-gray-700 font-medium">
-                        <td className="p-3 font-bold text-gray-800">{formData.name || selectedUser.name}</td>
+                        <td className="p-3 font-bold text-gray-800">{formData.name || selectedUser.username}</td>
                         <td className="p-3">Super Admin</td>
                         <td className="p-3 font-bold text-emerald-600">₹{tx.amount.toFixed(2)}</td>
                         <td className="p-3">
@@ -1131,14 +1134,23 @@ export default function UserManagementPage() {
 
               <div>
                 <label className="text-xs font-semibold text-gray-600">Password</label>
-                <input
-                  type="password"
-                  placeholder="Enter Password"
-                  value={newUserData.password}
-                  onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
-                  className="w-full border rounded-xl p-3 text-xs mt-1 bg-gray-50 focus:outline-none focus:border-emerald-500 font-mono"
-                  required
-                />
+                <div className="relative mt-1">
+                  <input
+                    type={showNewUserPassword ? "text" : "password"}
+                    placeholder="Enter Password"
+                    value={newUserData.password}
+                    onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
+                    className="w-full border rounded-xl p-3 text-xs bg-gray-50 focus:outline-none focus:border-emerald-500 font-mono pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewUserPassword(!showNewUserPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-sm cursor-pointer"
+                  >
+                    {showNewUserPassword ? "👁️‍🗨️" : "👁️"}
+                  </button>
+                </div>
               </div>
 
               <div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Sidebar from "@/components/sidebar";
+import LogoutButton from "@/components/LogoutButton";
 import { useState, useEffect } from "react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -21,9 +22,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-gray-50 text-xs font-sans">
+      {/* Sidebar Component */}
       <Sidebar />
 
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Header */}
         <header className="bg-white border-b px-6 py-3 flex justify-between items-center shadow-xs">
           <div className="text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg font-mono">
             IP: 171.50.181.171
@@ -35,8 +38,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               Wallet Balance: ₹{walletBalance.toFixed(2)}
             </div>
 
-            {/* Dynamic User Profile Info */}
-            <div className="flex items-center gap-2 border-l pl-4">
+            {/* Dynamic User Profile Info & Logout */}
+            <div className="flex items-center gap-3 border-l pl-4">
               <div className="w-9 h-9 bg-emerald-600 text-white font-bold rounded-full flex items-center justify-center text-sm shadow">
                 {user?.username?.[0]?.toUpperCase() || "U"}
               </div>
@@ -52,10 +55,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     : "User Account"}
                 </div>
               </div>
+
+              {/* Logout Option */}
+              <div className="border-l pl-3 ml-1">
+                <LogoutButton />
+              </div>
             </div>
           </div>
         </header>
 
+        {/* Main Dashboard Content */}
         <main className="flex-1 p-6 overflow-y-auto">
           {children}
         </main>

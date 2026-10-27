@@ -5,7 +5,6 @@ import bcrypt from "bcryptjs";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    // Support both username, email, or identifier fields from frontend
     const identifier = body.username || body.email || body.identifier;
     const password = body.password;
 
@@ -34,9 +33,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
 
+    // Determine redirect URL based on role
+    let redirectUrl = "/dashboard";
+    if (user.role === "SUPER_ADMIN" || user.role === "RESELLER") {
+      redirectUrl = "/admin";
+    }
+
     // 3. Create response and set cookies
     const response = NextResponse.json({
       message: "Login successful",
+      redirectUrl, // <--- Yeh add karna zaroori hai
       user: {
         id: user.id,
         name: user.name,
@@ -53,7 +59,6 @@ export async function POST(req: Request) {
       maxAge: 60 * 60 * 24 * 7, // 1 week
     };
 
-    // FIX: Set BOTH "userId" (for middleware & impersonation) and "token" (for compatibility)
     response.cookies.set("userId", user.id, cookieOptions);
     response.cookies.set("token", user.id, cookieOptions);
 

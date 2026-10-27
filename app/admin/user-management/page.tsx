@@ -14,9 +14,6 @@ export default function UserManagementPage() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("profile");
 
-  // WhatsApp Sub-tab State
-  const [whatsappSubTab, setWhatsappSubTab] = useState("account");
-
   // WhatsApp Account Settings Toggles State
   const [whatsappSettings, setWhatsappSettings] = useState({
     whatsappApiEnabled: true,
@@ -24,21 +21,6 @@ export default function UserManagementPage() {
     internationalAccount: false,
     chatbotEnabled: true,
     agentEnabled: false,
-  });
-
-  // Channel List States & Modals
-  const [channels, setChannels] = useState<any[]>([]);
-  const [selectedChannel, setSelectedChannel] = useState<any>(null);
-  const [showEditChannelModal, setShowEditChannelModal] = useState(false);
-  const [showRegisterApiModal, setShowRegisterApiModal] = useState(false);
-  const [showRepushModal, setShowRepushModal] = useState(false);
-  const [repushDate, setRepushDate] = useState("2026-10-26");
-
-  const [editChannelForm, setEditChannelForm] = useState({
-    webhookUrl: "",
-    tps: "40",
-    webhookType: "Default",
-    wrapperClient: "Disabled (Panel Mode)",
   });
 
   // Modals
@@ -160,46 +142,9 @@ export default function UserManagementPage() {
     }
   };
 
-  // 5. Fetch Channels & Funds on User Select
+  // 5. Fetch Funds on User Select
   useEffect(() => {
     if (selectedUser?.id) {
-      fetch(`/api/admin/channels?userId=${selectedUser.id}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.channels) {
-            setChannels(data.channels);
-          } else {
-            setChannels([
-              {
-                id: "1",
-                wabaNumber: "919078191120",
-                phoneId: "1117975088062436",
-                wabaId: "1485899409705104",
-                displayName: "100 APP",
-                configureDate: "01 May 2026 12:29:30 PM",
-                webhookUrl: "NA",
-                tps: 40,
-                isDefault: true,
-              },
-            ]);
-          }
-        })
-        .catch(() => {
-          setChannels([
-            {
-              id: "1",
-              wabaNumber: "919078191120",
-              phoneId: "1117975088062436",
-              wabaId: "1485899409705104",
-              displayName: "100 APP",
-              configureDate: "01 May 2026 12:29:30 PM",
-              webhookUrl: "NA",
-              tps: 40,
-              isDefault: true,
-            },
-          ]);
-        });
-
       fetch(`/api/admin/funds?userId=${selectedUser.id}`)
         .then((res) => res.json())
         .then((data) => {
@@ -213,7 +158,7 @@ export default function UserManagementPage() {
     }
   }, [selectedUser]);
 
-  // 6. LOGIN AS USER (FIXED: Using window.location.href for full hard reload)
+  // 6. LOGIN AS USER
   const handleLoginAsUser = async () => {
     if (!selectedUser?.id) return;
     try {
@@ -554,7 +499,7 @@ export default function UserManagementPage() {
                   </div>
                 </div>
 
-                {/* Profile Tab Action Buttons (Added Login as User here too) */}
+                {/* Profile Tab Action Buttons */}
                 <div className="pt-2 flex justify-end space-x-3">
                   <button
                     type="button"
@@ -575,208 +520,72 @@ export default function UserManagementPage() {
             </div>
           )}
 
-          {/* WHATSAPP TAB */}
+          {/* WHATSAPP TAB (Only Account Settings) */}
           {activeTab === "whatsapp" && (
             <div className="space-y-6">
-              {/* WhatsApp Sub-navigation */}
-              <div className="flex space-x-4 border-b pb-3 text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setWhatsappSubTab("account")}
-                  className={`pb-1 border-b-2 cursor-pointer ${whatsappSubTab === "account" ? "border-emerald-600 text-emerald-700 font-bold" : "border-transparent text-gray-500"}`}
-                >
-                  Account Settings
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWhatsappSubTab("message")}
-                  className={`pb-1 border-b-2 cursor-pointer ${whatsappSubTab === "message" ? "border-emerald-600 text-emerald-700 font-bold" : "border-transparent text-gray-500"}`}
-                >
-                  Message Management
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWhatsappSubTab("channels")}
-                  className={`pb-1 border-b-2 cursor-pointer ${whatsappSubTab === "channels" ? "border-emerald-600 text-emerald-700 font-bold" : "border-transparent text-gray-500"}`}
-                >
-                  Channel List
-                </button>
+              <div className="border-b pb-3 text-xs font-bold text-gray-700">
+                Account Settings
               </div>
 
-              {/* 1. Account Settings Sub-tab */}
-              {whatsappSubTab === "account" && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
-                      <span className="font-semibold text-gray-700">WhatsApp API Enabled</span>
-                      <input
-                        type="checkbox"
-                        checked={whatsappSettings.whatsappApiEnabled}
-                        onChange={(e) => setWhatsappSettings({ ...whatsappSettings, whatsappApiEnabled: e.target.checked })}
-                        className="toggle toggle-success cursor-pointer"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
-                      <span className="font-semibold text-gray-700">Secure Reporting</span>
-                      <input
-                        type="checkbox"
-                        checked={whatsappSettings.secureReporting}
-                        onChange={(e) => setWhatsappSettings({ ...whatsappSettings, secureReporting: e.target.checked })}
-                        className="toggle toggle-success cursor-pointer"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
-                      <span className="font-semibold text-gray-700">International Account</span>
-                      <input
-                        type="checkbox"
-                        checked={whatsappSettings.internationalAccount}
-                        onChange={(e) => setWhatsappSettings({ ...whatsappSettings, internationalAccount: e.target.checked })}
-                        className="toggle toggle-success cursor-pointer"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
-                      <span className="font-semibold text-gray-700">Chatbot Enabled</span>
-                      <input
-                        type="checkbox"
-                        checked={whatsappSettings.chatbotEnabled}
-                        onChange={(e) => setWhatsappSettings({ ...whatsappSettings, chatbotEnabled: e.target.checked })}
-                        className="toggle toggle-success cursor-pointer"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
-                      <span className="font-semibold text-gray-700">Agent Enabled</span>
-                      <input
-                        type="checkbox"
-                        checked={whatsappSettings.agentEnabled}
-                        onChange={(e) => setWhatsappSettings({ ...whatsappSettings, agentEnabled: e.target.checked })}
-                        className="toggle toggle-success cursor-pointer"
-                      />
-                    </div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                    <span className="font-semibold text-gray-700">WhatsApp API Enabled</span>
+                    <input
+                      type="checkbox"
+                      checked={whatsappSettings.whatsappApiEnabled}
+                      onChange={(e) => setWhatsappSettings({ ...whatsappSettings, whatsappApiEnabled: e.target.checked })}
+                      className="toggle toggle-success cursor-pointer"
+                    />
                   </div>
-
-                  <div className="flex justify-end pt-2">
-                    <button
-                      type="button"
-                      onClick={() => alert("WhatsApp Account Settings saved successfully!")}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow cursor-pointer text-xs"
-                    >
-                      💾 Save WhatsApp Settings
-                    </button>
+                  <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                    <span className="font-semibold text-gray-700">Secure Reporting</span>
+                    <input
+                      type="checkbox"
+                      checked={whatsappSettings.secureReporting}
+                      onChange={(e) => setWhatsappSettings({ ...whatsappSettings, secureReporting: e.target.checked })}
+                      className="toggle toggle-success cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                    <span className="font-semibold text-gray-700">International Account</span>
+                    <input
+                      type="checkbox"
+                      checked={whatsappSettings.internationalAccount}
+                      onChange={(e) => setWhatsappSettings({ ...whatsappSettings, internationalAccount: e.target.checked })}
+                      className="toggle toggle-success cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                    <span className="font-semibold text-gray-700">Chatbot Enabled</span>
+                    <input
+                      type="checkbox"
+                      checked={whatsappSettings.chatbotEnabled}
+                      onChange={(e) => setWhatsappSettings({ ...whatsappSettings, chatbotEnabled: e.target.checked })}
+                      className="toggle toggle-success cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                    <span className="font-semibold text-gray-700">Agent Enabled</span>
+                    <input
+                      type="checkbox"
+                      checked={whatsappSettings.agentEnabled}
+                      onChange={(e) => setWhatsappSettings({ ...whatsappSettings, agentEnabled: e.target.checked })}
+                      className="toggle toggle-success cursor-pointer"
+                    />
                   </div>
                 </div>
-              )}
 
-              {/* 2. Message Management Sub-tab */}
-              {whatsappSubTab === "message" && (
-                <div className="border rounded-xl p-4 bg-gray-50 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-bold text-gray-700">Sent Messages Management</h4>
-                    <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-1 rounded font-bold">Active</span>
-                  </div>
-                  <p className="text-gray-500 text-xs">View and manage message logs and delivery reports for this user.</p>
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => alert("WhatsApp Account Settings saved successfully!")}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow cursor-pointer text-xs"
+                  >
+                    💾 Save WhatsApp Settings
+                  </button>
                 </div>
-              )}
-
-              {/* 3. Channel List Sub-tab */}
-              {whatsappSubTab === "channels" && (
-                <div className="space-y-3">
-                  <h4 className="font-bold text-gray-700">Channel List</h4>
-                  <table className="w-full text-left border-collapse bg-white rounded-xl border">
-                    <thead>
-                      <tr className="bg-gray-100 text-gray-500 uppercase border-b text-[10px]">
-                        <th className="p-3">USER NAME</th>
-                        <th className="p-3">WABA DETAILS</th>
-                        <th className="p-3">DEFAULT</th>
-                        <th className="p-3">DISPLAY NAME</th>
-                        <th className="p-3">CONFIGURED DATE</th>
-                        <th className="p-3">WEBHOOK URL</th>
-                        <th className="p-3">TPS</th>
-                        <th className="p-3 text-right">ACTION</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y text-xs">
-                      {channels.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="p-6 text-center text-gray-400">
-                            No channels found for this user.
-                          </td>
-                        </tr>
-                      ) : (
-                        channels.map((ch) => (
-                          <tr key={ch.id} className="hover:bg-gray-50">
-                            <td className="p-3 font-bold">{formData.name || selectedUser.username}</td>
-                            <td className="p-3 font-mono text-[11px] leading-relaxed">
-                              <div><strong>WABA Number:</strong> {ch.wabaNumber}</div>
-                              <div><strong>Phone ID:</strong> {ch.phoneId}</div>
-                              <div><strong>Waba ID:</strong> {ch.wabaId}</div>
-                            </td>
-                            <td className="p-3">
-                              <input type="radio" defaultChecked={ch.isDefault} name="defaultChannel" />
-                            </td>
-                            <td className="p-3 font-medium">{ch.displayName || "100 APP"}</td>
-                            <td className="p-3 font-mono text-[10px]">{ch.configureDate}</td>
-                            <td className="p-3 text-gray-500 font-mono">{ch.webhookUrl || "NA"}</td>
-                            <td className="p-3 font-bold text-emerald-700">{ch.tps || 40}</td>
-                            <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedChannel(ch);
-                                  setEditChannelForm({
-                                    webhookUrl: ch.webhookUrl === "NA" ? "" : ch.webhookUrl,
-                                    tps: String(ch.tps || 40),
-                                    webhookType: "Default",
-                                    wrapperClient: "Disabled (Panel Mode)",
-                                  });
-                                  setShowEditChannelModal(true);
-                                }}
-                                className="bg-blue-600 text-white p-1.5 rounded hover:bg-blue-700"
-                                title="Edit"
-                              >
-                                ✏️
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (confirm("Are you sure you want to delete this channel?")) {
-                                    setChannels(channels.filter((c) => c.id !== ch.id));
-                                  }
-                                }}
-                                className="bg-rose-600 text-white p-1.5 rounded hover:bg-rose-700"
-                                title="Delete"
-                              >
-                                🗑️
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedChannel(ch);
-                                  setShowRegisterApiModal(true);
-                                }}
-                                className="bg-emerald-600 text-white p-1.5 rounded hover:bg-emerald-700"
-                                title="Register API"
-                              >
-                                🔑
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedChannel(ch);
-                                  setShowRepushModal(true);
-                                }}
-                                className="bg-amber-600 text-white p-1.5 rounded hover:bg-amber-700"
-                                title="Repush Webhook"
-                              >
-                                🔄
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -951,152 +760,6 @@ export default function UserManagementPage() {
       )}
 
       {/* ================= MODALS ================= */}
-
-      {/* EDIT CHANNEL MODAL */}
-      {showEditChannelModal && selectedChannel && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-lg font-bold text-gray-800">Edit Channel Configuration</h3>
-              <button onClick={() => setShowEditChannelModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-gray-600">Webhook URL</label>
-                <input
-                  type="text"
-                  value={editChannelForm.webhookUrl}
-                  onChange={(e) => setEditChannelForm({ ...editChannelForm, webhookUrl: e.target.value })}
-                  placeholder="Enter Webhook URL"
-                  className="w-full border rounded-xl p-2.5 text-xs mt-1 bg-gray-50 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-600">TPS</label>
-                <input
-                  type="number"
-                  value={editChannelForm.tps}
-                  onChange={(e) => setEditChannelForm({ ...editChannelForm, tps: e.target.value })}
-                  className="w-full border rounded-xl p-2.5 text-xs mt-1 bg-gray-50 focus:outline-none font-mono"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-600">Select User Webhook Type</label>
-                <select
-                  value={editChannelForm.webhookType}
-                  onChange={(e) => setEditChannelForm({ ...editChannelForm, webhookType: e.target.value })}
-                  className="w-full border rounded-xl p-2.5 text-xs mt-1 bg-gray-50 focus:outline-none"
-                >
-                  <option value="Default">Default</option>
-                  <option value="Custom">Custom</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-600">Wrapper Client</label>
-                <select
-                  value={editChannelForm.wrapperClient}
-                  onChange={(e) => setEditChannelForm({ ...editChannelForm, wrapperClient: e.target.value })}
-                  className="w-full border rounded-xl p-2.5 text-xs mt-1 bg-gray-50 focus:outline-none"
-                >
-                  <option value="Disabled (Panel Mode)">Disabled (Panel Mode)</option>
-                  <option value="Enabled">Enabled</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex justify-end space-x-3 pt-3 border-t">
-              <button
-                type="button"
-                onClick={() => setShowEditChannelModal(false)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setChannels(
-                    channels.map((c) => (c.id === selectedChannel.id ? { ...c, webhookUrl: editChannelForm.webhookUrl, tps: Number(editChannelForm.tps) } : c))
-                  );
-                  setShowEditChannelModal(false);
-                  alert("Channel updated successfully!");
-                }}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* REGISTER API MODAL */}
-      {showRegisterApiModal && selectedChannel && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-center space-y-4">
-            <h3 className="text-lg font-bold text-gray-800">Are you sure?</h3>
-            <p className="text-gray-600 text-xs">Do you really want to call Register API against this number?</p>
-            <div className="flex justify-center space-x-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowRegisterApiModal(false)}
-                className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowRegisterApiModal(false);
-                  alert("Register API called successfully for number: " + selectedChannel.wabaNumber);
-                }}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold"
-              >
-                Yes, Register it!
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* REPUSH WEBHOOK MODAL */}
-      {showRepushModal && selectedChannel && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-sm font-bold text-gray-800">Repush Webhook</h3>
-              <button onClick={() => setShowRepushModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">Close</button>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600">Select Date</label>
-              <input
-                type="date"
-                value={repushDate}
-                onChange={(e) => setRepushDate(e.target.value)}
-                className="w-full border rounded-xl p-2.5 text-xs mt-1 bg-gray-50 focus:outline-none"
-              />
-            </div>
-            <div className="flex justify-end space-x-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowRepushModal(false)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowRepushModal(false);
-                  alert(`Webhook repushed successfully for date: ${repushDate}`);
-                }}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1"
-              >
-                ▶ Repush
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* BALANCE TRANSFER MODAL */}
       {showFundModal && (

@@ -16,26 +16,26 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    const cleanUser = username.trim().toLowerCase();
-    const cleanPass = password.trim();
+    const cleanUser = username.trim();
+    const cleanPass = password;
 
-    if (cleanUser === "admin" && cleanPass === "Admin@123") {
-      document.cookie = "userId=admin-fallback-id; path=/; max-age=604800";
-      window.location.href = "/dashboard";
-      return;
-    }
-
-    fetch("/api/login", {
+    // Sahi backend API endpoint par request bhej rahe hain (/api/auth/login)
+    fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: cleanUser, password: cleanPass }),
     })
       .then(async (res) => {
         const data = await res.json();
-        if (res.ok && data.success) {
-          window.location.href = data.redirectUrl || "/dashboard";
+        if (res.ok && data.user) {
+          // Role ke hisab se sahi panel par redirect karein
+          if (data.user.role === "SUPER_ADMIN") {
+            window.location.href = "/admin";
+          } else {
+            window.location.href = "/dashboard";
+          }
         } else {
-          setError(data.message || "Invalid username or password");
+          setError(data.error || data.message || "Invalid username or password");
           setLoading(false);
         }
       })
@@ -83,7 +83,7 @@ export default function LoginPage() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Your username"
+              placeholder="Your username or email"
               className="w-full border border-slate-200 rounded-xl p-4 bg-slate-50 focus:outline-none focus:border-emerald-500 focus:bg-white text-sm transition text-slate-800"
               required
             />
@@ -143,7 +143,6 @@ export default function LoginPage() {
           <div className="absolute w-[24rem] h-[24rem] border border-white/30 rounded-full animate-[pulse_4s_linear_infinite]"></div>
           <div className="absolute w-[16rem] h-[16rem] border border-white/40 rounded-full animate-[pulse_2s_linear_infinite]"></div>
           
-          {/* Bigger WhatsApp Icon in Center */}
           <div className="bg-white/15 backdrop-blur-2xl p-12 rounded-full border border-white/30 shadow-[0_0_80px_rgba(255,255,255,0.3)] flex items-center justify-center z-10 transition hover:scale-105 duration-300">
             <svg className="w-28 h-28 text-white fill-current" viewBox="0 0 24 24">
               <path d="M12.04 2c-5.46 0-9.9 4.44-9.9 9.9 0 1.75.46 3.45 1.32 4.95L2 22l5.35-1.4c1.44.79 3.08 1.22 4.69 1.22 5.46 0 9.9-4.44 9.9-9.9 0-2.65-1.03-5.14-2.9-7.01C17.18 3.03 14.69 2 12.04 2M12.04 20.1c-1.42 0-2.81-.38-4.03-1.1l-.29-.17-3.03.79.81-2.95-.19-.31c-.81-1.31-1.24-2.83-1.24-4.38 0-4.56 3.71-8.27 8.27-8.27 2.21 0 4.29.86 5.85 2.42 1.56 1.56 2.42 3.64 2.41 5.85 0 4.56-3.71 8.27-8.27 8.27zm4.53-6.03c-.25-.13-1.47-.72-1.69-.81-.23-.09-.4-.13-.57.13-.18.25-.65.81-.8 1-.15.18-.3.2-.55.08-.25-.13-1.05-.39-2-1.23-.74-.66-1.24-1.48-1.39-1.73-.15-.25-.02-.39.11-.52.11-.11.25-.29.38-.44.13-.15.17-.25.25-.42.08-.17.04-.32-.02-.45-.06-.13-.57-1.38-.78-1.89-.2-.49-.41-.43-.57-.44h-.49c-.17 0-.45.06-.69.32-.24.25-.92.9-.92 2.2 0 1.3 1 2.55 1.14 2.73.14.18 1.97 3.01 4.77 4.22.67.29 1.19.46 1.6.59.67.22 1.28.19 1.76.11.54-.08 1.47-.6 1.68-1.18.21-.58.21-1.08.15-1.18-.06-.1-.23-.16-.48-.29z"/>

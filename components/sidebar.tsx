@@ -2,85 +2,124 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import LogoutButton from "@/components/LogoutButton";
 import { useState, useEffect } from "react";
-import { 
-  LayoutDashboard, 
-  Users, 
-  MessageSquare, 
-  Wallet, 
-  Settings, 
-  Radio,
-  ShieldAlert 
-} from "lucide-react";
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [userRole, setUserRole] = useState("USER");
+  const [role, setRole] = useState<string>("USER");
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then((res) => res.json())
       .then((data) => {
         if (data?.user?.role) {
-          setUserRole(data.user.role);
+          setRole(data.user.role);
         }
       })
       .catch(() => {});
   }, []);
 
-  // Reseller aur Admin ke liye Admin Panel / Clients ka access rahega, Normal User ke liye nahi
-  const navItems = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "RESELLER", "USER"] },
-    { name: "Admin Panel", href: "/admin", icon: ShieldAlert, roles: ["SUPER_ADMIN", "RESELLER"] },
-    { name: "Clients", href: "/clients", icon: Users, roles: ["SUPER_ADMIN", "RESELLER"] },
-    { name: "WABA Accounts", href: "/waba", icon: Radio, roles: ["SUPER_ADMIN", "RESELLER", "USER"] },
-    { name: "Broadcasts", href: "/broadcasts", icon: MessageSquare, roles: ["SUPER_ADMIN", "RESELLER", "USER"] },
-    { name: "Wallet & Billing", href: "/billing", icon: Wallet, roles: ["SUPER_ADMIN", "RESELLER", "USER"] },
-    { name: "Settings", href: "/settings", icon: Settings, roles: ["SUPER_ADMIN", "RESELLER", "USER"] },
-  ];
-
-  const filteredNavItems = navItems.filter((item) => item.roles.includes(userRole));
+  const isUser = role === "USER";
 
   return (
-    <aside className="w-64 bg-slate-900 text-white min-h-screen p-4 flex flex-col justify-between">
-      <div>
-        <div className="flex items-center gap-3 px-2 py-4 mb-6 border-b border-slate-800">
-          <div className="bg-emerald-500 p-2 rounded-lg text-slate-950 font-bold">WA</div>
-          <span className="font-bold text-lg tracking-wide">WABA Panel</span>
-        </div>
-
-        <nav className="space-y-1">
-          {filteredNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = item.href === "/dashboard" 
-              ? pathname === "/dashboard" 
-              : pathname === item.href || pathname?.startsWith(item.href + "/");
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive 
-                    ? "bg-emerald-600 text-white font-bold shadow-md" 
-                    : "text-slate-400 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                {item.name}
-              </Link>
-            );
-          })}
-        </nav>
+    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800 font-sans">
+      <div className="p-5 font-bold text-xl text-white flex items-center space-x-2 border-b border-slate-800">
+        <span className="bg-emerald-600 text-white px-2 py-1 rounded text-sm font-extrabold">WA</span>
+        <span>WABA Panel</span>
       </div>
 
-      <div className="border-t border-slate-800 pt-4 px-2 flex flex-col gap-3">
-        <LogoutButton />
-        
-        <div className="text-xs text-slate-500">
-          WABA SaaS Platform v1.0
-        </div>
+      <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto text-sm font-medium">
+        {/* Common Dashboard */}
+        <Link
+          href="/dashboard"
+          className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+            pathname === "/dashboard" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+          }`}
+        >
+          <span>🏠</span>
+          <span>Dashboard</span>
+        </Link>
+
+        {/* WhatsApp Core Features for Users */}
+        <Link
+          href="/templates"
+          className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+            pathname === "/templates" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+          }`}
+        >
+          <span>📄</span>
+          <span>Manage Template</span>
+        </Link>
+
+        <Link
+          href="/campaigns"
+          className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+            pathname === "/campaigns" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+          }`}
+        >
+          <span>📢</span>
+          <span>Campaigns & Broadcast</span>
+        </Link>
+
+        <Link
+          href="/agents"
+          className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+            pathname === "/agents" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+          }`}
+        >
+          <span>👥</span>
+          <span>Agents & Contacts</span>
+        </Link>
+
+        <Link
+          href="/automation"
+          className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+            pathname === "/automation" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+          }`}
+        >
+          <span>⚡</span>
+          <span>Automation & Chatbot</span>
+        </Link>
+
+        <Link
+          href="/reports"
+          className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+            pathname === "/reports" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+          }`}
+        >
+          <span>📊</span>
+          <span>Delivery Reports</span>
+        </Link>
+
+        <Link
+          href="/api-docs"
+          className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+            pathname === "/api-docs" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+          }`}
+        >
+          <span>🔌</span>
+          <span>API Keys & Docs</span>
+        </Link>
+
+        {/* Admin/Reseller Only Links */}
+        {!isUser && (
+          <div className="pt-4 border-t border-slate-800 space-y-1.5">
+            <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Admin Management</p>
+            <Link
+              href="/admin"
+              className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+                pathname.startsWith("/admin") ? "bg-purple-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+              }`}
+            >
+              <span>🛠️</span>
+              <span>Admin Panel</span>
+            </Link>
+          </div>
+        )}
+      </nav>
+
+      <div className="p-4 border-t border-slate-800 text-xs text-slate-500">
+        WABA SaaS Platform v1.0
       </div>
     </aside>
   );

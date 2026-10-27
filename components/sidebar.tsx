@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import LogoutButton from "@/components/LogoutButton";
+import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
   Users, 
@@ -13,31 +14,45 @@ import {
   ShieldAlert 
 } from "lucide-react";
 
-const navItems = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Admin Panel", href: "/admin/admin-home", icon: ShieldAlert },
-  { name: "Clients", href: "/clients", icon: Users },
-  { name: "WABA Accounts", href: "/waba", icon: Radio },
-  { name: "Broadcasts", href: "/broadcasts", icon: MessageSquare },
-  { name: "Wallet & Billing", href: "/billing", icon: Wallet },
-  { name: "Settings", href: "/settings", icon: Settings },
-];
-
 export default function Sidebar() {
   const pathname = usePathname();
+  const [userRole, setUserRole] = useState("USER");
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.user?.role) {
+          setUserRole(data.user.role);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Reseller aur Admin ke liye Admin Panel / Clients ka access rahega, Normal User ke liye nahi
+  const navItems = [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "RESELLER", "USER"] },
+    { name: "Admin Panel", href: "/admin", icon: ShieldAlert, roles: ["SUPER_ADMIN", "RESELLER"] },
+    { name: "Clients", href: "/clients", icon: Users, roles: ["SUPER_ADMIN", "RESELLER"] },
+    { name: "WABA Accounts", href: "/waba", icon: Radio, roles: ["SUPER_ADMIN", "RESELLER", "USER"] },
+    { name: "Broadcasts", href: "/broadcasts", icon: MessageSquare, roles: ["SUPER_ADMIN", "RESELLER", "USER"] },
+    { name: "Wallet & Billing", href: "/billing", icon: Wallet, roles: ["SUPER_ADMIN", "RESELLER", "USER"] },
+    { name: "Settings", href: "/settings", icon: Settings, roles: ["SUPER_ADMIN", "RESELLER", "USER"] },
+  ];
+
+  const filteredNavItems = navItems.filter((item) => item.roles.includes(userRole));
 
   return (
     <aside className="w-64 bg-slate-900 text-white min-h-screen p-4 flex flex-col justify-between">
       <div>
         <div className="flex items-center gap-3 px-2 py-4 mb-6 border-b border-slate-800">
           <div className="bg-emerald-500 p-2 rounded-lg text-slate-950 font-bold">WA</div>
-          <span className="font-bold text-lg tracking-wide">WABA Admin</span>
+          <span className="font-bold text-lg tracking-wide">WABA Panel</span>
         </div>
 
         <nav className="space-y-1">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const Icon = item.icon;
-            // Dashboard ke liye exact match, baki sabke liye exact ya sub-route match
             const isActive = item.href === "/dashboard" 
               ? pathname === "/dashboard" 
               : pathname === item.href || pathname?.startsWith(item.href + "/");

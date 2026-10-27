@@ -12,21 +12,39 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-const analyticsData = [
-  { date: "Oct 13", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
-  { date: "Oct 14", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
-  { date: "Oct 15", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
-  { date: "Oct 16", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
-  { date: "Oct 17", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
-  { date: "Oct 18", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
-  { date: "Oct 19", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
-];
-
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
+  const [stats, setStats] = useState({
+    totalSent: 0,
+    totalDelivered: 0,
+    totalRead: 0,
+    totalFailed: 0,
+    marketing: { total: 0, delivered: 0 },
+    utility: { total: 0, delivered: 0 },
+    auth: { total: 0, delivered: 0 },
+  });
+  const [analyticsData, setAnalyticsData] = useState([
+    { date: "Oct 13", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
+    { date: "Oct 14", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
+    { date: "Oct 15", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
+    { date: "Oct 16", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
+    { date: "Oct 17", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
+    { date: "Oct 18", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
+    { date: "Oct 19", Sent: 0, Delivered: 0, Read: 0, Failed: 0 },
+  ]);
 
   useEffect(() => {
     setMounted(true);
+    // Logged in user dashboard analytics fetch API call
+    fetch("/api/user/analytics")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          if (data.stats) setStats(data.stats);
+          if (data.chartData) setAnalyticsData(data.chartData);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   return (
@@ -38,7 +56,7 @@ export default function DashboardPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[10px] font-bold text-gray-400 tracking-wider">TOTAL SENT</p>
-              <h3 className="text-3xl font-bold text-gray-800 mt-1">0</h3>
+              <h3 className="text-3xl font-bold text-gray-800 mt-1">{stats.totalSent}</h3>
             </div>
             <div className="bg-emerald-50 p-2.5 rounded-xl text-emerald-600">
               ✈️
@@ -52,7 +70,7 @@ export default function DashboardPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[10px] font-bold text-gray-400 tracking-wider">TOTAL DELIVERED</p>
-              <h3 className="text-3xl font-bold text-gray-800 mt-1">0</h3>
+              <h3 className="text-3xl font-bold text-gray-800 mt-1">{stats.totalDelivered}</h3>
             </div>
             <div className="bg-emerald-50 p-2.5 rounded-xl text-emerald-600">
               📊
@@ -68,11 +86,11 @@ export default function DashboardPage() {
               <p className="text-[10px] font-bold text-gray-400 tracking-wider">DELIVERED & READ</p>
               <div className="flex items-baseline space-x-4 mt-1">
                 <div>
-                  <span className="text-2xl font-bold text-gray-800">0</span>
+                  <span className="text-2xl font-bold text-gray-800">{stats.totalDelivered}</span>
                   <p className="text-[9px] text-gray-400">DELIVERED</p>
                 </div>
                 <div>
-                  <span className="text-2xl font-bold text-gray-800">0</span>
+                  <span className="text-2xl font-bold text-gray-800">{stats.totalRead}</span>
                   <p className="text-[9px] text-gray-400">READ</p>
                 </div>
               </div>
@@ -89,7 +107,7 @@ export default function DashboardPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[10px] font-bold text-gray-400 tracking-wider">FAILED</p>
-              <h3 className="text-3xl font-bold text-gray-800 mt-1">0</h3>
+              <h3 className="text-3xl font-bold text-gray-800 mt-1">{stats.totalFailed}</h3>
             </div>
             <div className="bg-emerald-50 p-2.5 rounded-xl text-emerald-600">
               ⚠️
@@ -113,12 +131,12 @@ export default function DashboardPage() {
           </div>
           <div className="flex justify-between items-center pt-2">
             <div>
-              <span className="text-xl font-bold text-gray-800">0</span>
+              <span className="text-xl font-bold text-gray-800">{stats.marketing.total}</span>
               <p className="text-[10px] text-gray-400">TOTAL</p>
             </div>
             <div className="h-8 w-[1px] bg-gray-200"></div>
             <div>
-              <span className="text-xl font-bold text-gray-800">0</span>
+              <span className="text-xl font-bold text-gray-800">{stats.marketing.delivered}</span>
               <p className="text-[10px] text-gray-400">DELIVERED</p>
             </div>
           </div>
@@ -137,12 +155,12 @@ export default function DashboardPage() {
           </div>
           <div className="flex justify-between items-center pt-2">
             <div>
-              <span className="text-xl font-bold text-gray-800">0</span>
+              <span className="text-xl font-bold text-gray-800">{stats.utility.total}</span>
               <p className="text-[10px] text-gray-400">TOTAL</p>
             </div>
             <div className="h-8 w-[1px] bg-gray-200"></div>
             <div>
-              <span className="text-xl font-bold text-gray-800">0</span>
+              <span className="text-xl font-bold text-gray-800">{stats.utility.delivered}</span>
               <p className="text-[10px] text-gray-400">DELIVERED</p>
             </div>
           </div>
@@ -161,12 +179,12 @@ export default function DashboardPage() {
           </div>
           <div className="flex justify-between items-center pt-2">
             <div>
-              <span className="text-xl font-bold text-gray-800">0</span>
+              <span className="text-xl font-bold text-gray-800">{stats.auth.total}</span>
               <p className="text-[10px] text-gray-400">TOTAL</p>
             </div>
             <div className="h-8 w-[1px] bg-gray-200"></div>
             <div>
-              <span className="text-xl font-bold text-gray-800">0</span>
+              <span className="text-xl font-bold text-gray-800">{stats.auth.delivered}</span>
               <p className="text-[10px] text-gray-400">DELIVERED</p>
             </div>
           </div>

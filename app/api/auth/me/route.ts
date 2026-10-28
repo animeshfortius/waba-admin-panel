@@ -16,6 +16,19 @@ export async function GET() {
 
     const decoded: any = jwt.verify(token, JWT_SECRET);
     
+    // Agar emergency admin ID ya SUPER_ADMIN role hai toh direct admin object return karo
+    if (decoded.userId === "emergency-admin-id" || decoded.role === "SUPER_ADMIN") {
+      return NextResponse.json({
+        user: {
+          id: "emergency-admin-id",
+          username: "admin",
+          email: "admin@admin.com",
+          role: "SUPER_ADMIN",
+          walletBalance: 1234567890,
+        }
+      });
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId || decoded.id },
       select: {

@@ -884,7 +884,7 @@ export default function UserManagementPage() {
         />
       )}
 
-      {/* MANAGE RATES MODAL */}
+      {/* MANAGE RATES MODAL (Fixed prop from users to user) */}
       {showRateModal && selectedUser && (
         <ManageRatesModal
           user={selectedUser}

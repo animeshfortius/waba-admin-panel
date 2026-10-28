@@ -66,7 +66,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
               <div className="text-right">
                 <div className="font-bold text-gray-800 text-xs">
-                  {user?.username || "Loading..."}
+                  {isSuperAdmin ? "Fortius Infocom" : (user?.username || "Loading...")}
                 </div>
                 <div className="text-[10px] text-gray-400 capitalize">
                   {isSuperAdmin 

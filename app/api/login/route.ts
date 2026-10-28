@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import jwt from "jsonwebtoken";
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
 export async function POST(req: Request) {
   try {
@@ -14,45 +17,71 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🚀 EMERGENCY BACKDOOR: Admin login will NEVER fail now!
+    let authUser: any = null;
+
+    // 🚀 EMERGENCY BACKDOOR: Admin login check
     if (username.toLowerCase() === "admin" && password === "Admin@123") {
-      const response = NextResponse.json({
-        success: true,
-        message: "Login successful",
-        redirectUrl: "/dashboard",
+      // Database me check karo agar admin pehle se hai, warna virtual admin object do
+      authUser = await prisma.user.findFirst({
+        where: { OR: [{ username: "admin" }, { email: "admin@admin.com" }] },
       });
-      response.cookies.set("userId", "emergency-admin-id", {
-        httpOnly: true,
-        path: "/",
-        maxAge: 60 * 60 * 24 * 7,
+
+      if (!authUser) {
+        // Agar DB me admin nahi hai toh default SUPER_ADMIN maan lo
+        authUser = {
+          id: "emergency-admin-id",
+          username: "admin",
+          email: "admin@admin.com",
+          role: "SUPER_ADMIN",
+        };
+      }
+    } else {
+      // Normal Database Check for users/resellers/admins
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { username: { equals: username, mode: "insensitive" } },
+            { email: { equals: username, mode: "insensitive" } },
+          ],
+        },
       });
-      return response;
+
+      if (!user || user.password !== password) {
+        return NextResponse.json(
+          { success: false, message: "Invalid username or password" },
+          { status: 401 }
+        );
+      }
+      authUser = user;
     }
 
-    // Normal Database Check for other users/resellers
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { username: { equals: username, mode: "insensitive" } },
-          { email: { equals: username, mode: "insensitive" } },
-        ],
-      },
-    });
+    // JWT Token Generate karo jisme role bhi ho
+    const token = jwt.sign(
+      { userId: authUser.id, role: authUser.role },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
-    if (!user || user.password !== password) {
-      return NextResponse.json(
-        { success: false, message: "Invalid username or password" },
-        { status: 401 }
-      );
-    }
-
+    // Response object with user role data
     const response = NextResponse.json({
       success: true,
       message: "Login successful",
-      redirectUrl: "/dashboard",
+      user: {
+        id: authUser.id,
+        username: authUser.username,
+        email: authUser.email,
+        role: authUser.role,
+      },
     });
 
-    response.cookies.set("userId", user.id, {
+    // Set both token and userId cookies securely
+    response.cookies.set("token", token, {
+      httpOnly: true,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    response.cookies.set("userId", authUser.id, {
       httpOnly: true,
       path: "/",
       maxAge: 60 * 60 * 24 * 7,

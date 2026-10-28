@@ -61,12 +61,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Dynamic User Profile Info & Logout */}
             <div className="flex items-center gap-3 border-l pl-4">
-              <div className="w-9 h-9 bg-emerald-600 text-white font-bold rounded-full flex items-center justify-center text-sm shadow">
-                {user?.username?.[0]?.toUpperCase() || "U"}
+              {/* Profile Icon: 'FI' for Super Admin, Initial Letter for Normal User */}
+              <div className="w-9 h-9 bg-slate-900 text-white font-extrabold rounded-full flex items-center justify-center text-xs shadow tracking-wider">
+                {isSuperAdmin ? "FI" : user?.username?.[0]?.toUpperCase() || "U"}
               </div>
+
               <div className="text-right">
                 <div className="font-bold text-gray-800 text-xs">
-                  {isSuperAdmin ? "Fortius Infocom" : (user?.username || "Loading...")}
+                  {isSuperAdmin ? "Fortius Infocom" : user?.username || "Loading..."}
                 </div>
                 <div className="text-[10px] text-gray-400 capitalize">
                   {isSuperAdmin 

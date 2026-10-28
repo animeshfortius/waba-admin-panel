@@ -2,6 +2,7 @@
 
 import Sidebar from "@/components/sidebar";
 import LogoutButton from "@/components/LogoutButton";
+import Link from "next/link";
 import { useState, useEffect } from "react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -20,6 +21,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .catch((err) => console.error("Error fetching user session:", err));
   }, []);
 
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
+
   return (
     <div className="flex min-h-screen bg-gray-50 text-xs font-sans">
       {/* Sidebar Component */}
@@ -33,10 +36,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Single Wallet Balance */}
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-1.5 rounded-xl font-bold text-xs shadow-xs">
-              Wallet Balance: ₹{walletBalance.toFixed(2)}
-            </div>
+            {/* SUPER_ADMIN Specific Balances & Admin Button */}
+            {isSuperAdmin ? (
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/admin"
+                  className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition"
+                >
+                  <span>⚙️</span> Admin
+                </Link>
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs">
+                  ACTUAL: ₹1,234,567,890.00
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs">
+                  VIRTUAL: ₹1,234,567,890.00
+                </div>
+              </div>
+            ) : (
+              /* Single Wallet Balance for Normal Users */
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-1.5 rounded-xl font-bold text-xs shadow-xs">
+                Wallet Balance: ₹{walletBalance.toFixed(2)}
+              </div>
+            )}
 
             {/* Dynamic User Profile Info & Logout */}
             <div className="flex items-center gap-3 border-l pl-4">
@@ -48,8 +69,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   {user?.username || "Loading..."}
                 </div>
                 <div className="text-[10px] text-gray-400 capitalize">
-                  {user?.role === "SUPER_ADMIN" 
-                    ? "Super Admin" 
+                  {isSuperAdmin 
+                    ? "Admin Panel" 
                     : user?.role === "RESELLER" 
                     ? "Reseller Account" 
                     : "User Account"}

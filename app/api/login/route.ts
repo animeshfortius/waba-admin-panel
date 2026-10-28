@@ -1,98 +1,51 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
+import { prisma } from "@/lib/prisma";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
-export async function POST(req: Request) {
+export async function GET() {
   try {
-    const body = await req.json();
-    const username = body.username?.trim();
-    const password = body.password?.trim();
+    const cookieStore = await cookies();
+    const token = cookieStore.get("token")?.value || cookieStore.get("auth_token")?.value;
 
-    if (!username || !password) {
-      return NextResponse.json(
-        { success: false, message: "Username and password are required" },
-        { status: 400 }
-      );
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let authUser: any = null;
-
-    // 🚀 EMERGENCY BACKDOOR: Admin login check
-    if (username.toLowerCase() === "admin" && password === "Admin@123") {
-      // Database me check karo agar admin pehle se hai, warna virtual admin object do
-      authUser = await prisma.user.findFirst({
-        where: { OR: [{ username: "admin" }, { email: "admin@admin.com" }] },
-      });
-
-      if (!authUser) {
-        // Agar DB me admin nahi hai toh default SUPER_ADMIN maan lo
-        authUser = {
+    const decoded: any = jwt.verify(token, JWT_SECRET);
+    
+    // Agar emergency admin ID ya SUPER_ADMIN hai toh direct admin object return karo
+    if (decoded.userId === "emergency-admin-id" || decoded.role === "SUPER_ADMIN") {
+      return NextResponse.json({
+        user: {
           id: "emergency-admin-id",
           username: "admin",
           email: "admin@admin.com",
           role: "SUPER_ADMIN",
-        };
-      }
-    } else {
-      // Normal Database Check for users/resellers/admins
-      const user = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { username: { equals: username, mode: "insensitive" } },
-            { email: { equals: username, mode: "insensitive" } },
-          ],
-        },
+          walletBalance: 0,
+        }
       });
-
-      if (!user || user.password !== password) {
-        return NextResponse.json(
-          { success: false, message: "Invalid username or password" },
-          { status: 401 }
-        );
-      }
-      authUser = user;
     }
 
-    // JWT Token Generate karo jisme role bhi ho
-    const token = jwt.sign(
-      { userId: authUser.id, role: authUser.role },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    // Response object with user role data
-    const response = NextResponse.json({
-      success: true,
-      message: "Login successful",
-      user: {
-        id: authUser.id,
-        username: authUser.username,
-        email: authUser.email,
-        role: authUser.role,
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId || decoded.id },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        walletBalance: true,
       },
     });
 
-    // Set both token and userId cookies securely
-    response.cookies.set("token", token, {
-      httpOnly: true,
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
 
-    response.cookies.set("userId", authUser.id, {
-      httpOnly: true,
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
-
-    return response;
-  } catch (error: any) {
-    console.error("Login API Error:", error);
-    return NextResponse.json(
-      { success: false, message: error.message || "Internal Server Error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ user });
+  } catch (error) {
+    return NextResponse.json({ error: "Invalid token or session expired" }, { status: 401 });
   }
 }

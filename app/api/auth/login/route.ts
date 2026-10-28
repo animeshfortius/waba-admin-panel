@@ -20,24 +20,17 @@ export async function POST(req: Request) {
     let authUser: any = null;
     let assignedRole = "USER";
 
-    // 🚀 EMERGENCY BACKDOOR / ADMIN CHECK
+    // 🚀 EMERGENCY BACKDOOR / SUPER ADMIN LOGIN
     if (username.toLowerCase() === "admin" && password === "Admin@123") {
       assignedRole = "SUPER_ADMIN";
-      authUser = await prisma.user.findFirst({
-        where: { OR: [{ username: "admin" }, { email: "admin@admin.com" }] },
-      });
-
-      if (!authUser) {
-        authUser = {
-          id: "emergency-admin-id",
-          username: "admin",
-          email: "admin@admin.com",
-          role: "SUPER_ADMIN",
-        };
-      } else {
-        authUser.role = "SUPER_ADMIN"; // Forcefully override to SUPER_ADMIN
-      }
+      authUser = {
+        id: "emergency-admin-id",
+        username: "admin",
+        email: "admin@admin.com",
+        role: "SUPER_ADMIN",
+      };
     } else {
+      // Normal Database Check
       const user = await prisma.user.findFirst({
         where: {
           OR: [
@@ -54,16 +47,17 @@ export async function POST(req: Request) {
         );
       }
       authUser = user;
-      assignedRole = user.role;
+      assignedRole = user.role || "USER";
     }
 
-    // JWT Token with correct role
+    // Generate JWT Token with role
     const token = jwt.sign(
       { userId: authUser.id, role: assignedRole },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
 
+    // Response with user object containing the role
     const response = NextResponse.json({
       success: true,
       message: "Login successful",
@@ -71,7 +65,7 @@ export async function POST(req: Request) {
         id: authUser.id,
         username: authUser.username,
         email: authUser.email,
-        role: assignedRole, // Guaranteed SUPER_ADMIN for admin
+        role: assignedRole,
       },
     });
 

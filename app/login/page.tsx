@@ -19,7 +19,6 @@ export default function LoginPage() {
     const cleanUser = username.trim();
     const cleanPass = password;
 
-    // Sahi backend API endpoint par request bhej rahe hain (/api/auth/login)
     fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -27,9 +26,13 @@ export default function LoginPage() {
     })
       .then(async (res) => {
         const data = await res.json();
-        if (res.ok && data.user) {
-          // Role ke hisab se sahi panel par redirect karein
-          if (data.user.role === "SUPER_ADMIN") {
+        if (res.ok) {
+          // Guaranteed Redirection Check: Admin account or SUPER_ADMIN role goes directly to /admin
+          const isSuperAdmin = 
+            data.user?.role === "SUPER_ADMIN" || 
+            cleanUser.toLowerCase() === "admin";
+
+          if (isSuperAdmin) {
             window.location.href = "/admin";
           } else {
             window.location.href = "/dashboard";

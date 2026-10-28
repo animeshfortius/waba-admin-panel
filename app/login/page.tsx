@@ -27,16 +27,8 @@ export default function LoginPage() {
       .then(async (res) => {
         const data = await res.json();
         if (res.ok) {
-          // Guaranteed Redirection Check: Admin account or SUPER_ADMIN role goes directly to /admin
-          const isSuperAdmin = 
-            data.user?.role === "SUPER_ADMIN" || 
-            cleanUser.toLowerCase() === "admin";
-
-          if (isSuperAdmin) {
-            window.location.href = "/admin";
-          } else {
-            window.location.href = "/dashboard";
-          }
+          // Always redirect to dashboard for everyone as requested
+          window.location.href = "/dashboard";
         } else {
           setError(data.error || data.message || "Invalid username or password");
           setLoading(false);

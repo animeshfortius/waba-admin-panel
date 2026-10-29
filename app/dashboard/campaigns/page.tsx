@@ -377,16 +377,16 @@ export default function CampaignsPage() {
                   ⬅ Previous
                 </button>
                 <button
-                  type="button"
-                  onClick={() => {
-                    alert(isScheduled ? "Campaign Scheduled Successfully! ⏰" : "Campaign Launched Successfully! 🚀");
-                    // Redirect directly to Campaign Activity / Report page
-                    window.location.href = "/dashboard/reports";
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg cursor-pointer transition"
-                >
-                  {isScheduled ? "⏰ Schedule Campaign" : "🚀 Launch Campaign"}
-                </button>
+  type="button"
+  onClick={() => {
+    alert(isScheduled ? "Campaign Scheduled Successfully! ⏰" : "Campaign Launched Successfully! 🚀");
+    // Redirecting directly to the detailed reports page as shown in the interface
+    window.location.href = "/dashboard/reports";
+  }}
+  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg cursor-pointer transition"
+>
+  {isScheduled ? "⏰ Schedule Campaign" : "🚀 Launch Campaign"}
+</button>
               </div>
             </div>
           )}

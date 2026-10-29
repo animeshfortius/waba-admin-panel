@@ -18,14 +18,18 @@ export default function CampaignsPage() {
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
 
-  // Template Selection States (Matching Original Panel Flow)
-  const [selectedCategory, setSelectedCategory] = useState("Utility");
+  // Template Selection States (Exact match as per screenshots)
+  const [selectedCategory, setSelectedCategory] = useState("");
   const [templateType, setTemplateType] = useState("All");
-  const [selectedTemplate, setSelectedTemplate] = useState("feedback_collection");
+  const [selectedTemplate, setSelectedTemplate] = useState("");
 
-  // Dynamic variable mappings
-  const [var1, setVar1] = useState("");
-  const [var2, setVar2] = useState("");
+  // Variable Mapping States
+  const [mappingType1, setMappingType1] = useState("Assign Const Value");
+  const [val1, setVal1] = useState("");
+  const [mappingType2, setMappingType2] = useState("Assign Const Value");
+  const [val2, setVal2] = useState("");
+  const [mappingType3, setMappingType3] = useState("Assign Const Value");
+  const [val3, setVal3] = useState("");
 
   // Fix prerender error by generating dynamic name client-side
   useEffect(() => {
@@ -187,15 +191,14 @@ export default function CampaignsPage() {
                     value={selectedCategory}
                     onChange={(e) => {
                       setSelectedCategory(e.target.value);
-                      if (e.target.value === "Utility") setSelectedTemplate("feedback_collection");
-                      else if (e.target.value === "Authentication") setSelectedTemplate("otp_test");
-                      else setSelectedTemplate("");
+                      setSelectedTemplate(""); // Reset template when category changes
                     }}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold text-gray-700"
                   >
-                    <option value="Marketing">Marketing</option>
-                    <option value="Utility">Utility</option>
-                    <option value="Authentication">Authentication</option>
+                    <option value="">Select Category[cite: 9]</option>
+                    <option value="Marketing">Marketing[cite: 9]</option>
+                    <option value="Utility">Utility[cite: 9]</option>
+                    <option value="Authentication">Authentication[cite: 9]</option>
                   </select>
                 </div>
 
@@ -206,20 +209,24 @@ export default function CampaignsPage() {
                     onChange={(e) => setTemplateType(e.target.value)}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold text-gray-700"
                   >
-                    <option value="All">All Formats</option>
-                    <option value="Default">Default</option>
+                    <option value="All">All[cite: 10]</option>
+                    <option value="Default">Default[cite: 10]</option>
+                    <option value="Flows">Flows[cite: 12]</option>
+                    <option value="LimitedTimeOffer">Limited Time Offer</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-600 mb-1">META TEMPLATE *[cite: 7]</label>
+                  <label className="block font-bold text-gray-600 mb-1">META TEMPLATE *</label>
                   <select
                     value={selectedTemplate}
                     onChange={(e) => setSelectedTemplate(e.target.value)}
-                    className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-700 focus:outline-none font-bold"
+                    disabled={!selectedCategory}
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-700 focus:outline-none font-bold disabled:opacity-50"
                   >
+                    <option value="">Select Template[cite: 8]</option>
                     {selectedCategory === "Utility" && (
-                      <option value="feedback_collection">feedback_collection[cite: 7]</option>
+                      <option value="feedback_collection">feedback_collection[cite: 13]</option>
                     )}
                     {selectedCategory === "Authentication" && (
                       <option value="otp_test">otp_test</option>
@@ -231,36 +238,72 @@ export default function CampaignsPage() {
                 </div>
               </div>
 
-              {/* Dynamic Variable Parameters Box */}
-              <div className="bg-emerald-50/50 border border-emerald-200 p-4 rounded-2xl space-y-3">
-                <div className="font-bold text-emerald-800 flex items-center justify-between">
-                  <span>Dynamic Variable Parameters Mapping</span>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Template: {selectedTemplate}</span>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-600">{"{{1}}"} Parameter Value / Column[cite: 7]</label>
+              {/* Dynamic Body Variable Mapping Section (Appears when template is selected) */}
+              {selectedTemplate && (
+                <div className="bg-gray-50 border rounded-2xl p-4 space-y-4">
+                  <div className="font-bold text-gray-700 border-b pb-2">Body ⓘ</div>
+
+                  {/* Variable 1 */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+                    <div className="font-mono font-bold text-gray-600 text-xs">{"{{1}}"}[cite: 14, 15]</div>
+                    <select
+                      value={mappingType1}
+                      onChange={(e) => setMappingType1(e.target.value)}
+                      className="border rounded-xl p-2 bg-white text-xs font-semibold focus:outline-none"
+                    >
+                      <option value="Assign Const Value">Assign Const Value[cite: 15]</option>
+                      <option value="Map Column Value">Map Column Value[cite: 15]</option>
+                    </select>
                     <input
                       type="text"
-                      placeholder="e.g. John or column_name"
-                      value={var1}
-                      onChange={(e) => setVar1(e.target.value)}
-                      className="w-full border rounded-lg p-2.5 bg-white text-xs mt-1 font-mono focus:outline-none"
+                      placeholder={mappingType1 === "Assign Const Value" ? "Enter value..." : "Enter column name..."}
+                      value={val1}
+                      onChange={(e) => setVal1(e.target.value)}
+                      className="border rounded-xl p-2 bg-white text-xs font-mono focus:outline-none"
                     />
                   </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-600">{"{{2}}"} Parameter Value / Column[cite: 7]</label>
+
+                  {/* Variable 2 */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+                    <div className="font-mono font-bold text-gray-600 text-xs">{"{{2}}"}[cite: 14]</div>
+                    <select
+                      value={mappingType2}
+                      onChange={(e) => setMappingType2(e.target.value)}
+                      className="border rounded-xl p-2 bg-white text-xs font-semibold focus:outline-none"
+                    >
+                      <option value="Assign Const Value">Assign Const Value</option>
+                      <option value="Map Column Value">Map Column Value</option>
+                    </select>
                     <input
                       type="text"
-                      placeholder="e.g. 123 or column_name"
-                      value={var2}
-                      onChange={(e) => setVar2(e.target.value)}
-                      className="w-full border rounded-lg p-2.5 bg-white text-xs mt-1 font-mono focus:outline-none"
+                      placeholder={mappingType2 === "Assign Const Value" ? "Enter value..." : "Enter column name..."}
+                      value={val2}
+                      onChange={(e) => setVal2(e.target.value)}
+                      className="border rounded-xl p-2 bg-white text-xs font-mono focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Variable 3 */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+                    <div className="font-mono font-bold text-gray-600 text-xs">{"{{3}}"}[cite: 14]</div>
+                    <select
+                      value={mappingType3}
+                      onChange={(e) => setMappingType3(e.target.value)}
+                      className="border rounded-xl p-2 bg-white text-xs font-semibold focus:outline-none"
+                    >
+                      <option value="Assign Const Value">Assign Const Value</option>
+                      <option value="Map Column Value">Map Column Value</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder={mappingType3 === "Assign Const Value" ? "Enter value..." : "Enter column name..."}
+                      value={val3}
+                      onChange={(e) => setVal3(e.target.value)}
+                      className="border rounded-xl p-2 bg-white text-xs font-mono focus:outline-none"
                     />
                   </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex justify-between items-center pt-6 border-t">
                 <button
@@ -292,7 +335,7 @@ export default function CampaignsPage() {
                 </div>
                 <div>
                   <div className="text-gray-400 font-semibold text-[10px]">TEMPLATE</div>
-                  <div className="font-bold text-emerald-700 mt-0.5">{selectedTemplate}</div>
+                  <div className="font-bold text-emerald-700 mt-0.5">{selectedTemplate || "None"}</div>
                 </div>
                 <div>
                   <div className="text-gray-400 font-semibold text-[10px]">TOTAL RECIPIENTS</div>
@@ -352,18 +395,22 @@ export default function CampaignsPage() {
             <div className="bg-emerald-900/60 p-3 rounded-2xl space-y-2 shadow-inner border border-emerald-800/50">
               <div className="text-slate-100 leading-relaxed text-xs whitespace-pre-wrap">
                 {selectedTemplate === "feedback_collection"
-                  ? `Hi ${var1 || "{{1}}"}, the service request we completed on ${var2 || "{{2}}"} is now closed. Please rate your experience from 1-5 and share any feedback to help us improve your recent request with us at the link below:`
-                  : `${var1 || "{{1()}}"} is your verification code. For your security, do not share this code.`}
+                  ? `Hi ${val1 || "{{1}}"}, the service request we completed on ${val2 || "{{2}}"} is now closed. Please rate your experience from 1-5 and share any feedback to help us improve your recent request with us at the link below:`
+                  : selectedTemplate
+                  ? `${val1 || "{{1}}"} is your template preview content here.`
+                  : "There is no template added yet"}
               </div>
-              <div className="pt-2">
-                <div className="bg-white text-emerald-800 text-center py-1.5 rounded-xl font-bold text-xs shadow-xs">
-                  Copy Code
+              {selectedTemplate && (
+                <div className="pt-2">
+                  <div className="bg-white text-emerald-800 text-center py-1.5 rounded-xl font-bold text-xs shadow-xs">
+                    Copy Code
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="text-center text-[10px] text-slate-500 font-mono">
-              Template: <span className="text-emerald-400 font-bold">{selectedTemplate}</span>
+              Template: <span className="text-emerald-400 font-bold">{selectedTemplate || "None"}</span>
             </div>
           </div>
         </div>

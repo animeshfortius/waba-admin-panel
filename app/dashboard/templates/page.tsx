@@ -37,24 +37,57 @@ export default function ManageTemplatesPage() {
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadTemplatesData = () => {
     try {
+      const defaultList = [
+        {
+          id: "1",
+          name: "otp_test",
+          language: "English",
+          templateId: "1758713771836411",
+          wabaNumber: "28402710282733872",
+          text: "{{1}} is your verification code. For your security...",
+          category: "Authentication",
+          status: "Approved",
+          created: "08 Oct 2025 12:05 PM",
+          modified: "26 Oct 2026 04:44 PM"
+        },
+        {
+          id: "2",
+          name: "feedback_collection",
+          language: "English",
+          templateId: "1764876244783508",
+          wabaNumber: "28402710282733872",
+          text: "Hi {{1}}, the service request we completed on...",
+          category: "Utility",
+          status: "Approved",
+          created: "08 Oct 2025 12:04 PM",
+          modified: "N/A"
+        }
+      ];
+
       const customTpls = JSON.parse(localStorage.getItem("custom_whatsapp_templates") || "[]");
-      if (customTpls.length > 0) {
-        setTemplates((prev) => [...customTpls, ...prev]);
-      }
+      setTemplates([...customTpls, ...defaultList]);
     } catch (e) {
       console.error(e);
     }
+  };
+
+  useEffect(() => {
+    loadTemplatesData();
   }, []);
 
+  const handleSyncTemplates = () => {
+    loadTemplatesData();
+    alert("Template Sync Successfully! Meta templates retrieved.");
+  };
+
   const handleDelete = (id: string) => {
-    const updated = templates.filter(t => t.id !== id);
-    setTemplates(updated);
     try {
       const customTpls = JSON.parse(localStorage.getItem("custom_whatsapp_templates") || "[]");
       const newCustom = customTpls.filter((t: any) => t.id !== id);
       localStorage.setItem("custom_whatsapp_templates", JSON.stringify(newCustom));
+      loadTemplatesData();
     } catch (e) {
       console.error(e);
     }
@@ -100,7 +133,7 @@ export default function ManageTemplatesPage() {
             <span>+ Create Templates</span>
           </Link>
           <button
-            onClick={() => alert("Template Sync Successfully! Meta templates retrieved.")}
+            onClick={handleSyncTemplates}
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer"
           >
             🔄 Retrieve Meta Templates
@@ -179,7 +212,14 @@ export default function ManageTemplatesPage() {
                   </button>
                 </td>
                 <td className="p-3 align-top text-center">
-                  <div className="flex items-center justify-center space-x-2">
+                  <div className="flex items-center justify-center space-x-1">
+                    <button
+                      title="Sync Template Status"
+                      onClick={handleSyncTemplates}
+                      className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg cursor-pointer text-xs"
+                    >
+                      🔄
+                    </button>
                     <button
                       title="Preview"
                       onClick={() => setPreviewTemplate(tpl)}

@@ -3,10 +3,10 @@
 import { useState } from "react";
 
 export default function ManageRatesModal({ user, onClose, onSuccess }: { user: any; onClose: () => void; onSuccess: () => void }) {
-  const [marketingRate, setMarketingRate] = useState(0.25);
-  const [utilityRate, setUtilityRate] = useState(0.15);
-  const [serviceRate, setServiceRate] = useState(0.15);
-  const [authRate, setAuthRate] = useState(0.20);
+  const [marketingRate, setMarketingRate] = useState(user?.perMsgRate ?? 0.25);
+  const [utilityRate, setUtilityRate] = useState(user?.utilityRate ?? 0.15);
+  const [serviceRate, setServiceRate] = useState(user?.serviceRate ?? 0.15);
+  const [authRate, setAuthRate] = useState(user?.authRate ?? 0.20);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -18,6 +18,12 @@ export default function ManageRatesModal({ user, onClose, onSuccess }: { user: a
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
+          rates: {
+            marketing: marketingRate,
+            utility: utilityRate,
+            service: serviceRate,
+            authentication: authRate,
+          },
           marketingRate,
           utilityRate,
           serviceRate,
@@ -52,7 +58,7 @@ export default function ManageRatesModal({ user, onClose, onSuccess }: { user: a
             <label className="font-semibold text-gray-600">Marketing Rate (₹ per msg)</label>
             <input
               type="number"
-              step="0.01"
+              step="0.0001"
               value={marketingRate}
               onChange={(e) => setMarketingRate(parseFloat(e.target.value))}
               className="w-full border rounded-xl p-3 mt-1 bg-gray-50 focus:outline-none"
@@ -64,7 +70,7 @@ export default function ManageRatesModal({ user, onClose, onSuccess }: { user: a
             <label className="font-semibold text-gray-600">Utility Rate (₹ per msg)</label>
             <input
               type="number"
-              step="0.01"
+              step="0.0001"
               value={utilityRate}
               onChange={(e) => setUtilityRate(parseFloat(e.target.value))}
               className="w-full border rounded-xl p-3 mt-1 bg-gray-50 focus:outline-none"
@@ -76,7 +82,7 @@ export default function ManageRatesModal({ user, onClose, onSuccess }: { user: a
             <label className="font-semibold text-gray-600">Service Rate (₹ per msg)</label>
             <input
               type="number"
-              step="0.01"
+              step="0.0001"
               value={serviceRate}
               onChange={(e) => setServiceRate(parseFloat(e.target.value))}
               className="w-full border rounded-xl p-3 mt-1 bg-gray-50 focus:outline-none"
@@ -88,7 +94,7 @@ export default function ManageRatesModal({ user, onClose, onSuccess }: { user: a
             <label className="font-semibold text-gray-600">Authentication Rate (₹ per msg)</label>
             <input
               type="number"
-              step="0.01"
+              step="0.0001"
               value={authRate}
               onChange={(e) => setAuthRate(parseFloat(e.target.value))}
               className="w-full border rounded-xl p-3 mt-1 bg-gray-50 focus:outline-none"

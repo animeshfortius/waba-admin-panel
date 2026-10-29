@@ -380,7 +380,8 @@ export default function CampaignsPage() {
                   type="button"
                   onClick={() => {
                     alert(isScheduled ? "Campaign Scheduled Successfully! ⏰" : "Campaign Launched Successfully! 🚀");
-                    window.location.href = "/dashboard/campaigns";
+                    // Redirect directly to Campaign Activity / Report page
+                    window.location.href = "/dashboard/campaigns/activity";
                   }}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg cursor-pointer transition"
                 >

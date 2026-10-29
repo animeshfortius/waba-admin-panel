@@ -56,19 +56,19 @@ export default function ManageTemplatesPage() {
             href="/dashboard/templates/create"
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center space-x-1.5"
           >
-            <span>+ Create Flow Template[cite: 4]</span>
+            <span>+ Create Templates</span>
           </Link>
           <button
             onClick={() => alert("Retrieving templates from Meta...")}
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer"
           >
-            🔄 Retrieve Meta Templates[cite: 4]
+            🔄 Retrieve Meta Templates
           </button>
           <button
             onClick={() => alert("Downloading templates...")}
             className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2.5 rounded-xl border transition cursor-pointer"
           >
-            📥 Download Templates[cite: 4]
+            📥 Download Templates
           </button>
         </div>
       </div>

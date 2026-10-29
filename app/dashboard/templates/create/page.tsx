@@ -104,12 +104,33 @@ export default function CreateWhatsAppTemplateModule() {
     setCarouselCards([...carouselCards, newCard]);
   };
 
-  // Submit Handler with redirect to Manage Templates
+  // Submit Handler with localStorage persistence and redirect to Manage Templates
   const handleSubmitForReview = () => {
     if (!templateName) {
       alert("Please enter template name");
       return;
     }
+
+    const newTemplate = {
+      id: Date.now().toString(),
+      name: templateName,
+      language: language,
+      templateId: Math.floor(1000000000000000 + Math.random() * 9000000000000000).toString(),
+      wabaNumber: wabaAccount,
+      text: bodyText,
+      category: category,
+      status: "PENDING",
+      created: new Date().toLocaleString("en-GB", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      modified: "N/A"
+    };
+
+    try {
+      const existing = JSON.parse(localStorage.getItem("custom_whatsapp_templates") || "[]");
+      localStorage.setItem("custom_whatsapp_templates", JSON.stringify([newTemplate, ...existing]));
+    } catch (e) {
+      console.error(e);
+    }
+
     alert("WhatsApp Template submitted successfully to Meta! Status: PENDING ⏳");
     window.location.href = "/dashboard/templates";
   };

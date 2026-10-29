@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
-export default function ConfigPage() {
+function ConfigContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeSection = searchParams.get("tab") || "hub";
@@ -58,44 +58,6 @@ export default function ConfigPage() {
   const [showFacebookModal, setShowFacebookModal] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-
-  const [mediaList, setMediaList] = useState([
-    {
-      id: 1,
-      media: "diwali_offer.jpg",
-      url: "https://waba.fortius.in/media/diwali_offer.jpg",
-      wabaNumber: "15553945963",
-      configDate: "12-Oct-2026",
-    },
-  ]);
-
-  const [contacts, setContacts] = useState([
-    {
-      id: 1,
-      number: "919876543210",
-      profileName: "Rahul Sharma",
-      email: "rahul@gmail.com",
-      contactName: "Rahul",
-    },
-  ]);
-
-  const [unsubscribers, setUnsubscribers] = useState([
-    {
-      id: 1,
-      number: "919000011111",
-      wabaNumber: "15553945963",
-      unsubscribedOn: "11-Oct-2026",
-      messageText: "STOP",
-    },
-  ]);
-
-  const [groups, setGroups] = useState([
-    { id: 1, name: "VIP Broadcast Group", totalContacts: 45 },
-  ]);
-
-  const [blacklist, setBlacklist] = useState([
-    { id: 1, number: "919999888777", createdDate: "10-Oct-2026" },
-  ]);
 
   const openWebhookModal = (channel: any) => {
     setSelectedChannel(channel);
@@ -582,5 +544,13 @@ export default function ConfigPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ConfigPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-gray-500">Loading Configuration...</div>}>
+      <ConfigContent />
+    </Suspense>
   );
 }

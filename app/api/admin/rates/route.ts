@@ -42,26 +42,32 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST: Saare 4 rates ko alag-alag Neon DB me save karna
+// 2. POST: Saare 4 rates ko Neon DB me save karna (Supports both direct & nested object formats)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { userId, rates } = body;
 
-    if (!userId || !rates) {
+    if (!userId) {
       return NextResponse.json(
-        { success: false, message: "User ID and rates object are required" },
+        { success: false, message: "User ID is required" },
         { status: 400 }
       );
     }
 
+    // Support both body.rates object and direct flat properties from frontend modal
+    const utility = rates?.utility ?? body.utilityRate ?? 0.1550;
+    const service = rates?.service ?? body.serviceRate ?? 0.1550;
+    const authentication = rates?.authentication ?? body.authRate ?? 0.20;
+    const marketing = rates?.marketing ?? body.marketingRate ?? 0.25;
+
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
-        utilityRate: parseFloat(rates.utility || 0.1550),
-        serviceRate: parseFloat(rates.service || 0.1550),
-        authRate: parseFloat(rates.authentication || 0.1550),
-        perMsgRate: parseFloat(rates.marketing || 0.8046),
+        utilityRate: parseFloat(utility),
+        serviceRate: parseFloat(service),
+        authRate: parseFloat(authentication),
+        perMsgRate: parseFloat(marketing),
       },
     });
 

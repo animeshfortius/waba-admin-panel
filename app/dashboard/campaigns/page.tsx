@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 export default function CampaignsPage() {
   const [step, setStep] = useState(1);
-  const [campaignName, setCampaignName] = useState(`Campaign_${Date.now().toString().slice(-6)}`);
+  const [campaignName, setCampaignName] = useState("Campaign_000000");
   const [numbersInput, setNumbersInput] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("28402710282733872");
   
@@ -17,6 +17,11 @@ export default function CampaignsPage() {
   // Template Selection States
   const [selectedCategory, setSelectedCategory] = useState("Utility");
   const [selectedTemplate, setSelectedTemplate] = useState("feedback_collection");
+
+  // Fix prerender error by generating dynamic name client-side
+  useEffect(() => {
+    setCampaignName(`Campaign_${Date.now().toString().slice(-6)}`);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6 max-w-7xl mx-auto relative">

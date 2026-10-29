@@ -5,11 +5,12 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-// Inline Manage Rates Modal Component
+// Inline Manage Rates Modal Component (Updated with Service Rate)
 function ManageRatesModal({ user, onClose, onSuccess }: { user: any; onClose: () => void; onSuccess: () => void }) {
   const [marketingRate, setMarketingRate] = useState(0.25);
   const [utilityRate, setUtilityRate] = useState(0.15);
   const [authRate, setAuthRate] = useState(0.20);
+  const [serviceRate, setServiceRate] = useState(0.15);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -24,6 +25,7 @@ function ManageRatesModal({ user, onClose, onSuccess }: { user: any; onClose: ()
           marketingRate,
           utilityRate,
           authRate,
+          serviceRate,
         }),
       });
       const data = await res.json();
@@ -75,6 +77,18 @@ function ManageRatesModal({ user, onClose, onSuccess }: { user: any; onClose: ()
           </div>
 
           <div>
+            <label className="font-semibold text-gray-600">Service Rate (₹ per msg)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={serviceRate}
+              onChange={(e) => setServiceRate(parseFloat(e.target.value))}
+              className="w-full border rounded-xl p-3 mt-1 bg-gray-50 focus:outline-none"
+              required
+            />
+          </div>
+
+          <div>
             <label className="font-semibold text-gray-600">Authentication Rate (₹ per msg)</label>
             <input
               type="number"
@@ -117,7 +131,6 @@ export default function UserManagementPage() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("profile");
 
-  // WhatsApp Account Settings Toggles State
   const [whatsappSettings, setWhatsappSettings] = useState({
     whatsappApiEnabled: true,
     secureReporting: false,
@@ -126,13 +139,11 @@ export default function UserManagementPage() {
     agentEnabled: false,
   });
 
-  // Modals
   const [showFundModal, setShowFundModal] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
   const [showWhitelistModal, setShowWhitelistModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
 
-  // New User Form State
   const [newUserData, setNewUserData] = useState({
     username: "",
     password: "",
@@ -144,10 +155,8 @@ export default function UserManagementPage() {
   const [addUserLoading, setAddUserLoading] = useState(false);
   const [showNewUserPassword, setShowNewUserPassword] = useState(false);
 
-  // Whitelist State
   const [whitelistNumbers, setWhitelistNumbers] = useState<string[]>([]);
 
-  // Form Data
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -157,16 +166,13 @@ export default function UserManagementPage() {
     expiryDate: "2026-10-29",
   });
 
-  // Password Toggle
   const [changePasswordToggle, setChangePasswordToggle] = useState(false);
   const [newPasswordInput, setNewPasswordInput] = useState("");
 
-  // Funds State
   const [walletBalance, setWalletBalance] = useState(0);
   const [oversellBalance, setOversellBalance] = useState(0);
   const [transactions, setTransactions] = useState<any[]>([]);
 
-  // 1. Initial Load: Fetch Users
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -182,13 +188,11 @@ export default function UserManagementPage() {
     }
   };
 
-  // 2. Suggestion click fills search bar
   const handleSuggestionSelect = (user: any) => {
     setSearchQuery(user.name || user.username || user.email || "");
     setShowSuggestions(false);
   };
 
-  // 3. Search Input Change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -210,7 +214,6 @@ export default function UserManagementPage() {
     }
   };
 
-  // 4. Search Button Click Handler
   const handleSearchClick = () => {
     if (!searchQuery.trim()) {
       alert("Please enter a username or email to search!");
@@ -245,7 +248,6 @@ export default function UserManagementPage() {
     }
   };
 
-  // 5. Fetch Funds on User Select
   useEffect(() => {
     if (selectedUser?.id) {
       fetch(`/api/admin/funds?userId=${selectedUser.id}`)
@@ -261,7 +263,6 @@ export default function UserManagementPage() {
     }
   }, [selectedUser]);
 
-  // 6. LOGIN AS USER
   const handleLoginAsUser = async () => {
     if (!selectedUser?.id) return;
     try {
@@ -282,7 +283,6 @@ export default function UserManagementPage() {
     }
   };
 
-  // 7. Update User Profile Settings
   const handleUpdateSettings = async () => {
     if (!selectedUser) return;
     try {
@@ -311,7 +311,6 @@ export default function UserManagementPage() {
     }
   };
 
-  // 8. Create New User Handler
   const handleCreateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddUserLoading(true);
@@ -350,7 +349,6 @@ export default function UserManagementPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 text-xs font-sans">
-      {/* Header */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
         <div>
           <div className="text-gray-400">Admin Home › User Management</div>
@@ -364,7 +362,6 @@ export default function UserManagementPage() {
         </Link>
       </div>
 
-      {/* Search Bar */}
       <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between gap-4 relative">
         <div className="flex items-center gap-2 flex-1 max-w-xl relative">
           <div className="w-full relative">
@@ -417,7 +414,6 @@ export default function UserManagementPage() {
         </button>
       </div>
 
-      {/* Empty State Prompt */}
       {!selectedUser ? (
         <div className="bg-white rounded-2xl border shadow-sm p-16 text-center space-y-3">
           <div className="text-4xl">🔍</div>
@@ -427,7 +423,6 @@ export default function UserManagementPage() {
           </p>
         </div>
       ) : (
-        /* Tabs Section */
         <div className="bg-white rounded-2xl border shadow-sm p-6 space-y-6">
           <div className="flex flex-wrap border-b space-x-6 font-semibold text-gray-500 text-xs">
             {[
@@ -452,7 +447,6 @@ export default function UserManagementPage() {
             ))}
           </div>
 
-          {/* PROFILE TAB */}
           {activeTab === "profile" && (
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
               <div className="lg:col-span-1 border rounded-2xl p-6 text-center space-y-3 bg-gray-50/50">
@@ -602,7 +596,6 @@ export default function UserManagementPage() {
                   </div>
                 </div>
 
-                {/* Profile Tab Action Buttons */}
                 <div className="pt-2 flex justify-end space-x-3">
                   <button
                     type="button"
@@ -623,7 +616,6 @@ export default function UserManagementPage() {
             </div>
           )}
 
-          {/* WHATSAPP TAB */}
           {activeTab === "whatsapp" && (
             <div className="space-y-6">
               <div className="border-b pb-3 text-xs font-bold text-gray-700">
@@ -692,7 +684,6 @@ export default function UserManagementPage() {
             </div>
           )}
 
-          {/* FUNDS TAB */}
           {activeTab === "funds" && (
             <div className="space-y-6">
               <div className="flex justify-between items-center border-b pb-3">
@@ -763,7 +754,6 @@ export default function UserManagementPage() {
             </div>
           )}
 
-          {/* EMAIL SETTINGS TAB */}
           {activeTab === "email_setting" && (
             <div className="space-y-4 max-w-xl">
               <div className="space-y-3">
@@ -792,7 +782,6 @@ export default function UserManagementPage() {
             </div>
           )}
 
-          {/* SEE MORE TAB */}
           {activeTab === "seemore" && (
             <div className="space-y-6">
               <div className="flex space-x-4">
@@ -862,9 +851,6 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* ================= MODALS ================= */}
-
-      {/* BALANCE TRANSFER MODAL */}
       {showFundModal && (
         <BalanceTransferModal
           users={selectedUser ? [selectedUser] : allUsers}
@@ -884,7 +870,6 @@ export default function UserManagementPage() {
         />
       )}
 
-      {/* MANAGE RATES MODAL */}
       {showRateModal && selectedUser && (
         <ManageRatesModal
           user={selectedUser}
@@ -895,7 +880,6 @@ export default function UserManagementPage() {
         />
       )}
 
-      {/* ADD USER MODAL */}
       {showAddUserModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">

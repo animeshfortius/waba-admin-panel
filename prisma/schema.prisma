@@ -7,61 +7,55 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  SUPER_ADMIN
-  RESELLER
-  USER
-}
-
 model User {
-  id             String   @id @default(uuid())
+  id             String              @id @default(uuid())
   name           String
-  username       String?   @unique
-  email          String   @unique
+  username       String?             @unique
+  email          String              @unique
   password       String
   phone          String?
   expiryDate     String?
-  role           Role      @default(USER)
-
-  walletBalance  Float     @default(0.0)
-  actualBalance  Float     @default(0.0)
-  virtualBalance Float     @default(0.0)
-
-  // WhatsApp Category Rates
-  perMsgRate     Float     @default(0.8046) // Marketing Rate
-  utilityRate    Float     @default(0.1550) // Utility Rate
-  serviceRate    Float     @default(0.1550) // Service Rate
-  authRate       Float     @default(0.1550) // Authentication Rate
-
+  role           Role                @default(USER)
+  walletBalance  Float               @default(0.0)
+  actualBalance  Float               @default(0.0)
+  virtualBalance Float               @default(0.0)
+  perMsgRate     Float               @default(0.8046)
+  utilityRate    Float               @default(0.1550)
+  serviceRate    Float               @default(0.1550)
+  authRate       Float               @default(0.1550)
   createdById    String?
-  createdBy      User?     @relation("UserHierarchy", fields: [createdById], references: [id])
-  childUsers     User[]    @relation("UserHierarchy")
-
-  transactions   WalletTransaction[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  createdBy      User?               @relation("UserHierarchy", fields: [createdById], references: [id])
+  childUsers     User[]              @relation("UserHierarchy")
   wabaAccounts   WabaAccount[]
-
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  transactions   WalletTransaction[]
 }
 
 model WalletTransaction {
   id          String   @id @default(uuid())
   userId      String
-  user        User     @relation(fields: [userId], references: [id])
   amount      Float
   type        String
   description String
   createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
 }
 
 model WabaAccount {
   id            String   @id @default(uuid())
   userId        String
-  user          User     @relation(fields: [userId], references: [id])
   wabaId        String   @unique
   phoneNumberId String
   displayPhone  String
   accessToken   String
   status        String   @default("ACTIVE")
   createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id])
+}
+
+enum Role {
+  SUPER_ADMIN
+  RESELLER
+  USER
 }

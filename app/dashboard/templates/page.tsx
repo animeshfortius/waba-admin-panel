@@ -47,7 +47,7 @@ export default function ManageTemplatesPage() {
       {/* Top Header & Action Buttons */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-2xl border shadow-xs gap-4">
         <div>
-          <div className="text-gray-400 font-medium">Dashboard › WhatsApp Templates[cite: 4]</div>
+          <div className="text-gray-400 font-medium">Dashboard › WhatsApp Templates</div>
           <h1 className="text-xl font-bold text-gray-800">WhatsApp Templates</h1>
         </div>
 
@@ -80,7 +80,7 @@ export default function ManageTemplatesPage() {
           placeholder="Filter Records..."
           className="border rounded-lg px-3 py-2 text-xs w-72 bg-gray-50 focus:outline-none"
         />
-        <div className="text-gray-500 font-semibold">Showing {templates.length} of {templates.length} records[cite: 4]</div>
+        <div className="text-gray-500 font-semibold">Showing {templates.length} of {templates.length} records</div>
       </div>
 
       {/* Templates Table */}
@@ -88,13 +88,13 @@ export default function ManageTemplatesPage() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-100/70 border-b text-gray-600 font-bold text-[11px]">
-              <th className="p-3">INSIGHTS[cite: 4]</th>
-              <th className="p-3">NAME / LANG CODE[cite: 4]</th>
-              <th className="p-3">TEXT[cite: 4]</th>
-              <th className="p-3">CATEGORY / STATUS[cite: 4]</th>
-              <th className="p-3">CREATED / MODIFIED[cite: 4]</th>
-              <th className="p-3">API PAYLOAD[cite: 4]</th>
-              <th className="p-3 text-center">ACTIONS[cite: 4]</th>
+              <th className="p-3">INSIGHTS</th>
+              <th className="p-3">NAME / LANG CODE</th>
+              <th className="p-3">TEXT</th>
+              <th className="p-3">CATEGORY / STATUS</th>
+              <th className="p-3">CREATED / MODIFIED</th>
+              <th className="p-3">API PAYLOAD</th>
+              <th className="p-3 text-center">ACTIONS</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -102,36 +102,36 @@ export default function ManageTemplatesPage() {
               <tr key={tpl.id} className="hover:bg-gray-50/80 transition">
                 <td className="p-3 align-top">
                   <button className="bg-blue-50 text-blue-600 border border-blue-200 px-2.5 py-1 rounded-lg font-bold text-[10px] hover:bg-blue-100 cursor-pointer">
-                    📊 Insights[cite: 4]
+                    📊 Insights
                   </button>
                 </td>
                 <td className="p-3 align-top space-y-0.5">
-                  <div className="font-bold text-gray-900">Name: {tpl.name}[cite: 4]</div>
-                  <div className="text-gray-500">Language Code: {tpl.language}[cite: 4]</div>
-                  <div className="text-gray-500">Template id: {tpl.templateId}[cite: 4]</div>
-                  <div className="text-gray-400 font-mono text-[10px]">WABABusinessId: {tpl.wabaNumber}[cite: 4]</div>
+                  <div className="font-bold text-gray-900">Name: {tpl.name}</div>
+                  <div className="text-gray-500">Language Code: {tpl.language}</div>
+                  <div className="text-gray-500">Template id: {tpl.templateId}</div>
+                  <div className="text-gray-400 font-mono text-[10px]">WABABusinessId: {tpl.wabaNumber}</div>
                 </td>
                 <td className="p-3 align-top text-gray-600 max-w-xs truncate">
-                  {tpl.text}[cite: 4]
+                  {tpl.text}
                 </td>
                 <td className="p-3 align-top space-y-1">
-                  <div className="font-semibold text-gray-800">{tpl.category}[cite: 4]</div>
+                  <div className="font-semibold text-gray-800">{tpl.category}</div>
                   <div className="inline-flex items-center space-x-1 font-bold text-[10px]">
                     <span className={tpl.status === "Approved" ? "text-emerald-600" : "text-amber-600"}>
-                      {tpl.status === "Approved" ? "🟢 Approved" : "⏳ PENDING"}[cite: 4]
+                      {tpl.status === "Approved" ? "🟢 Approved" : "⏳ PENDING"}
                     </span>
                   </div>
                 </td>
                 <td className="p-3 align-top text-gray-500 space-y-0.5 text-[11px]">
-                  <div>Created: {tpl.created}[cite: 4]</div>
-                  <div>Modified: {tpl.modified}[cite: 4]</div>
+                  <div>Created: {tpl.created}</div>
+                  <div>Modified: {tpl.modified}</div>
                 </td>
                 <td className="p-3 align-top">
                   <button
                     onClick={() => alert(`API Payload for ${tpl.name}`)}
                     className="border px-3 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 font-bold text-gray-700 cursor-pointer"
                   >
-                    👁️ View[cite: 4]
+                    👁️ View
                   </button>
                 </td>
                 <td className="p-3 align-top text-center">

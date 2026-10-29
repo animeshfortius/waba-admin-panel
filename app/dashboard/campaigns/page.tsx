@@ -191,7 +191,8 @@ export default function CampaignsPage() {
                     value={selectedCategory}
                     onChange={(e) => {
                       setSelectedCategory(e.target.value);
-                      setSelectedTemplate(""); 
+                      setSelectedTemplate("");
+                      setTemplateType("All");
                     }}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold text-gray-700"
                   >
@@ -212,9 +213,13 @@ export default function CampaignsPage() {
                     <option value="All">All</option>
                     <option value="Default">Default</option>
                     <option value="Flows">Flows</option>
-                    <option value="LimitedTimeOffer">Limited Time Offer</option>
-                    <option value="Carousel">Carousel</option>
-                    <option value="Catalogue">Catalogue</option>
+                    {selectedCategory === "Marketing" && (
+                      <>
+                        <option value="LimitedTimeOffer">Limited Time Offer</option>
+                        <option value="Carousel">Carousel</option>
+                        <option value="Catalogue">Catalogue</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -228,16 +233,16 @@ export default function CampaignsPage() {
                   >
                     <option value="">Select Template</option>
                     {selectedCategory === "Utility" && (
-                      <option value="feedback_collection">feedback_collection</option>
+                      <option value="feedback_collection">feedback_collection (Approved)</option>
                     )}
                     {selectedCategory === "Authentication" && (
-                      <option value="otp_test">otp_test</option>
+                      <option value="otp_test">otp_test (Approved)</option>
                     )}
                     {selectedCategory === "Marketing" && (
                       <>
-                        <option value="promotional_offer">promotional_offer</option>
-                        <option value="diwali_sale_discount">diwali_sale_discount</option>
-                        <option value="new_launch_alert">new_launch_alert</option>
+                        <option value="promotional_offer">promotional_offer (Approved)</option>
+                        <option value="diwali_sale_discount">diwali_sale_discount (Approved)</option>
+                        <option value="new_launch_alert">new_launch_alert (Approved)</option>
                       </>
                     )}
                   </select>
@@ -403,7 +408,7 @@ export default function CampaignsPage() {
                 {selectedTemplate === "feedback_collection"
                   ? `Hi ${val1 || "{{1}}"}, the service request we completed on ${val2 || "{{2}}"} is now closed. Please rate your experience from 1-5 and share any feedback to help us improve your recent request with us at the link below:`
                   : selectedTemplate
-                  ? `${val1 || "{{1}}"} is your template preview content for ${selectedTemplate}.`
+                  ? `${val1 || "{{1}}"} is your approved template preview for ${selectedTemplate}.`
                   : "There is no template added yet"}
               </div>
               {selectedTemplate && (

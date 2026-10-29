@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 export default function ManageTemplatesPage() {
-  const [templates] = useState([
+  const [templates, setTemplates] = useState([
     {
       id: "1",
       name: "otp_test",
@@ -30,6 +30,17 @@ export default function ManageTemplatesPage() {
       modified: "N/A"
     }
   ]);
+
+  useEffect(() => {
+    try {
+      const customTpls = JSON.parse(localStorage.getItem("custom_whatsapp_templates") || "[]");
+      if (customTpls.length > 0) {
+        setTemplates((prev) => [...customTpls, ...prev]);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6 max-w-7xl mx-auto">
@@ -105,8 +116,10 @@ export default function ManageTemplatesPage() {
                 </td>
                 <td className="p-3 align-top space-y-1">
                   <div className="font-semibold text-gray-800">{tpl.category}[cite: 4]</div>
-                  <div className="inline-flex items-center space-x-1 text-emerald-600 font-bold text-[10px]">
-                    <span>🟢 {tpl.status}[cite: 4]</span>
+                  <div className="inline-flex items-center space-x-1 font-bold text-[10px]">
+                    <span className={tpl.status === "Approved" ? "text-emerald-600" : "text-amber-600"}>
+                      {tpl.status === "Approved" ? "🟢 Approved" : "⏳ PENDING"}[cite: 4]
+                    </span>
                   </div>
                 </td>
                 <td className="p-3 align-top text-gray-500 space-y-0.5 text-[11px]">

@@ -228,7 +228,7 @@ export default function ManageTemplatesPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex justify-start">
           <div className="bg-white w-full max-w-xl h-full shadow-2xl p-6 overflow-y-auto space-y-4 animate-in slide-in-from-left duration-200">
             <div className="flex justify-between items-center border-b pb-3">
-              <h2 className="text-base font-bold text-gray-800">Template Payload: {selectedPayload.name}[cite: 8]</h2>
+              <h2 className="text-base font-bold text-gray-800">Template Payload: {selectedPayload.name}</h2>
               <button
                 onClick={() => setShowPayloadDrawer(false)}
                 className="text-gray-500 font-bold px-2 py-1 hover:bg-gray-100 rounded-lg cursor-pointer"
@@ -239,10 +239,10 @@ export default function ManageTemplatesPage() {
 
             <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-800 text-[11px] space-y-1">
               <div className="font-bold">Notes:</div>
-              <div>• ({{1}}) - contains the mobile number where the message will be sent.[cite: 8]</div>
-              <div>• ({{2}}), ({{3}}) - replace these in body parameters with actual dynamic values.[cite: 8]</div>
-              <div>• ({{url}} header) - used when header contains media (image, video, or document) - replace with media URL.[cite: 8]</div>
-              <div>• ({{url}}) - replace with the actual link for URL buttons.[cite: 8]</div>
+              <div>• {"{{1}}"} - contains the mobile number where the message will be sent.</div>
+              <div>• {"{{2}}"}, {"{{3}}"} - replace these in body parameters with actual dynamic values.</div>
+              <div>• {"{{url}}"} header - used when header contains media (image, video, or document) - replace with media URL.</div>
+              <div>• {"{{url}}"} - replace with the actual link for URL buttons.</div>
             </div>
 
             <div className="flex justify-between items-center pt-2">
@@ -251,7 +251,7 @@ export default function ManageTemplatesPage() {
                 onClick={() => copyJsonPayload(selectedPayload)}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow-xs cursor-pointer"
               >
-                📋 Copy JSON[cite: 8]
+                📋 Copy JSON
               </button>
             </div>
 
@@ -285,7 +285,7 @@ export default function ManageTemplatesPage() {
           <div className="bg-slate-900 p-6 rounded-3xl border-4 border-slate-700 shadow-2xl max-w-sm w-full text-white space-y-3">
             <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-xs">
               <span className="font-bold text-emerald-400">Template Preview: {previewTemplate.name}</span>
-              <button onClick={() => setPreviewTemplate(null)} className="text-rose-40 font-bold">✕</button>
+              <button onClick={() => setPreviewTemplate(null)} className="text-rose-400 font-bold">✕</button>
             </div>
             <div className="bg-emerald-950 p-4 rounded-2xl space-y-2 border border-emerald-800/50">
               <div className="text-xs text-slate-100 whitespace-pre-wrap">{previewTemplate.text}</div>

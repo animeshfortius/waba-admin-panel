@@ -18,7 +18,7 @@ export default function CampaignsPage() {
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
 
-  // Template Selection States (Exact match as per screenshots)
+  // Template Selection States
   const [selectedCategory, setSelectedCategory] = useState("");
   const [templateType, setTemplateType] = useState("All");
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -191,14 +191,14 @@ export default function CampaignsPage() {
                     value={selectedCategory}
                     onChange={(e) => {
                       setSelectedCategory(e.target.value);
-                      setSelectedTemplate(""); // Reset template when category changes
+                      setSelectedTemplate(""); 
                     }}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold text-gray-700"
                   >
-                    <option value="">Select Category[cite: 9]</option>
-                    <option value="Marketing">Marketing[cite: 9]</option>
-                    <option value="Utility">Utility[cite: 9]</option>
-                    <option value="Authentication">Authentication[cite: 9]</option>
+                    <option value="">Select Category</option>
+                    <option value="Marketing">Marketing</option>
+                    <option value="Utility">Utility</option>
+                    <option value="Authentication">Authentication</option>
                   </select>
                 </div>
 
@@ -209,10 +209,12 @@ export default function CampaignsPage() {
                     onChange={(e) => setTemplateType(e.target.value)}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold text-gray-700"
                   >
-                    <option value="All">All[cite: 10]</option>
-                    <option value="Default">Default[cite: 10]</option>
-                    <option value="Flows">Flows[cite: 12]</option>
+                    <option value="All">All</option>
+                    <option value="Default">Default</option>
+                    <option value="Flows">Flows</option>
                     <option value="LimitedTimeOffer">Limited Time Offer</option>
+                    <option value="Carousel">Carousel</option>
+                    <option value="Catalogue">Catalogue</option>
                   </select>
                 </div>
 
@@ -224,35 +226,39 @@ export default function CampaignsPage() {
                     disabled={!selectedCategory}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-700 focus:outline-none font-bold disabled:opacity-50"
                   >
-                    <option value="">Select Template[cite: 8]</option>
+                    <option value="">Select Template</option>
                     {selectedCategory === "Utility" && (
-                      <option value="feedback_collection">feedback_collection[cite: 13]</option>
+                      <option value="feedback_collection">feedback_collection</option>
                     )}
                     {selectedCategory === "Authentication" && (
                       <option value="otp_test">otp_test</option>
                     )}
                     {selectedCategory === "Marketing" && (
-                      <option value="promotional_offer">promotional_offer</option>
+                      <>
+                        <option value="promotional_offer">promotional_offer</option>
+                        <option value="diwali_sale_discount">diwali_sale_discount</option>
+                        <option value="new_launch_alert">new_launch_alert</option>
+                      </>
                     )}
                   </select>
                 </div>
               </div>
 
-              {/* Dynamic Body Variable Mapping Section (Appears when template is selected) */}
+              {/* Dynamic Body Variable Mapping Section */}
               {selectedTemplate && (
                 <div className="bg-gray-50 border rounded-2xl p-4 space-y-4">
                   <div className="font-bold text-gray-700 border-b pb-2">Body ⓘ</div>
 
                   {/* Variable 1 */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-                    <div className="font-mono font-bold text-gray-600 text-xs">{"{{1}}"}[cite: 14, 15]</div>
+                    <div className="font-mono font-bold text-gray-600 text-xs">{"{{1}}"}</div>
                     <select
                       value={mappingType1}
                       onChange={(e) => setMappingType1(e.target.value)}
                       className="border rounded-xl p-2 bg-white text-xs font-semibold focus:outline-none"
                     >
-                      <option value="Assign Const Value">Assign Const Value[cite: 15]</option>
-                      <option value="Map Column Value">Map Column Value[cite: 15]</option>
+                      <option value="Assign Const Value">Assign Const Value</option>
+                      <option value="Map Column Value">Map Column Value</option>
                     </select>
                     <input
                       type="text"
@@ -265,7 +271,7 @@ export default function CampaignsPage() {
 
                   {/* Variable 2 */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-                    <div className="font-mono font-bold text-gray-600 text-xs">{"{{2}}"}[cite: 14]</div>
+                    <div className="font-mono font-bold text-gray-600 text-xs">{"{{2}}"}</div>
                     <select
                       value={mappingType2}
                       onChange={(e) => setMappingType2(e.target.value)}
@@ -285,7 +291,7 @@ export default function CampaignsPage() {
 
                   {/* Variable 3 */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-                    <div className="font-mono font-bold text-gray-600 text-xs">{"{{3}}"}[cite: 14]</div>
+                    <div className="font-mono font-bold text-gray-600 text-xs">{"{{3}}"}</div>
                     <select
                       value={mappingType3}
                       onChange={(e) => setMappingType3(e.target.value)}
@@ -397,7 +403,7 @@ export default function CampaignsPage() {
                 {selectedTemplate === "feedback_collection"
                   ? `Hi ${val1 || "{{1}}"}, the service request we completed on ${val2 || "{{2}}"} is now closed. Please rate your experience from 1-5 and share any feedback to help us improve your recent request with us at the link below:`
                   : selectedTemplate
-                  ? `${val1 || "{{1}}"} is your template preview content here.`
+                  ? `${val1 || "{{1}}"} is your template preview content for ${selectedTemplate}.`
                   : "There is no template added yet"}
               </div>
               {selectedTemplate && (
@@ -417,7 +423,7 @@ export default function CampaignsPage() {
 
       </div>
 
-      {/* File Upload Modal (Popup) matching original panel */}
+      {/* File Upload Modal (Popup) */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-lg w-full space-y-4 animate-in fade-in duration-200">

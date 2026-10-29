@@ -27,10 +27,10 @@ export async function GET(req: Request) {
     return NextResponse.json({
       success: true,
       rates: {
-        utility: user?.utilityRate ?? 0.1550,
-        service: user?.serviceRate ?? 0.1550,
-        authentication: user?.authRate ?? 0.1550,
-        marketing: user?.perMsgRate ?? 0.8046,
+        utility: user?.utilityRate ?? 0.1150,
+        service: user?.serviceRate ?? 0.1150,
+        authentication: user?.authRate ?? 0.1150,
+        marketing: user?.perMsgRate ?? 0.7850,
       },
     });
   } catch (error: any) {
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST: Saare 4 rates ko Neon DB me save karna (Supports both direct & nested object formats)
+// 2. POST: Saare 4 rates ko Neon DB me save karna (Updated Standards)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -56,10 +56,10 @@ export async function POST(req: Request) {
     }
 
     // Support both body.rates object and direct flat properties from frontend modal
-    const utility = rates?.utility ?? body.utilityRate ?? 0.1550;
-    const service = rates?.service ?? body.serviceRate ?? 0.1550;
-    const authentication = rates?.authentication ?? body.authRate ?? 0.20;
-    const marketing = rates?.marketing ?? body.marketingRate ?? 0.25;
+    const utility = rates?.utility ?? body.utilityRate ?? 0.1150;
+    const service = rates?.service ?? body.serviceRate ?? 0.1150;
+    const authentication = rates?.authentication ?? body.authRate ?? 0.1150;
+    const marketing = rates?.marketing ?? body.marketingRate ?? 0.7850;
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },

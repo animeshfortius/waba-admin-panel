@@ -5,6 +5,7 @@ import { useState } from "react";
 export default function ManageRatesModal({ user, onClose, onSuccess }: { user: any; onClose: () => void; onSuccess: () => void }) {
   const [marketingRate, setMarketingRate] = useState(0.25);
   const [utilityRate, setUtilityRate] = useState(0.15);
+  const [serviceRate, setServiceRate] = useState(0.15);
   const [authRate, setAuthRate] = useState(0.20);
   const [loading, setLoading] = useState(false);
 
@@ -19,6 +20,7 @@ export default function ManageRatesModal({ user, onClose, onSuccess }: { user: a
           userId: user.id,
           marketingRate,
           utilityRate,
+          serviceRate,
           authRate,
         }),
       });
@@ -65,6 +67,18 @@ export default function ManageRatesModal({ user, onClose, onSuccess }: { user: a
               step="0.01"
               value={utilityRate}
               onChange={(e) => setUtilityRate(parseFloat(e.target.value))}
+              className="w-full border rounded-xl p-3 mt-1 bg-gray-50 focus:outline-none"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="font-semibold text-gray-600">Service Rate (₹ per msg)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={serviceRate}
+              onChange={(e) => setServiceRate(parseFloat(e.target.value))}
               className="w-full border rounded-xl p-3 mt-1 bg-gray-50 focus:outline-none"
               required
             />

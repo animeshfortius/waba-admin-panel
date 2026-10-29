@@ -14,6 +14,10 @@ export default function CampaignsPage() {
   const [uploadType, setUploadType] = useState("Single Number Column");
   const [uploadedFileName, setUploadedFileName] = useState("");
 
+  // Schedule Options State
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState("");
+
   // Template Selection States
   const [selectedCategory, setSelectedCategory] = useState("Utility");
   const [selectedTemplate, setSelectedTemplate] = useState("feedback_collection");
@@ -119,16 +123,41 @@ export default function CampaignsPage() {
                 </button>
               </div>
 
-              <div className="flex items-center space-x-6 pt-4 border-t text-gray-700 font-semibold">
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="accent-emerald-600 rounded" />
-                  <span>Remove Duplicates</span>
-                </label>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="accent-emerald-600 rounded" />
-                  <span>Remove BlackList</span>
+              <div className="flex flex-wrap items-center justify-between pt-4 border-t gap-4 text-gray-700 font-semibold">
+                <div className="flex items-center space-x-6">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" defaultChecked className="accent-emerald-600 rounded" />
+                    <span>Remove Duplicates</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" defaultChecked className="accent-emerald-600 rounded" />
+                    <span>Remove BlackList</span>
+                  </label>
+                </div>
+
+                <label className="flex items-center space-x-2 cursor-pointer text-emerald-700">
+                  <input
+                    type="checkbox"
+                    checked={isScheduled}
+                    onChange={(e) => setIsScheduled(e.target.checked)}
+                    className="accent-emerald-600 rounded"
+                  />
+                  <span>Schedule Now</span>
                 </label>
               </div>
+
+              {/* Schedule Date Input if enabled */}
+              {isScheduled && (
+                <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 flex items-center space-x-3">
+                  <label className="font-bold text-gray-700">Select Date & Time:</label>
+                  <input
+                    type="datetime-local"
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    className="border rounded-lg p-2 bg-white text-xs font-mono"
+                  />
+                </div>
+              )}
 
               <div className="flex justify-end pt-4 border-t">
                 <button
@@ -237,6 +266,12 @@ export default function CampaignsPage() {
                 </div>
               </div>
 
+              {isScheduled && scheduleDate && (
+                <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl text-blue-800 font-semibold text-center text-xs">
+                  ⏰ Campaign scheduled for: {scheduleDate}
+                </div>
+              )}
+
               <div className="bg-emerald-50 border border-emerald-300 p-4 rounded-2xl text-emerald-900 font-semibold text-center">
                 ✅ Sufficient credit available to broadcast this campaign successfully.
               </div>
@@ -252,12 +287,12 @@ export default function CampaignsPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    alert("Campaign Launched Successfully! 🚀");
+                    alert(isScheduled ? "Campaign Scheduled Successfully! ⏰" : "Campaign Launched Successfully! 🚀");
                     window.location.href = "/dashboard/campaigns";
                   }}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg cursor-pointer transition"
                 >
-                  🚀 Launch Campaign
+                  {isScheduled ? "⏰ Schedule Campaign" : "🚀 Launch Campaign"}
                 </button>
               </div>
             </div>

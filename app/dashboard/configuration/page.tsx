@@ -1,19 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 
 export default function ConfigPage() {
-  const [activeSection, setActiveSection] = useState<
-    | "hub"
-    | "waba_channels"
-    | "business_profile"
-    | "onboarding"
-    | "media_library"
-    | "contacts"
-    | "unsubscribe"
-    | "groups"
-    | "blacklist"
-  >("hub");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeSection = searchParams.get("tab") || "hub";
+
+  const setActiveSection = (section: string) => {
+    if (section === "hub") {
+      router.push("/dashboard/configuration");
+    } else {
+      router.push(`/dashboard/configuration?tab=${section}`);
+    }
+  };
 
   const [channels, setChannels] = useState([
     {
@@ -155,56 +156,40 @@ export default function ConfigPage() {
     setActiveSection("waba_channels");
   };
 
-  const handleDownloadSample = (sectionName: string) => {
-    alert(`Downloading sample CSV/Excel template for ${sectionName}...`);
-  };
-
-  const handleExportData = (sectionName: string) => {
-    alert(`Exporting ${sectionName} data to Excel file...`);
-  };
-
-  const handleImportFile = (sectionName: string) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".csv, .xlsx, .xls";
-    input.onchange = (e: any) => {
-      const file = e.target.files[0];
-      if (file) {
-        alert(`Successfully imported ${file.name} into ${sectionName}!`);
-      }
-    };
-    input.click();
-  };
-
   const handleFacebookSignup = () => {
-  setIsProcessing(true);
-  
-  const appId = process.env.NEXT_PUBLIC_META_APP_ID;
-  const redirectUri = encodeURIComponent("https://waba.fortius.in/facebook/callback");
+    setIsProcessing(true);
+    const appId = process.env.NEXT_PUBLIC_META_APP_ID;
+    const redirectUri = encodeURIComponent("https://waba.fortius.in/facebook/callback");
 
-  const fbPopup = window.open(
-    `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=whatsapp_business_management`,
-    "FacebookLogin",
-    "width=600,height=700,top=100,left=200"
-  );
+    const fbPopup = window.open(
+      `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=whatsapp_business_management`,
+      "FacebookLogin",
+      "width=600,height=700,top=100,left=200"
+    );
 
-  setTimeout(() => {
-    if (fbPopup && !fbPopup.closed) {
-      fbPopup.close();
-    }
-    setIsProcessing(false);
-    setShowFacebookModal(false);
-    alert("Facebook Embedded Signup completed! Connecting channel...");
-    setActiveSection("waba_channels");
-  }, 3000);
-};
+    setTimeout(() => {
+      if (fbPopup && !fbPopup.closed) {
+        fbPopup.close();
+      }
+      setIsProcessing(false);
+      setShowFacebookModal(false);
+      alert("Facebook Embedded Signup completed! Connecting channel...");
+      setActiveSection("waba_channels");
+    }, 3000);
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-2">
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
         <div>
           <div className="text-xs text-gray-400">
-            Home › Configuration{" "}
+            Home ›{" "}
+            <span
+              onClick={() => setActiveSection("hub")}
+              className="cursor-pointer hover:text-emerald-600 font-medium"
+            >
+              Configuration
+            </span>{" "}
             {activeSection !== "hub" &&
               `› ${activeSection.replace("_", " ").toUpperCase()}`}
           </div>
@@ -228,7 +213,7 @@ export default function ConfigPage() {
                 activeSection === "business_profile" ? "waba_channels" : "hub"
               )
             }
-            className="border px-3.5 py-1.5 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 flex items-center space-x-1.5 shadow-sm"
+            className="border px-3.5 py-1.5 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 flex items-center space-x-1.5 shadow-sm cursor-pointer"
           >
             <span>⬅</span>
             <span>
@@ -352,7 +337,7 @@ export default function ConfigPage() {
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
             <button
               onClick={() => setShowFacebookModal(true)}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow transition flex items-center space-x-1.5"
+              className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow transition flex items-center space-x-1.5 cursor-pointer"
             >
               <span>+</span>
               <span>Register New WhatsApp</span>
@@ -380,26 +365,16 @@ export default function ConfigPage() {
                 <tbody className="divide-y divide-gray-100 text-gray-700 font-medium">
                   {channels.map((ch) => (
                     <tr key={ch.id} className="hover:bg-slate-50 transition">
-                      <td className="p-3 font-semibold text-slate-800">
-                        {ch.wabaNumber}
-                      </td>
-                      <td className="p-3 font-mono text-slate-600">
-                        {ch.phoneNumberId}
-                      </td>
-                      <td className="p-3 font-mono text-slate-600">
-                        {ch.wabaBusinessId}
-                      </td>
-                      <td className="p-3 font-semibold text-slate-800">
-                        {ch.bspName}
-                      </td>
+                      <td className="p-3 font-semibold text-slate-800">{ch.wabaNumber}</td>
+                      <td className="p-3 font-mono text-slate-600">{ch.phoneNumberId}</td>
+                      <td className="p-3 font-mono text-slate-600">{ch.wabaBusinessId}</td>
+                      <td className="p-3 font-semibold text-slate-800">{ch.bspName}</td>
                       <td className="p-3">
                         <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-200 font-semibold text-[11px]">
                           🟡 {ch.messagingLimit}
                         </span>
                       </td>
-                      <td className="p-3 font-bold text-emerald-600">
-                        ✓ {ch.qualityRating}
-                      </td>
+                      <td className="p-3 font-bold text-emerald-600">✓ {ch.qualityRating}</td>
                       <td className="p-3 text-center">
                         <label className="inline-flex items-center cursor-pointer gap-1">
                           <input
@@ -413,16 +388,12 @@ export default function ConfigPage() {
                           </span>
                         </label>
                       </td>
-                      <td className="p-3 font-semibold text-slate-800">
-                        {ch.displayName}
-                      </td>
-                      <td className="p-3 text-gray-500 whitespace-nowrap">
-                        {ch.configDate}
-                      </td>
+                      <td className="p-3 font-semibold text-slate-800">{ch.displayName}</td>
+                      <td className="p-3 text-gray-500 whitespace-nowrap">{ch.configDate}</td>
                       <td className="p-3">
                         <button
                           onClick={() => openWebhookModal(ch)}
-                          className="text-emerald-600 hover:underline font-mono"
+                          className="text-emerald-600 hover:underline font-mono cursor-pointer"
                         >
                           {ch.webhookUrl}
                         </button>
@@ -431,7 +402,7 @@ export default function ConfigPage() {
                         <button
                           onClick={() => openBusinessProfile(ch)}
                           title="Edit Business Profile"
-                          className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 border border-emerald-200 transition font-bold"
+                          className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 border border-emerald-200 transition font-bold cursor-pointer"
                         >
                           💼 Profile
                         </button>
@@ -441,10 +412,49 @@ export default function ConfigPage() {
                 </tbody>
               </table>
             </div>
-            <div className="p-3 border-t border-gray-100 text-xs text-gray-500 flex justify-between items-center">
-              <span>Showing 1 to {channels.length} of {channels.length} records</span>
-            </div>
           </div>
+        </div>
+      )}
+
+      {activeSection === "onboarding" && (
+        <div className="bg-white p-8 rounded-2xl border shadow-sm text-center space-y-4">
+          <h2 className="text-lg font-bold text-gray-800">Coexistence Onboarding</h2>
+          <p className="text-xs text-gray-500">Easily Onboard WhatsApp Business App users.</p>
+        </div>
+      )}
+
+      {activeSection === "media_library" && (
+        <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-4">
+          <h2 className="text-lg font-bold text-gray-800">Media Library</h2>
+          <p className="text-xs text-gray-500">Browse and manage media assets.</p>
+        </div>
+      )}
+
+      {activeSection === "contacts" && (
+        <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-4">
+          <h2 className="text-lg font-bold text-gray-800">WhatsApp Contact</h2>
+          <p className="text-xs text-gray-500">Manage your contacts list.</p>
+        </div>
+      )}
+
+      {activeSection === "unsubscribe" && (
+        <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-4">
+          <h2 className="text-lg font-bold text-gray-800">Unsubscriber Number List</h2>
+          <p className="text-xs text-gray-500">View and manage opt-out numbers.</p>
+        </div>
+      )}
+
+      {activeSection === "groups" && (
+        <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-4">
+          <h2 className="text-lg font-bold text-gray-800">Group List</h2>
+          <p className="text-xs text-gray-500">Easily manage your contact groups.</p>
+        </div>
+      )}
+
+      {activeSection === "blacklist" && (
+        <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-4">
+          <h2 className="text-lg font-bold text-gray-800">Blacklisted Numbers</h2>
+          <p className="text-xs text-gray-500">Manage your blacklist for better control.</p>
         </div>
       )}
 
@@ -457,7 +467,6 @@ export default function ConfigPage() {
                 <p className="text-xs text-gray-400">Update your photo and personal details here</p>
               </div>
 
-              {/* Functional Click to Upload Box */}
               <label className="border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center space-y-2 hover:border-emerald-500 transition cursor-pointer block bg-gray-50/50">
                 <input
                   type="file"
@@ -469,8 +478,6 @@ export default function ConfigPage() {
                   ☁️
                 </div>
                 <p className="text-xs font-bold text-gray-700">Click to upload</p>
-                <p className="text-[11px] text-gray-400">or drag and drop an image here</p>
-                <p className="text-[10px] text-gray-400">PNG, JPG up to 10MB. At least 400px wide and 400px tall is recommended.</p>
                 {profileData.profileImage && (
                   <p className="text-xs font-bold text-emerald-600 pt-2">✓ Image Selected Successfully!</p>
                 )}
@@ -485,37 +492,16 @@ export default function ConfigPage() {
                     disabled
                     className="w-full border rounded-lg p-2.5 bg-gray-100 text-gray-500 cursor-not-allowed"
                   />
-                  <p className="text-[10px] text-gray-400 mt-1">Display Name can't be edited</p>
                 </div>
-
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">Category</label>
                   <select
                     value={profileData.category}
                     onChange={(e) => setProfileData({ ...profileData, category: e.target.value })}
-                    className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none focus:border-emerald-500"
+                    className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none"
                   >
-                    <option value="Automotive">Automotive</option>
-                    <option value="Beauty">Beauty</option>
-                    <option value="Apparel">Apparel</option>
-                    <option value="Education">Education</option>
-                    <option value="Entertainment">Entertainment</option>
-                    <option value="Online Gambling">Online Gambling</option>
-                    <option value="Physical Gambling">Physical Gambling</option>
-                    <option value="Event Planning">Event Planning</option>
-                    <option value="Finance">Finance</option>
-                    <option value="Grocery">Grocery</option>
-                    <option value="Alcohol">Alcohol</option>
-                    <option value="Government">Government</option>
-                    <option value="Hotel & Hospitality">Hotel & Hospitality</option>
-                    <option value="Healthcare">Healthcare</option>
-                    <option value="OTC Drugs">OTC Drugs</option>
-                    <option value="Nonprofit / NGO">Nonprofit / NGO</option>
                     <option value="Professional Services">Professional Services</option>
                     <option value="Retail">Retail</option>
-                    <option value="Travel">Travel</option>
-                    <option value="Restaurant & Food">Restaurant & Food</option>
-                    <option value="Other">Other</option>
                   </select>
                 </div>
               </div>
@@ -526,69 +512,20 @@ export default function ConfigPage() {
                   rows={4}
                   value={profileData.description}
                   onChange={(e) => setProfileData({ ...profileData, description: e.target.value })}
-                  className="w-full border rounded-lg p-2.5 bg-white text-xs text-gray-800 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
-              <div>
-                <h2 className="text-base font-bold text-gray-800">Contact Info</h2>
-                <p className="text-xs text-gray-400">Manage your address and contact details here</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    value={profileData.email}
-                    onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                    className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Channel Number</label>
-                  <input
-                    type="text"
-                    value={profileData.channelNumber}
-                    disabled
-                    className="w-full border rounded-lg p-2.5 bg-gray-100 text-gray-500 cursor-not-allowed font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="text-xs">
-                <label className="block font-bold text-gray-700 mb-1">Address</label>
-                <textarea
-                  rows={2}
-                  value={profileData.address}
-                  onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
-                  className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="text-xs">
-                <label className="block font-bold text-gray-700 mb-1">Website</label>
-                <input
-                  type="text"
-                  value={profileData.website}
-                  onChange={(e) => setProfileData({ ...profileData, website: e.target.value })}
-                  className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none focus:border-emerald-500"
+                  className="w-full border rounded-lg p-2.5 bg-white text-xs text-gray-800 focus:outline-none"
                 />
               </div>
 
               <div className="flex justify-end space-x-3 pt-4 border-t">
                 <button
                   onClick={() => setActiveSection("waba_channels")}
-                  className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-gray-50"
+                  className="px-4 py-2 border rounded-lg text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSaveProfile}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-lg text-xs shadow"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-lg text-xs shadow cursor-pointer"
                 >
                   💾 Save Profile Details
                 </button>
@@ -598,32 +535,14 @@ export default function ConfigPage() {
 
           <div className="bg-white p-4 rounded-2xl border shadow-sm flex flex-col items-center">
             <p className="text-xs font-bold text-gray-500 mb-4">Template Preview</p>
-            <div className="w-[280px] bg-slate-900 rounded-[35px] p-3 shadow-2xl border-4 border-slate-800">
-              <div className="bg-emerald-800 text-white p-2 rounded-t-[25px] flex items-center gap-2 text-xs">
+            <div className="w-[280px] bg-slate-900 rounded-[35px] p-3 shadow-2xl border-4 border-slate-800 text-white">
+              <div className="bg-emerald-800 p-2 rounded-t-[25px] flex items-center gap-2 text-xs">
                 <span>💬</span>
                 <span className="font-bold truncate">{profileData.displayName}</span>
               </div>
               <div className="bg-slate-100 p-3 rounded-b-[25px] space-y-3 text-[11px] text-gray-800">
-                <div className="text-center space-y-1">
-                  <div className="w-16 h-16 bg-slate-800 rounded-full mx-auto flex items-center justify-center text-white font-bold text-lg shadow overflow-hidden">
-                    {profileData.profileImage ? (
-                      <img src={profileData.profileImage} alt="Profile" className="w-full h-full object-cover" />
-                    ) : (
-                      "FI"
-                    )}
-                  </div>
-                  <h3 className="font-bold text-sm">{profileData.displayName}</h3>
-                </div>
-
-                <div className="bg-white p-2.5 rounded-xl space-y-2 shadow-sm text-[10px]">
-                  <p className="text-gray-600 leading-snug">{profileData.description}</p>
-                  <div className="border-t pt-2 space-y-1 text-gray-500">
-                    <p>📂 {profileData.category}</p>
-                    <p>📍 {profileData.address}</p>
-                    <p>✉️ {profileData.email}</p>
-                    <p className="text-emerald-600 truncate">🌐 {profileData.website}</p>
-                  </div>
-                </div>
+                <h3 className="font-bold text-sm text-center">{profileData.displayName}</h3>
+                <p className="text-gray-600 text-[10px]">{profileData.description}</p>
               </div>
             </div>
           </div>
@@ -635,67 +554,18 @@ export default function ConfigPage() {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b pb-3">
               <h3 className="font-bold text-sm text-gray-800">Update Webhook URL</h3>
-              <button
-                onClick={() => setShowWebhookModal(false)}
-                className="text-gray-400 hover:text-gray-600 font-bold"
-              >
-                ✕
-              </button>
+              <button onClick={() => setShowWebhookModal(false)} className="text-gray-400 font-bold cursor-pointer">✕</button>
             </div>
-
             <div className="space-y-4 text-xs text-left">
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">Webhook URL</label>
-                <input
-                  type="text"
-                  placeholder="https://yourdomain.com/webhook"
-                  value={webhookInput}
-                  onChange={(e) => setWebhookInput(e.target.value)}
-                  className="w-full border rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="enableAuth"
-                  checked={enableAuth}
-                  onChange={(e) => setEnableAuth(e.target.checked)}
-                  className="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4"
-                />
-                <label htmlFor="enableAuth" className="font-medium text-gray-600">
-                  Enable Authorization
-                </label>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">Select User Webhook Type</label>
-                <select
-                  value={webhookType}
-                  onChange={(e) => setWebhookType(e.target.value)}
-                  className="w-full border border-emerald-500 rounded-lg p-2.5 bg-white text-gray-800 focus:outline-none"
-                >
-                  <option value="Default">Default</option>
-                  <option value="Moengage">Moengage</option>
-                  <option value="CleverTap">CleverTap</option>
-                  <option value="WebEngage">WebEngage</option>
-                </select>
-              </div>
+              <input
+                type="text"
+                value={webhookInput}
+                onChange={(e) => setWebhookInput(e.target.value)}
+                className="w-full border rounded-lg p-2.5 bg-white text-gray-800"
+              />
             </div>
-
             <div className="flex justify-end space-x-2 pt-3 border-t">
-              <button
-                onClick={() => setShowWebhookModal(false)}
-                className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveWebhook}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-lg text-xs shadow"
-              >
-                Save
-              </button>
+              <button onClick={handleSaveWebhook} className="bg-emerald-600 text-white font-bold px-5 py-2 rounded-lg text-xs cursor-pointer">Save</button>
             </div>
           </div>
         </div>
@@ -704,50 +574,10 @@ export default function ConfigPage() {
       {showFacebookModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-base text-gray-800">
-                Get started with WhatsApp Business API
-              </h3>
-              <button
-                onClick={() => setShowFacebookModal(false)}
-                className="text-gray-400"
-                disabled={isProcessing}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs text-left">
-              <label className="block font-semibold text-gray-600">
-                Company Name (Optional)
-              </label>
-              <input
-                type="text"
-                placeholder="Enter company name (optional)"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
-                disabled={isProcessing}
-              />
-            </div>
-
-            <div className="flex justify-end space-x-2 pt-3 border-t">
-              <button
-                onClick={() => setShowFacebookModal(false)}
-                className="px-4 py-2 border rounded-lg text-xs font-semibold"
-                disabled={isProcessing}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleFacebookSignup}
-                disabled={isProcessing}
-                className="bg-[#1877F2] hover:bg-[#165fe6] text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow flex items-center space-x-2 disabled:opacity-50"
-              >
-                <span>🌐</span>
-                <span>{isProcessing ? "Connecting..." : "Continue with Facebook"}</span>
-              </button>
-            </div>
+            <h3 className="font-bold text-base text-gray-800">Get started with WhatsApp Business API</h3>
+            <button onClick={handleFacebookSignup} className="bg-[#1877F2] text-white font-bold px-5 py-2.5 rounded-xl text-xs cursor-pointer">
+              Continue with Facebook
+            </button>
           </div>
         </div>
       )}

@@ -867,7 +867,7 @@ export default function CreateWhatsAppTemplateModule() {
               {/* Buttons Preview */}
               {buttons.length > 0 && (
                 <div className="pt-2 space-y-1.5">
-                  {buttons.link?.length > 0 || buttons.map((b) => (
+                  {buttons.map?.length > 0 || buttons.map((b) => (
                     <div
                       key={b.id}
                       className="bg-white text-emerald-800 text-center py-1.5 rounded-xl font-bold text-xs shadow-xs"

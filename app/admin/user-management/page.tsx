@@ -852,9 +852,9 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {showFundModal && (
+      {showFundModal && selectedUser && (
         <BalanceTransferModal
-          users={selectedUser ? [selectedUser] : allUsers}
+          user={selectedUser}
           onClose={() => setShowFundModal(false)}
           onSuccess={async () => {
             setShowFundModal(false);

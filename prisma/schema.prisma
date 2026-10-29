@@ -8,28 +8,28 @@ datasource db {
 }
 
 model User {
-  id             String              @id @default(uuid())
-  name           String
-  username       String?             @unique
-  email          String              @unique
-  password       String
-  phone          String?
-  expiryDate     String?
-  role           Role                @default(USER)
-  walletBalance  Float               @default(0.0)
-  actualBalance  Float               @default(0.0)
-  virtualBalance Float               @default(0.0)
-  perMsgRate     Float               @default(0.8046)
-  utilityRate    Float               @default(0.1550)
-  serviceRate    Float               @default(0.1550)
-  authRate       Float               @default(0.1550)
-  createdById    String?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  createdBy      User?               @relation("UserHierarchy", fields: [createdById], references: [id])
-  childUsers     User[]              @relation("UserHierarchy")
-  wabaAccounts   WabaAccount[]
-  transactions   WalletTransaction[]
+  id              String               @id @default(uuid())
+  name            String
+  username        String?              @unique
+  email           String               @unique
+  password        String
+  phone           String?
+  expiryDate      String?
+  role            Role                 @default(USER)
+  walletBalance   Float                @default(0.0)
+  actualBalance   Float                @default(0.0)
+  virtualBalance  Float                @default(0.0)
+  perMsgRate      Float                @default(0.8046)
+  utilityRate     Float                @default(0.1550)
+  serviceRate     Float                @default(0.1550)
+  authRate        Float                @default(0.1550)
+  createdById     String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  createdBy       User?                @relation("UserHierarchy", fields: [createdById], references: [id])
+  childUsers      User[]               @relation("UserHierarchy")
+  wabaAccounts    WabaAccount[]
+  transactions    WalletTransaction[]
 }
 
 model WalletTransaction {
@@ -43,15 +43,49 @@ model WalletTransaction {
 }
 
 model WabaAccount {
+  id              String   @id @default(uuid())
+  userId          String
+  wabaId          String   @unique
+  phoneNumberId   String
+  displayPhone    String
+  accessToken     String
+  status          String   @default("ACTIVE")
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id])
+}
+
+model MediaAsset {
+  id          String   @id @default(uuid())
+  userId      String
+  mediaName   String
+  mediaUrl    String
+  wabaNumber  String
+  createdAt   DateTime @default(now())
+}
+
+model WhatsAppContact {
+  id          String   @id @default(uuid())
+  userId      String
+  number      String
+  profileName String?
+  email       String?
+  contactName String?
+  createdAt   DateTime @default(now())
+}
+
+model ContactGroup {
   id            String   @id @default(uuid())
   userId        String
-  wabaId        String   @unique
-  phoneNumberId String
-  displayPhone  String
-  accessToken   String
-  status        String   @default("ACTIVE")
+  groupName     String
+  totalContacts Int      @default(0)
   createdAt     DateTime @default(now())
-  user          User     @relation(fields: [userId], references: [id])
+}
+
+model BlacklistNumber {
+  id        String   @id @default(uuid())
+  userId    String
+  number    String
+  createdAt DateTime @default(now())
 }
 
 enum Role {

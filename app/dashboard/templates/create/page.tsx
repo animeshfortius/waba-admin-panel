@@ -104,6 +104,16 @@ export default function CreateWhatsAppTemplateModule() {
     setCarouselCards([...carouselCards, newCard]);
   };
 
+  // Submit Handler with redirect to Manage Templates
+  const handleSubmitForReview = () => {
+    if (!templateName) {
+      alert("Please enter template name");
+      return;
+    }
+    alert("WhatsApp Template submitted successfully to Meta! Status: PENDING ⏳");
+    window.location.href = "/dashboard/templates";
+  };
+
   return (
     <div className="min-h-screen bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6 max-w-7xl mx-auto">
       {/* Top Header */}
@@ -546,7 +556,6 @@ export default function CreateWhatsAppTemplateModule() {
                         type="button"
                         onClick={() => {
                           setMediaType(m);
-                          if (m !== "None") setHeaderText("");
                         }}
                         className={`py-2 rounded-xl font-bold text-xs border transition cursor-pointer ${
                           mediaType === m ? "bg-emerald-600 text-white border-emerald-600" : "bg-gray-50 text-gray-700"
@@ -560,12 +569,12 @@ export default function CreateWhatsAppTemplateModule() {
                   {mediaType === "None" && (
                     <div className="space-y-1 pt-2">
                       <div className="flex justify-between text-xs text-gray-500">
-                        <span className="font-bold text-gray-600">HEADER TEXT</span>
+                        <span className="font-bold text-gray-600">HEADER TEXT • OPTIONAL</span>
                         <span>{headerText.length}/60</span>
                       </div>
                       <input
                         type="text"
-                        placeholder="Add a header text line..."
+                        placeholder="Add an optional header text line..."
                         value={headerText}
                         onChange={(e) => setHeaderText(e.target.value)}
                         className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none"
@@ -708,7 +717,7 @@ export default function CreateWhatsAppTemplateModule() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => alert("WhatsApp Template submitted for review successfully!")}
+                  onClick={handleSubmitForReview}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-7 py-2.5 rounded-xl shadow-md cursor-pointer transition"
                 >
                   Submit for Review 🚀
@@ -743,7 +752,7 @@ export default function CreateWhatsAppTemplateModule() {
                 </div>
               )}
 
-              {/* Header Text */}
+              {/* Header Text (Optional when None) */}
               {mediaType === "None" && headerText && (
                 <div className="font-bold text-white text-xs border-b border-emerald-700/50 pb-1">
                   {headerText}

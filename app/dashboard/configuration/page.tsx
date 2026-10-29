@@ -536,10 +536,27 @@ function ConfigContent() {
       {showFacebookModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
-            <h3 className="font-bold text-base text-gray-800">Get started with WhatsApp Business API</h3>
-            <button onClick={handleFacebookSignup} className="bg-[#1877F2] text-white font-bold px-5 py-2.5 rounded-xl text-xs cursor-pointer">
-              Continue with Facebook
-            </button>
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-base text-gray-800">Get started with WhatsApp Business API</h3>
+              <button onClick={() => setShowFacebookModal(false)} className="text-gray-400 font-bold cursor-pointer">✕</button>
+            </div>
+            <div className="space-y-3 text-xs text-left">
+              <label className="block font-semibold text-gray-600">Company Name (Optional)</label>
+              <input
+                type="text"
+                placeholder="Enter company name (optional)"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
+              />
+            </div>
+            <div className="flex justify-end space-x-2 pt-3 border-t">
+              <button onClick={() => setShowFacebookModal(false)} className="px-4 py-2 border rounded-lg text-xs font-semibold cursor-pointer">Cancel</button>
+              <button onClick={handleFacebookSignup} className="bg-[#1877F2] text-white font-bold px-5 py-2.5 rounded-xl text-xs cursor-pointer flex items-center space-x-2">
+                <span>🌐</span>
+                <span>Continue with Facebook</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

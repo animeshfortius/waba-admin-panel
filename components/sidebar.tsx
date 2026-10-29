@@ -73,7 +73,7 @@ export default function Sidebar() {
           }`}
         >
           <span>📊</span>
-          <span>Delivery Reports</span>
+          <span>Reports</span>
         </Link>
 
         <Link

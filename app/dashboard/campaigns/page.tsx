@@ -18,9 +18,14 @@ export default function CampaignsPage() {
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
 
-  // Template Selection States
+  // Template Selection States (Matching Original Panel Flow)
   const [selectedCategory, setSelectedCategory] = useState("Utility");
+  const [templateType, setTemplateType] = useState("All");
   const [selectedTemplate, setSelectedTemplate] = useState("feedback_collection");
+
+  // Dynamic variable mappings
+  const [var1, setVar1] = useState("");
+  const [var2, setVar2] = useState("");
 
   // Fix prerender error by generating dynamic name client-side
   useEffect(() => {
@@ -177,11 +182,16 @@ export default function CampaignsPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-bold text-gray-600 mb-1">TEMPLATE CATEGORY</label>
+                  <label className="block font-bold text-gray-600 mb-1">TEMPLATE CATEGORY *</label>
                   <select
                     value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold"
+                    onChange={(e) => {
+                      setSelectedCategory(e.target.value);
+                      if (e.target.value === "Utility") setSelectedTemplate("feedback_collection");
+                      else if (e.target.value === "Authentication") setSelectedTemplate("otp_test");
+                      else setSelectedTemplate("");
+                    }}
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold text-gray-700"
                   >
                     <option value="Marketing">Marketing</option>
                     <option value="Utility">Utility</option>
@@ -190,36 +200,64 @@ export default function CampaignsPage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-600 mb-1">TEMPLATE TYPE</label>
-                  <select className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold">
+                  <label className="block font-bold text-gray-600 mb-1">TEMPLATE TYPE *</label>
+                  <select
+                    value={templateType}
+                    onChange={(e) => setTemplateType(e.target.value)}
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold text-gray-700"
+                  >
                     <option value="All">All Formats</option>
                     <option value="Default">Default</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-600 mb-1">META TEMPLATE</label>
+                  <label className="block font-bold text-gray-600 mb-1">META TEMPLATE *[cite: 7]</label>
                   <select
                     value={selectedTemplate}
                     onChange={(e) => setSelectedTemplate(e.target.value)}
-                    className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-700 focus:outline-none"
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-700 focus:outline-none font-bold"
                   >
-                    <option value="feedback_collection">feedback_collection (Utility)</option>
-                    <option value="otp_test">otp_test (Authentication)</option>
+                    {selectedCategory === "Utility" && (
+                      <option value="feedback_collection">feedback_collection[cite: 7]</option>
+                    )}
+                    {selectedCategory === "Authentication" && (
+                      <option value="otp_test">otp_test</option>
+                    )}
+                    {selectedCategory === "Marketing" && (
+                      <option value="promotional_offer">promotional_offer</option>
+                    )}
                   </select>
                 </div>
               </div>
 
+              {/* Dynamic Variable Parameters Box */}
               <div className="bg-emerald-50/50 border border-emerald-200 p-4 rounded-2xl space-y-3">
-                <div className="font-bold text-emerald-800">Dynamic Variable Parameters</div>
+                <div className="font-bold text-emerald-800 flex items-center justify-between">
+                  <span>Dynamic Variable Parameters Mapping</span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Template: {selectedTemplate}</span>
+                </div>
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] font-bold text-gray-500">{"{{1}}"} (Customer Name)</label>
-                    <input type="text" placeholder="Assign Value or Column" className="w-full border rounded-lg p-2 bg-white text-xs mt-1" />
+                    <label className="text-[10px] font-bold text-gray-600">{"{{1}}"} Parameter Value / Column[cite: 7]</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. John or column_name"
+                      value={var1}
+                      onChange={(e) => setVar1(e.target.value)}
+                      className="w-full border rounded-lg p-2.5 bg-white text-xs mt-1 font-mono focus:outline-none"
+                    />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-gray-500">{"{{2}}"} (Service ID)</label>
-                    <input type="text" placeholder="Assign Value or Column" className="w-full border rounded-lg p-2 bg-white text-xs mt-1" />
+                    <label className="text-[10px] font-bold text-gray-600">{"{{2}}"} Parameter Value / Column[cite: 7]</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 123 or column_name"
+                      value={var2}
+                      onChange={(e) => setVar2(e.target.value)}
+                      className="w-full border rounded-lg p-2.5 bg-white text-xs mt-1 font-mono focus:outline-none"
+                    />
                   </div>
                 </div>
               </div>
@@ -314,8 +352,8 @@ export default function CampaignsPage() {
             <div className="bg-emerald-900/60 p-3 rounded-2xl space-y-2 shadow-inner border border-emerald-800/50">
               <div className="text-slate-100 leading-relaxed text-xs whitespace-pre-wrap">
                 {selectedTemplate === "feedback_collection"
-                  ? "Hi {{1}}, the service request we completed on {{2}} is now closed. Please rate your experience from 1-5 and share any feedback to help us improve your recent request with us at the link below:"
-                  : "{{1}} is your verification code. For your security, do not share this code."}
+                  ? `Hi ${var1 || "{{1}}"}, the service request we completed on ${var2 || "{{2}}"} is now closed. Please rate your experience from 1-5 and share any feedback to help us improve your recent request with us at the link below:`
+                  : `${var1 || "{{1()}}"} is your verification code. For your security, do not share this code.`}
               </div>
               <div className="pt-2">
                 <div className="bg-white text-emerald-800 text-center py-1.5 rounded-xl font-bold text-xs shadow-xs">

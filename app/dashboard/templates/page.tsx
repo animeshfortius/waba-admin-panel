@@ -19,7 +19,7 @@ export default function CreateWhatsAppTemplateModule() {
     { id: "1", name: "Default WABA Channel", number: "28402710282733872" }
   ]);
   const [selectedWabaChannel, setSelectedWabaChannel] = useState("28402710282733872");
-  const [templateStatus, setTemplateStatus] = useState("PENDING"); // Pending, Approved, Rejected
+  const [templateStatus] = useState("PENDING");
 
   const [allowCategoryChange, setAllowCategoryChange] = useState(false);
 
@@ -39,8 +39,7 @@ export default function CreateWhatsAppTemplateModule() {
   const [apps, setApps] = useState<{ packageName: string; signatureHash: string }[]>([
     { packageName: "com.example.myapp", signatureHash: "12345678901" },
   ]);
-  const [otpExpiryMinutes, setOtpExpiryMinutes] = useState(10);
-  const [addSecurityRecommendation, setAddSecurityRecommendation] = useState(true);
+  const [otpExpiryMinutes] = useState(10);
 
   // Carousel Cards State
   const [carouselCards, setCarouselCards] = useState([
@@ -59,7 +58,7 @@ export default function CreateWhatsAppTemplateModule() {
           setSelectedWabaChannel(data.channels[0].number);
         }
       })
-      .catch((err) => console.log("Using default WABA channel"));
+      .catch((err) => console.log("Using default WABA channel", err));
   }, []);
 
   // Helper Functions for Variables
@@ -103,7 +102,6 @@ export default function CreateWhatsAppTemplateModule() {
     setButtons(buttons.filter((b) => b.id !== id));
   };
 
-  // App Setup Helpers (Auth)
   const handleAddApp = () => {
     setApps([...apps, { packageName: "", signatureHash: "" }]);
   };
@@ -112,7 +110,6 @@ export default function CreateWhatsAppTemplateModule() {
     setApps(apps.filter((_, i) => i !== idx));
   };
 
-  // Carousel Card Helpers
   const handleAddCarouselCard = () => {
     if (carouselCards.length >= 10) return alert("Maximum 10 Carousel cards allowed");
     const newCard = {
@@ -125,7 +122,6 @@ export default function CreateWhatsAppTemplateModule() {
     setCarouselCards([...carouselCards, newCard]);
   };
 
-  // Submit Handler with Status Tracking
   const handleSubmitForReview = async () => {
     if (!templateName) {
       alert("Please enter template name");
@@ -143,7 +139,7 @@ export default function CreateWhatsAppTemplateModule() {
       bodyText,
       footerText,
       buttons,
-      status: templateStatus // PENDING, APPROVED, REJECTED
+      status: templateStatus
     };
 
     try {
@@ -169,14 +165,14 @@ export default function CreateWhatsAppTemplateModule() {
       {/* Top Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-2xl border shadow-xs gap-3">
         <div>
-          <div className="text-gray-400 font-medium">WhatsApp Manager › Templates</div>
+          <div className="text-gray-400 font-medium">WhatsApp Manager › Templates[cite: 6]</div>
           <h1 className="text-xl font-bold text-gray-800">Create & Edit Message Template</h1>
         </div>
         <Link
           href="/admin/templates"
           className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2 rounded-xl border transition"
         >
-          📁 Template Library
+          📁 Template Library[cite: 4]
         </Link>
       </div>
 
@@ -189,7 +185,7 @@ export default function CreateWhatsAppTemplateModule() {
           }`}
         >
           <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px]">1</span>
-          <span>Set up template</span>
+          <span>Set up template[cite: 6]</span>
         </button>
         <span className="text-gray-300">➔</span>
         <button
@@ -199,7 +195,7 @@ export default function CreateWhatsAppTemplateModule() {
           }`}
         >
           <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px]">2</span>
-          <span>Edit template</span>
+          <span>Edit template[cite: 6]</span>
         </button>
       </div>
 
@@ -214,7 +210,7 @@ export default function CreateWhatsAppTemplateModule() {
             <div className="space-y-6">
               <div>
                 <h2 className="text-base font-bold text-gray-800">Choose Template Category & Sub-type</h2>
-                <p className="text-gray-500 mt-1">Select the intent and structure of your message template.</p>
+                <p className="text-gray-500 mt-1">Select the intent and structure of your message template[cite: 6].</p>
               </div>
 
               {/* Category Tabs */}
@@ -250,12 +246,12 @@ export default function CreateWhatsAppTemplateModule() {
                 {category === "Marketing" && (
                   <div className="space-y-2">
                     {[
-                      { id: "Default", label: "Default", desc: "Send messages with media and customized buttons to your customers." },
-                      { id: "Catalogue", label: "Catalogue", desc: "Send messages with product catalog by connecting your products catalogue." },
-                      { id: "Flows", label: "Flows", desc: "Send messages to capture customer interest, appointments requests or let surveys." },
+                      { id: "Default", label: "Default", desc: "Send messages with media and customized buttons to your customers[cite: 6]." },
+                      { id: "Catalogue", label: "Catalogue", desc: "Send messages with product catalog by connecting your products catalogue[cite: 5]." },
+                      { id: "Flows", label: "Flows", desc: "Send messages to capture customer interest, appointments requests or let surveys[cite: 5]." },
                       { id: "Calling permissions request", label: "Calling permissions request", desc: "Ask if user can call them on WhatsApp." },
                       { id: "Limited Time Offer (LTO)", label: "Limited Time Offer (LTO)", desc: "Send messages with expiration date for high user engagement and conversion." },
-                      { id: "Carousel", label: "Carousel", desc: "Carousel lets you showcase multiple products, services or variable formats in one banner." },
+                      { id: "Carousel", label: "Carousel", desc: "Carousel lets you showcase multiple products, services or variable formats in one banner[cite: 5]." },
                     ].map((item) => (
                       <label
                         key={item.id}
@@ -283,8 +279,8 @@ export default function CreateWhatsAppTemplateModule() {
                   <div className="space-y-2">
                     {[
                       { id: "None", label: "Default Utility", desc: "Send account updates, notifications or transactional alerts." },
-                      { id: "Order status", label: "Order status", desc: "Send messages to keep customers updated about the progress of their orders." },
-                      { id: "Order details", label: "Order details", desc: "Send detailed order confirmations and receipts." },
+                      { id: "Order status", label: "Order status", desc: "Send messages to keep customers updated about the progress of their orders[cite: 5]." },
+                      { id: "Order details", label: "Order details", desc: "Send detailed order confirmations and receipts[cite: 5]." },
                     ].map((item) => (
                       <label
                         key={item.id}
@@ -311,8 +307,8 @@ export default function CreateWhatsAppTemplateModule() {
                 {category === "Authentication" && (
                   <div className="space-y-2">
                     {[
-                      { id: "Zero-tap OTP", label: "Zero-tap OTP", desc: "Automatically send and verify OTP codes without manual user interaction." },
-                      { id: "One-tap auto fill", label: "One-tap auto fill", desc: "Allow customers to autofill verification codes with a single tap button." },
+                      { id: "Zero-tap OTP", label: "Zero-tap OTP", desc: "Automatically send and verify OTP codes without manual user interaction[cite: 6]." },
+                      { id: "One-tap auto fill", label: "One-tap auto fill", desc: "Allow customers to autofill verification codes with a single tap button[cite: 6]." },
                       { id: "Copy code", label: "Copy code button", desc: "Standard OTP template with a button to copy code directly." },
                     ].map((item) => (
                       <label
@@ -343,7 +339,7 @@ export default function CreateWhatsAppTemplateModule() {
                   href="/admin/templates"
                   className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200"
                 >
-                  Go to Template Library
+                  Go to Template Library[cite: 4]
                 </Link>
                 <button
                   type="button"
@@ -385,7 +381,7 @@ export default function CreateWhatsAppTemplateModule() {
                 </div>
               </div>
 
-              {/* BASIC DETAILS (WABA Channel replaced with WABA Account) */}
+              {/* BASIC DETAILS */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block font-bold text-gray-600 mb-1">TEMPLATE NAME</label>
@@ -405,7 +401,7 @@ export default function CreateWhatsAppTemplateModule() {
                     onChange={(e) => setLanguage(e.target.value)}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold"
                   >
-                    <option value="English">English (en)</option>
+                    <option value="English">English (en)[cite: 6]</option>
                     <option value="Hindi">Hindi (hi)</option>
                     <option value="Spanish">Spanish (es)</option>
                     <option value="Arabic">Arabic (ar)</option>
@@ -429,12 +425,12 @@ export default function CreateWhatsAppTemplateModule() {
               {/* AUTHENTICATION SPECIFIC CONFIGURATION */}
               {category === "Authentication" && (
                 <div className="border-2 border-emerald-200 rounded-2xl p-4 bg-emerald-50/30 space-y-4">
-                  <h3 className="font-bold text-gray-800 text-sm">🔐 Code Delivery Setup</h3>
+                  <h3 className="font-bold text-gray-800 text-sm">🔐 Code Delivery Setup[cite: 6]</h3>
                   
                   <div className="space-y-2">
                     {[
-                      { id: "zero_tap", label: "Zero-tap OTP", desc: "Automatically verifies code without user opening app." },
-                      { id: "one_tap", label: "One-tap auto fill", desc: "User taps one button in WhatsApp to auto fill code in your app." },
+                      { id: "zero_tap", label: "Zero-tap OTP[cite: 6]", desc: "Automatically verifies code without user opening app." },
+                      { id: "one_tap", label: "One-tap auto fill[cite: 6]", desc: "User taps one button in WhatsApp to auto fill code in your app." },
                       { id: "copy_code", label: "Copy code", desc: "Standard copy button to copy verification code." },
                     ].map((opt) => (
                       <label key={opt.id} className="flex items-center space-x-3 bg-white p-2.5 rounded-xl border cursor-pointer">
@@ -455,7 +451,7 @@ export default function CreateWhatsAppTemplateModule() {
 
                   {/* App Setup */}
                   <div className="space-y-3 pt-2">
-                    <label className="block font-bold text-gray-700">App Setup (Android Package & Signature)</label>
+                    <label className="block font-bold text-gray-700">App Setup (Android Package & Signature)[cite: 6]</label>
                     {apps.map((app, idx) => (
                       <div key={idx} className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-white p-3 rounded-xl border relative">
                         <div>
@@ -502,7 +498,7 @@ export default function CreateWhatsAppTemplateModule() {
                       onClick={handleAddApp}
                       className="text-emerald-700 font-bold text-xs hover:underline flex items-center space-x-1"
                     >
-                      <span>+ Add another app</span>
+                      <span>+ Add another app[cite: 6]</span>
                     </button>
                   </div>
 
@@ -512,8 +508,8 @@ export default function CreateWhatsAppTemplateModule() {
                     <input
                       type="number"
                       value={otpExpiryMinutes}
-                      onChange={(e) => setOtpExpiryMinutes(Number(e.target.value))}
-                      className="border rounded-lg p-1.5 w-20 text-center font-bold"
+                      readOnly
+                      className="border rounded-lg p-1.5 w-20 text-center font-bold bg-gray-100"
                     />
                   </div>
                 </div>
@@ -523,13 +519,13 @@ export default function CreateWhatsAppTemplateModule() {
               {subType === "Carousel" && (
                 <div className="border-2 border-indigo-200 rounded-2xl p-4 bg-indigo-50/30 space-y-4">
                   <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-gray-800 text-sm">🎠 Carousel Cards Setup ({carouselCards.length}/10 Cards)</h3>
+                    <h3 className="font-bold text-gray-800 text-sm">🎠 Carousel Cards Setup ({carouselCards.length}/10 Cards)[cite: 5]</h3>
                     <button
                       type="button"
                       onClick={handleAddCarouselCard}
                       className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-xs cursor-pointer"
                     >
-                      + Add Carousel Card
+                      + Add Carousel Card[cite: 5]
                     </button>
                   </div>
 
@@ -604,7 +600,7 @@ export default function CreateWhatsAppTemplateModule() {
               {/* MEDIA HEADER WITH FILE UPLOAD, MAX SIZE & FORMAT EXAMPLES */}
               {category !== "Authentication" && subType !== "Carousel" && (
                 <div className="space-y-3 border-t pt-4">
-                  <label className="block font-bold text-gray-600 uppercase">Media Header • Optional</label>
+                  <label className="block font-bold text-gray-600 uppercase">Media Header • Optional[cite: 6]</label>
                   <div className="grid grid-cols-5 gap-2">
                     {["None", "Image", "Video", "Document", "Location"].map((m) => (
                       <button
@@ -624,6 +620,7 @@ export default function CreateWhatsAppTemplateModule() {
                     ))}
                   </div>
 
+                  {/* FILE UPLOAD BOX FOR MEDIA SAMPLES */}
                   {mediaType !== "None" && mediaType !== "Location" && (
                     <div className="border-2 border-dashed border-gray-300 rounded-2xl p-4 bg-gray-50 space-y-2 text-center">
                       <div className="text-gray-600 font-bold text-xs">Upload {mediaType} Sample File</div>
@@ -644,10 +641,11 @@ export default function CreateWhatsAppTemplateModule() {
                     </div>
                   )}
 
+                  {/* HEADER TEXT FIELD ONLY WHEN MEDIA TYPE IS NONE */}
                   {mediaType === "None" && (
                     <div className="space-y-1 pt-2">
                       <div className="flex justify-between text-xs text-gray-500">
-                        <span className="font-bold text-gray-600">HEADER TEXT</span>
+                        <span className="font-bold text-gray-600">HEADER TEXT • OPTIONAL</span>
                         <span>{headerText.length}/60</span>
                       </div>
                       <input
@@ -663,7 +661,7 @@ export default function CreateWhatsAppTemplateModule() {
                           onClick={addVariableToHeader}
                           className="text-blue-600 font-bold hover:underline cursor-pointer"
                         >
-                          + Add Variable
+                          + Add Variable[cite: 6]
                         </button>
                       </div>
                     </div>
@@ -674,7 +672,7 @@ export default function CreateWhatsAppTemplateModule() {
               {/* BODY TEXT SECTION */}
               <div className="space-y-2 border-t pt-4">
                 <div className="flex justify-between items-center">
-                  <label className="block font-bold text-gray-600">MESSAGE BODY</label>
+                  <label className="block font-bold text-gray-600">MESSAGE BODY[cite: 6]</label>
                   <span className="text-gray-400">{bodyText.length}/1024</span>
                 </div>
 
@@ -699,7 +697,7 @@ export default function CreateWhatsAppTemplateModule() {
                       onClick={addVariableToBody}
                       className="text-blue-600 font-bold hover:underline cursor-pointer"
                     >
-                      + Add Variable
+                      + Add Variable[cite: 6]
                     </button>
                   </div>
                 </div>
@@ -708,7 +706,7 @@ export default function CreateWhatsAppTemplateModule() {
               {/* FOOTER SECTION */}
               <div className="space-y-1 border-t pt-4">
                 <div className="flex justify-between text-xs text-gray-500">
-                  <span className="font-bold text-gray-600">FOOTER TEXT • OPTIONAL</span>
+                  <span className="font-bold text-gray-600">FOOTER TEXT • OPTIONAL[cite: 6]</span>
                   <span>{footerText.length}/60</span>
                 </div>
                 <input
@@ -722,7 +720,7 @@ export default function CreateWhatsAppTemplateModule() {
 
               {/* BUTTONS SECTION */}
               <div className="space-y-3 border-t pt-4 relative">
-                <label className="block font-bold text-gray-600">INTERACTIVE BUTTONS • OPTIONAL</label>
+                <label className="block font-bold text-gray-600">INTERACTIVE BUTTONS • OPTIONAL[cite: 6]</label>
                 
                 <div className="relative inline-block">
                   <button
@@ -730,7 +728,7 @@ export default function CreateWhatsAppTemplateModule() {
                     onClick={() => setShowButtonMenu(!showButtonMenu)}
                     className="bg-emerald-50 text-emerald-700 border border-emerald-300 px-4 py-2 rounded-xl font-bold cursor-pointer hover:bg-emerald-100 flex items-center space-x-1"
                   >
-                    <span>+ Add Button</span>
+                    <span>+ Add Button[cite: 6]</span>
                   </button>
 
                   {showButtonMenu && (
@@ -798,7 +796,7 @@ export default function CreateWhatsAppTemplateModule() {
                   onClick={handleSubmitForReview}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-7 py-2.5 rounded-xl shadow-md cursor-pointer transition"
                 >
-                  Submit for Review 🚀
+                  Submit for Review 🚀[cite: 5]
                 </button>
               </div>
 
@@ -815,9 +813,9 @@ export default function CreateWhatsAppTemplateModule() {
             <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-[10px] text-slate-400 font-mono">
               <span className="flex items-center space-x-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                <span>WhatsApp Business</span>
+                <span>WhatsApp Business[cite: 6]</span>
               </span>
-              <span>12:45 PM</span>
+              <span className="text-emerald-400 font-bold">{category} / {subType}</span>
             </div>
 
             {/* Chat Bubble Container */}
@@ -826,11 +824,11 @@ export default function CreateWhatsAppTemplateModule() {
               {/* Media Preview */}
               {mediaType !== "None" && category !== "Authentication" && subType !== "Carousel" && (
                 <div className="h-32 bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 font-bold text-xs border border-slate-700">
-                  📷 [{uploadedFile ? uploadedFile.name : `${mediaType} Sample Header`}]
+                  📷 [{uploadedFile ? uploadedFile.name : `${mediaType} Sample Header[cite: 6]`}]
                 </div>
               )}
 
-              {/* Header Text */}
+              {/* Header Text (Only when mediaType is None) */}
               {mediaType === "None" && headerText && (
                 <div className="font-bold text-white text-xs border-b border-emerald-700/50 pb-1">
                   {headerText}
@@ -841,13 +839,13 @@ export default function CreateWhatsAppTemplateModule() {
               {subType === "Carousel" && (
                 <div className="bg-slate-800 p-2.5 rounded-xl border border-slate-700 space-y-1.5">
                   <div className="h-24 bg-slate-700 rounded-lg flex items-center justify-center text-slate-400 text-[10px]">
-                    🖼️ [{carouselCards[activeCarouselIndex]?.mediaType || "Image"}]
+                    🖼️ [{carouselCards[activeCarouselIndex]?.mediaType || "Image"}[cite: 5]]
                   </div>
                   <div className="text-[11px] font-semibold text-slate-200">
-                    {carouselCards[activeCarouselIndex]?.text || "Carousel Card Details"}
+                    {carouselCards[activeCarouselIndex]?.text || "Carousel Card Details[cite: 5]"}
                   </div>
                   <div className="bg-white text-emerald-800 text-center py-1 rounded-lg font-bold text-[10px]">
-                    {carouselCards[activeCarouselIndex]?.buttonText || "Button"}
+                    {carouselCards[activeCarouselIndex]?.buttonText || "Button[cite: 5]"}
                   </div>
                 </div>
               )}
@@ -867,7 +865,7 @@ export default function CreateWhatsAppTemplateModule() {
               {/* Buttons Preview */}
               {buttons.length > 0 && (
                 <div className="pt-2 space-y-1.5">
-                  {buttons.map?.length > 0 || buttons.map((b) => (
+                  {buttons.map((b) => (
                     <div
                       key={b.id}
                       className="bg-white text-emerald-800 text-center py-1.5 rounded-xl font-bold text-xs shadow-xs"
@@ -885,7 +883,7 @@ export default function CreateWhatsAppTemplateModule() {
               {category === "Authentication" && (
                 <div className="pt-2 space-y-1">
                   <div className="bg-white text-emerald-800 text-center py-2 rounded-xl font-bold text-xs shadow-xs flex items-center justify-center space-x-1">
-                    <span>📑 Copy Code</span>
+                    <span>📑 Copy Code[cite: 6]</span>
                   </div>
                 </div>
               )}

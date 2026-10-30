@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 export async function GET() {
   try {
-    const contacts = await prisma.contact.findMany({
+    const contacts = await (prisma as any).contact.findMany({
       orderBy: { id: "desc" }
     });
     return NextResponse.json(contacts);
@@ -17,7 +17,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const newContact = await prisma.contact.create({
+    const newContact = await (prisma as any).contact.create({
       data: {
         userId: body.userId || "default_user",
         number: body.number,
@@ -37,8 +37,8 @@ export async function DELETE(request: Request) {
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    await prisma.contact.delete({
-      where: { id: parseInt(id) },
+    await (prisma as any).contact.delete({
+      where: { id },
     });
     return NextResponse.json({ success: true });
   } catch (error) {

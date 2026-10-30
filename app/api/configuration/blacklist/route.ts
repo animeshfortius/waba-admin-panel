@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 export async function GET() {
   try {
-    const blacklist = await prisma.blacklistNumber.findMany({
+    const blacklist = await (prisma as any).blacklistNumber.findMany({
       orderBy: { id: "desc" }
     });
     return NextResponse.json(blacklist);
@@ -17,7 +17,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const newItem = await prisma.blacklistNumber.create({
+    const newItem = await (prisma as any).blacklistNumber.create({
       data: {
         userId: body.userId || "default_user",
         number: body.number,
@@ -35,8 +35,8 @@ export async function DELETE(request: Request) {
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    await prisma.blacklistNumber.delete({
-      where: { id: parseInt(id) },
+    await (prisma as any).blacklistNumber.delete({
+      where: { id },
     });
     return NextResponse.json({ success: true });
   } catch (error) {

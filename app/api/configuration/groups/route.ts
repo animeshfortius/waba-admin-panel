@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 export async function GET() {
   try {
-    const groups = await prisma.contactGroup.findMany({
+    const groups = await (prisma as any).contactGroup.findMany({
       orderBy: { id: "desc" }
     });
     return NextResponse.json(groups);
@@ -17,7 +17,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const newGroup = await prisma.contactGroup.create({
+    const newGroup = await (prisma as any).contactGroup.create({
       data: {
         userId: body.userId || "default_user",
         groupName: body.groupName,
@@ -34,8 +34,8 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json();
     const { id, groupName } = body;
-    const updatedGroup = await prisma.contactGroup.update({
-      where: { id: parseInt(id) },
+    const updatedGroup = await (prisma as any).contactGroup.update({
+      where: { id },
       data: { groupName },
     });
     return NextResponse.json(updatedGroup);
@@ -50,8 +50,8 @@ export async function DELETE(request: Request) {
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    await prisma.contactGroup.delete({
-      where: { id: parseInt(id) },
+    await (prisma as any).contactGroup.delete({
+      where: { id },
     });
     return NextResponse.json({ success: true });
   } catch (error) {

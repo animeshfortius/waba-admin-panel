@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 export async function GET() {
   try {
-    const media = await prisma.mediaAsset.findMany({
+    const media = await (prisma as any).mediaAsset.findMany({
       orderBy: { id: "desc" }
     });
     return NextResponse.json(media);
@@ -17,7 +17,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const newMedia = await prisma.mediaAsset.create({
+    const newMedia = await (prisma as any).mediaAsset.create({
       data: {
         userId: body.userId || "default_user",
         mediaName: body.mediaName,
@@ -37,8 +37,8 @@ export async function DELETE(request: Request) {
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    await prisma.mediaAsset.delete({
-      where: { id: parseInt(id) },
+    await (prisma as any).mediaAsset.delete({
+      where: { id },
     });
     return NextResponse.json({ success: true });
   } catch (error) {

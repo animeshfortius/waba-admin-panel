@@ -5,7 +5,9 @@ const prisma = new PrismaClient();
 
 export async function GET() {
   try {
-    const channels = await prisma.wabaAccount.findMany();
+    const channels = await prisma.wabaAccount.findMany({
+      orderBy: { id: "desc" }
+    });
     return NextResponse.json(channels);
   } catch (error) {
     return NextResponse.json({ error: "Failed to fetch channels" }, { status: 500 });
@@ -22,7 +24,7 @@ export async function POST(request: Request) {
         phoneNumberId: body.phoneNumberId || "1384456657081014",
         displayPhone: body.displayPhone || "15553945963",
         accessToken: body.accessToken || "mock_token_12345",
-        status: "ACTIVE"
+        status: body.status || "ACTIVE"
       },
     });
     return NextResponse.json(newChannel);

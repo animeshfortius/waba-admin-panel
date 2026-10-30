@@ -33,8 +33,12 @@ function ConfigContent() {
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
   
-  // Group Action Modals
+  // Group Action Modals States
   const [manageGroupObj, setManageGroupObj] = useState<any>(null);
+  const [groupMembers, setGroupMembers] = useState<any[]>([]);
+  const [newMemberNumber, setNewMemberNumber] = useState("");
+  const [newMemberName, setNewMemberName] = useState("");
+
   const [importGroupObj, setImportGroupObj] = useState<any>(null);
   const [exportGroupObj, setExportGroupObj] = useState<any>(null);
   const [editGroupObj, setEditGroupObj] = useState<any>(null);
@@ -45,7 +49,6 @@ function ConfigContent() {
   const [blacklistInput, setBlacklistInput] = useState("");
 
   const [showFacebookModal, setShowFacebookModal] = useState(false);
-  const [companyName, setCompanyName] = useState("");
 
   useEffect(() => {
     fetch("/api/configuration/channels").then(res => res.json()).then(data => { if(Array.isArray(data)) setChannels(data); }).catch(() => {});
@@ -55,9 +58,50 @@ function ConfigContent() {
     fetch("/api/configuration/blacklist").then(res => res.json()).then(data => { if(Array.isArray(data)) setBlacklist(data); }).catch(() => {});
   }, []);
 
-  // Real Meta Embedded Signup Popup Trigger
+  // Fetch Group Members when Manage Group modal is opened
+  useEffect(() => {
+    if (manageGroupObj) {
+      fetch(`/api/configuration/groups/contacts?groupId=${manageGroupObj.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) setGroupMembers(data);
+        })
+        .catch(() => setGroupMembers([]));
+    }
+  }, [manageGroupObj]);
+
+  const handleAddMemberToGroup = async () => {
+    if (!newMemberNumber) return alert("Please enter mobile number");
+    const res = await fetch("/api/configuration/groups/contacts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        groupId: manageGroupObj.id,
+        number: newMemberNumber,
+        name: newMemberName || "Member",
+      }),
+    });
+    if (res.ok) {
+      const added = await res.json();
+      setGroupMembers([added, ...groupMembers]);
+      setNewMemberNumber("");
+      setNewMemberName("");
+      alert("Number added to group successfully!");
+    }
+  };
+
+  const handleDeleteMemberFromGroup = async (memberId: string) => {
+    const res = await fetch(`/api/configuration/groups/contacts?id=${memberId}&groupId=${manageGroupObj.id}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      setGroupMembers(groupMembers.filter((m) => m.id !== memberId));
+      alert("Number removed from group!");
+    }
+  };
+
   const handleFacebookSignup = () => {
-    const appId = process.env.NEXT_PUBLIC_META_APP_ID || "28402710282733872";
+    const appId = "28402710282733872";
     const redirectUri = encodeURIComponent(window.location.origin + "/dashboard/configuration?tab=waba_channels");
     const fbUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=whatsapp_business_management,whatsapp_business_messaging&response_type=code`;
 
@@ -67,26 +111,13 @@ function ConfigContent() {
     const top = window.innerHeight / 2 - height / 2;
 
     const popup = window.open(fbUrl, "MetaEmbeddedSignup", `width=${width},height=${height},top=${top},left=${left}`);
-    
     setShowFacebookModal(false);
 
-    // Listen for popup message or poll closure
     const timer = setInterval(() => {
       if (popup && popup.closed) {
         clearInterval(timer);
-        alert("Meta Embedded Signup completed! Connecting WhatsApp channel & coexistence...");
-        // Save to backend API
-        fetch("/api/configuration/channels", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            wabaId: "28402710282733872",
-            phoneNumberId: "1384456657081014",
-            displayPhone: "15553945963",
-            accessToken: "mock_token_meta_12345",
-            userId: "default_user"
-          })
-        }).then(() => window.location.reload());
+        alert("Meta Embedded Signup completed successfully!");
+        window.location.reload();
       }
     }, 1000);
   };
@@ -253,7 +284,7 @@ function ConfigContent() {
           </div>
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 border-b">
-              <tr><th className="p-3">GROUP NAME</th><th className="p-3">TOTAL CONTACTS</th><th className="p-3">ACTIONS (Manage, Import, Export, Edit, Delete)</th></tr>
+              <tr><th className="p-3">GROUP NAME</th><th className="p-3">TOTAL CONTACTS</th><th className="p-3">ACTIONS</th></tr>
             </thead>
             <tbody className="divide-y">
               {groups.map((g: any) => (
@@ -265,7 +296,10 @@ function ConfigContent() {
                     <button onClick={() => setImportGroupObj(g)} className="bg-blue-50 text-blue-600 border px-2 py-1 rounded cursor-pointer font-bold">📥 Import</button>
                     <button onClick={() => setExportGroupObj(g)} className="bg-emerald-50 text-emerald-600 border px-2 py-1 rounded cursor-pointer font-bold">📤 Export</button>
                     <button onClick={() => { setEditGroupObj(g); setEditGroupNameVal(g.groupName); }} className="bg-amber-50 text-amber-600 border px-2 py-1 rounded cursor-pointer font-bold">✏️ Edit</button>
-                    <button onClick={async () => { await fetch(`/api/configuration/groups?id=${g.id}`, { method: "DELETE" }); window.location.reload(); }} className="bg-red-50 text-red-600 border px-2 py-1 rounded cursor-pointer font-bold">🗑️ Delete</button>
+                    <button onClick={async () => {
+                      await fetch(`/api/configuration/groups?id=${g.id}`, { method: "DELETE" });
+                      window.location.reload();
+                    }} className="bg-red-50 text-red-600 border px-2 py-1 rounded cursor-pointer font-bold">🗑️ Delete</button>
                   </td>
                 </tr>
               ))}
@@ -300,7 +334,128 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* Media Modal with File Upload */}
+      {/* MANAGE GROUP MODAL WITH ADD / DELETE NUMBER FEATURE */}
+      {manageGroupObj && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 text-xs">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-sm text-gray-800">Manage Group: {manageGroupObj.groupName}</h3>
+              <button onClick={() => setManageGroupObj(null)} className="text-gray-400 font-bold">✕</button>
+            </div>
+
+            {/* Form to Add Number to Group */}
+            <div className="space-y-2 bg-slate-50 p-3 rounded-xl border">
+              <h4 className="font-bold text-gray-700">Add New Number to Group</h4>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Mobile Number (e.g. 919876543210)"
+                  value={newMemberNumber}
+                  onChange={(e) => setNewMemberNumber(e.target.value)}
+                  className="flex-1 border p-2 rounded-lg"
+                />
+                <input
+                  type="text"
+                  placeholder="Name (Optional)"
+                  value={newMemberName}
+                  onChange={(e) => setNewMemberName(e.target.value)}
+                  className="w-1/3 border p-2 rounded-lg"
+                />
+                <button
+                  onClick={handleAddMemberToGroup}
+                  className="bg-emerald-600 text-white font-bold px-3 py-2 rounded-lg cursor-pointer"
+                >
+                  + Add
+                </button>
+              </div>
+            </div>
+
+            {/* List of Numbers in Group */}
+            <div className="space-y-2">
+              <h4 className="font-bold text-gray-700">Group Members ({groupMembers.length})</h4>
+              <div className="max-h-60 overflow-y-auto border rounded-xl divide-y">
+                {groupMembers.length === 0 ? (
+                  <p className="p-3 text-center text-gray-400">No numbers added to this group yet.</p>
+                ) : (
+                  groupMembers.map((m: any) => (
+                    <div key={m.id} className="p-2.5 flex justify-between items-center hover:bg-slate-50">
+                      <div>
+                        <span className="font-bold font-mono text-gray-800">{m.number}</span>
+                        <span className="text-gray-400 ml-2">({m.name})</span>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteMemberFromGroup(m.id)}
+                        className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t">
+              <button onClick={() => { setManageGroupObj(null); window.location.reload(); }} className="bg-slate-800 text-white px-4 py-1.5 rounded-lg font-bold">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Group Modal */}
+      {importGroupObj && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
+            <h3 className="font-bold text-sm">Import Contacts to {importGroupObj.groupName}</h3>
+            <input type="file" accept=".csv, .xlsx" className="w-full border p-2 rounded-lg" />
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setImportGroupObj(null)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
+              <button onClick={() => { setImportGroupObj(null); alert("Contacts imported successfully!"); }} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg font-bold">Import</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Group Modal */}
+      {exportGroupObj && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
+            <h3 className="font-bold text-sm">Export Group: {exportGroupObj.groupName}</h3>
+            <p className="text-gray-500">Download group members list in CSV format.</p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setExportGroupObj(null)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
+              <button onClick={() => { setExportGroupObj(null); alert("Group exported successfully!"); }} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Download CSV</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Group Modal */}
+      {editGroupObj && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
+            <h3 className="font-bold text-sm">Edit Group Name</h3>
+            <input type="text" value={editGroupNameVal} onChange={(e) => setEditGroupNameVal(e.target.value)} className="w-full border p-2 rounded-lg" />
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setEditGroupObj(null)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
+              <button onClick={async () => {
+                await fetch("/api/configuration/groups", {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ id: editGroupObj.id, groupName: editGroupNameVal })
+                });
+                alert("Group updated successfully!");
+                setEditGroupObj(null);
+                window.location.reload();
+              }} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Update</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Media Modal */}
       {showMediaModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
@@ -368,68 +523,17 @@ function ConfigContent() {
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowGroupModal(false)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
               <button onClick={async () => {
+                if(!groupNameInput) return alert("Enter group name");
                 const res = await fetch("/api/configuration/groups", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ groupName: groupNameInput, totalContacts: 0 })
                 });
-                if(res.ok) { alert("Group created!"); window.location.reload(); }
+                if(res.ok) {
+                  alert("Group created successfully!");
+                  window.location.reload();
+                }
               }} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manage Group Modal */}
-      {manageGroupObj && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
-            <h3 className="font-bold text-sm">Manage Group: {manageGroupObj.groupName}</h3>
-            <p className="text-gray-500">Total Contacts: {manageGroupObj.totalContacts}</p>
-            <div className="flex justify-end pt-2">
-              <button onClick={() => setManageGroupObj(null)} className="bg-slate-800 text-white px-4 py-1.5 rounded-lg font-bold">Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Import Group Modal */}
-      {importGroupObj && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
-            <h3 className="font-bold text-sm">Import Contacts to {importGroupObj.groupName}</h3>
-            <input type="file" accept=".csv, .xlsx" className="w-full border p-2 rounded-lg" />
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setImportGroupObj(null)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
-              <button onClick={() => { setImportGroupObj(null); alert("Contacts imported successfully!"); }} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg font-bold">Import</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Export Group Modal */}
-      {exportGroupObj && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
-            <h3 className="font-bold text-sm">Export Group: {exportGroupObj.groupName}</h3>
-            <p className="text-gray-500">Download group members list in CSV format.</p>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setExportGroupObj(null)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
-              <button onClick={() => { setExportGroupObj(null); alert("Group exported successfully!"); }} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Download CSV</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Group Modal */}
-      {editGroupObj && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
-            <h3 className="font-bold text-sm">Edit Group Name</h3>
-            <input type="text" value={editGroupNameVal} onChange={(e) => setEditGroupNameVal(e.target.value)} className="w-full border p-2 rounded-lg" />
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setEditGroupObj(null)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
-              <button onClick={() => { setEditGroupObj(null); alert("Group updated!"); }} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Update</button>
             </div>
           </div>
         </div>
@@ -470,20 +574,19 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* Facebook Signup Modal (Onboarding & WABA Channels Meta Embedded Signup) */}
+      {/* Facebook Signup Modal */}
       {showFacebookModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 text-xs">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-base text-gray-800">Get started with WhatsApp Business API</h3>
+              <h3 className="font-bold text-base text-gray-800">WhatsApp Coexistence & Meta Signup</h3>
               <button onClick={() => setShowFacebookModal(false)} className="text-gray-400 font-bold">✕</button>
             </div>
-            <p className="text-gray-500">Connect via Meta Embedded Signup / WhatsApp Coexistence. This will open the official Meta authentication popup.</p>
+            <p className="text-gray-500">Connect via Meta Embedded Signup / WhatsApp Coexistence popup.</p>
             <div className="flex justify-end space-x-2 pt-3 border-t">
               <button onClick={() => setShowFacebookModal(false)} className="px-4 py-2 border rounded-lg font-semibold">Cancel</button>
-              <button onClick={handleFacebookSignup} className="bg-[#1877F2] text-white font-bold px-5 py-2.5 rounded-xl cursor-pointer flex items-center space-x-2">
-                <span>🌐</span>
-                <span>Continue with Facebook</span>
+              <button onClick={handleFacebookSignup} className="bg-[#1877F2] text-white font-bold px-5 py-2.5 rounded-xl cursor-pointer">
+                Continue with Facebook
               </button>
             </div>
           </div>

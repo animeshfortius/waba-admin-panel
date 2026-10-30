@@ -31,8 +31,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
             </div>
 
-            {/* Profile Info */}
-            <div className="flex items-center gap-3 border-l pl-4">
+            {/* Profile Info (Clickable Link to Profile Page) */}
+            <Link
+              href="/Client/MyProfile/Index"
+              className="flex items-center gap-3 border-l pl-4 cursor-pointer hover:opacity-80 transition"
+            >
               <div className="w-9 h-9 bg-slate-900 text-white font-extrabold rounded-full flex items-center justify-center text-xs shadow tracking-wider">
                 FI
               </div>
@@ -41,10 +44,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <div className="font-bold text-gray-800 text-xs">Fortius Infocom</div>
                 <div className="text-[10px] text-gray-400 capitalize">Admin Panel</div>
               </div>
+            </Link>
 
-              <div className="border-l pl-3 ml-1">
-                <LogoutButton />
-              </div>
+            <div className="border-l pl-3 ml-1">
+              <LogoutButton />
             </div>
           </div>
         </header>

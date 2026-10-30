@@ -51,10 +51,18 @@ function ConfigContent() {
   const [showFacebookModal, setShowFacebookModal] = useState(false);
 
   useEffect(() => {
+    const savedGroupsList = localStorage.getItem("configuration_groups_list");
+    if (savedGroupsList) {
+      setGroups(JSON.parse(savedGroupsList));
+    } else {
+      fetch("/api/configuration/groups")
+        .then(res => res.json())
+        .then(data => { if(Array.isArray(data)) { setGroups(data); localStorage.setItem("configuration_groups_list", JSON.stringify(data)); } })
+        .catch(() => {});
+    }
     fetch("/api/configuration/channels").then(res => res.json()).then(data => { if(Array.isArray(data)) setChannels(data); }).catch(() => {});
     fetch("/api/configuration/media").then(res => res.json()).then(data => { if(Array.isArray(data)) setMediaList(data); }).catch(() => {});
     fetch("/api/configuration/contacts").then(res => res.json()).then(data => { if(Array.isArray(data)) setContacts(data); }).catch(() => {});
-    fetch("/api/configuration/groups").then(res => res.json()).then(data => { if(Array.isArray(data)) setGroups(data); }).catch(() => {});
     fetch("/api/configuration/blacklist").then(res => res.json()).then(data => { if(Array.isArray(data)) setBlacklist(data); }).catch(() => {});
   }, []);
 
@@ -84,8 +92,11 @@ function ConfigContent() {
     
     if (manageGroupObj) {
       localStorage.setItem(`group_members_${manageGroupObj.id}`, JSON.stringify(updatedList));
-      // Update total contacts count state visually
-      setGroups(groups.map(g => g.id === manageGroupObj.id ? { ...g, totalContacts: updatedList.length } : g));
+      
+      // Update groups list state & localStorage so total count reflects immediately on main table
+      const updatedGroups = groups.map(g => g.id === manageGroupObj.id ? { ...g, totalContacts: updatedList.length } : g);
+      setGroups(updatedGroups);
+      localStorage.setItem("configuration_groups_list", JSON.stringify(updatedGroups));
     }
 
     setNewMemberNumber("");
@@ -99,7 +110,10 @@ function ConfigContent() {
     
     if (manageGroupObj) {
       localStorage.setItem(`group_members_${manageGroupObj.id}`, JSON.stringify(updatedList));
-      setGroups(groups.map(g => g.id === manageGroupObj.id ? { ...g, totalContacts: updatedList.length } : g));
+      
+      const updatedGroups = groups.map(g => g.id === manageGroupObj.id ? { ...g, totalContacts: updatedList.length } : g);
+      setGroups(updatedGroups);
+      localStorage.setItem("configuration_groups_list", JSON.stringify(updatedGroups));
     }
     alert("Number removed from group!");
   };

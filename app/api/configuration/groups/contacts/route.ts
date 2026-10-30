@@ -15,8 +15,9 @@ export async function GET(request: Request) {
       orderBy: { id: "desc" },
     });
     return NextResponse.json(groupContacts);
-  } catch (error) {
-    return NextResponse.json([]);
+  } catch (error: any) {
+    console.error("Error fetching group contacts:", error);
+    return NextResponse.json({ error: error.message || "Failed to fetch group contacts" }, { status: 500 });
   }
 }
 
@@ -25,6 +26,10 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { groupId, number, name } = body;
+
+    if (!groupId || !number) {
+      return NextResponse.json({ error: "groupId and number are required" }, { status: 400 });
+    }
 
     const newContact = await (prisma as any).groupContact.create({
       data: {
@@ -41,8 +46,9 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(newContact);
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to add member" }, { status: 500 });
+  } catch (error: any) {
+    console.error("Error adding group contact:", error);
+    return NextResponse.json({ error: error.message || "Failed to add member" }, { status: 500 });
   }
 }
 
@@ -60,14 +66,19 @@ export async function DELETE(request: Request) {
     });
 
     if (groupId) {
-      await (prisma as any).contactGroup.update({
-        where: { id: groupId },
-        data: { totalContacts: { decrement: 1 } },
-      });
+      try {
+        await (prisma as any).contactGroup.update({
+          where: { id: groupId },
+          data: { totalContacts: { decrement: 1 } },
+        });
+      } catch (e) {
+        // Ignore decrement error if group was modified
+      }
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to delete member" }, { status: 500 });
+  } catch (error: any) {
+    console.error("Error deleting group contact:", error);
+    return NextResponse.json({ error: error.message || "Failed to delete member" }, { status: 500 });
   }
 }

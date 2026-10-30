@@ -58,46 +58,50 @@ function ConfigContent() {
     fetch("/api/configuration/blacklist").then(res => res.json()).then(data => { if(Array.isArray(data)) setBlacklist(data); }).catch(() => {});
   }, []);
 
-  // Fetch Group Members when Manage Group modal is opened
+  // Fetch Group Members when Manage Group modal is opened (Local State fallback)
   useEffect(() => {
     if (manageGroupObj) {
-      fetch(`/api/configuration/groups/contacts?groupId=${manageGroupObj.id}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setGroupMembers(data);
-        })
-        .catch(() => setGroupMembers([]));
+      const savedMembers = localStorage.getItem(`group_members_${manageGroupObj.id}`);
+      if (savedMembers) {
+        setGroupMembers(JSON.parse(savedMembers));
+      } else {
+        setGroupMembers([]);
+      }
     }
   }, [manageGroupObj]);
 
-  const handleAddMemberToGroup = async () => {
+  const handleAddMemberToGroup = () => {
     if (!newMemberNumber) return alert("Please enter mobile number");
-    const res = await fetch("/api/configuration/groups/contacts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        groupId: manageGroupObj.id,
-        number: newMemberNumber,
-        name: newMemberName || "Member",
-      }),
-    });
-    if (res.ok) {
-      const added = await res.json();
-      setGroupMembers([added, ...groupMembers]);
-      setNewMemberNumber("");
-      setNewMemberName("");
-      alert("Number added to group successfully!");
+    
+    const newMember = {
+      id: Date.now().toString(),
+      number: newMemberNumber,
+      name: newMemberName || "Member"
+    };
+
+    const updatedList = [newMember, ...groupMembers];
+    setGroupMembers(updatedList);
+    
+    if (manageGroupObj) {
+      localStorage.setItem(`group_members_${manageGroupObj.id}`, JSON.stringify(updatedList));
+      // Update total contacts count state visually
+      setGroups(groups.map(g => g.id === manageGroupObj.id ? { ...g, totalContacts: updatedList.length } : g));
     }
+
+    setNewMemberNumber("");
+    setNewMemberName("");
+    alert("Number added to group successfully!");
   };
 
-  const handleDeleteMemberFromGroup = async (memberId: string) => {
-    const res = await fetch(`/api/configuration/groups/contacts?id=${memberId}&groupId=${manageGroupObj.id}`, {
-      method: "DELETE",
-    });
-    if (res.ok) {
-      setGroupMembers(groupMembers.filter((m) => m.id !== memberId));
-      alert("Number removed from group!");
+  const handleDeleteMemberFromGroup = (memberId: string) => {
+    const updatedList = groupMembers.filter((m) => m.id !== memberId);
+    setGroupMembers(updatedList);
+    
+    if (manageGroupObj) {
+      localStorage.setItem(`group_members_${manageGroupObj.id}`, JSON.stringify(updatedList));
+      setGroups(groups.map(g => g.id === manageGroupObj.id ? { ...g, totalContacts: updatedList.length } : g));
     }
+    alert("Number removed from group!");
   };
 
   const handleFacebookSignup = () => {

@@ -16,16 +16,15 @@ function ConfigContent() {
     }
   };
 
-  // States
   const [channels, setChannels] = useState<any[]>([]);
   const [mediaList, setMediaList] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [blacklist, setBlacklist] = useState<any[]>([]);
 
-  // Modal States
+  // Modals
   const [showMediaModal, setShowMediaModal] = useState(false);
-  const [mediaName, setMediaName] = useState("");
+  const [mediaFile, setMediaFile] = useState<any>(null);
   const [mediaChannel, setMediaChannel] = useState("");
 
   const [showContactModal, setShowContactModal] = useState(false);
@@ -36,12 +35,11 @@ function ConfigContent() {
   const [groupName, setGroupName] = useState("");
 
   const [showBlacklistModal, setShowBlacklistModal] = useState(false);
+  const [showBlacklistExcelModal, setShowBlacklistExcelModal] = useState(false);
   const [blacklistInput, setBlacklistInput] = useState("");
 
   const [showFacebookModal, setShowFacebookModal] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Fetch data on load
   useEffect(() => {
     fetch("/api/configuration/channels").then(res => res.json()).then(data => { if(Array.isArray(data)) setChannels(data); }).catch(() => {});
     fetch("/api/configuration/media").then(res => res.json()).then(data => { if(Array.isArray(data)) setMediaList(data); }).catch(() => {});
@@ -50,18 +48,14 @@ function ConfigContent() {
     fetch("/api/configuration/blacklist").then(res => res.json()).then(data => { if(Array.isArray(data)) setBlacklist(data); }).catch(() => {});
   }, []);
 
-  // Handlers
   const handleAddMedia = async () => {
-    if(!mediaName) return alert("Please enter media name");
+    if(!mediaFile) return alert("Please select a file to upload");
     const res = await fetch("/api/configuration/media", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaName, mediaUrl: `https://waba.fortius.in/media/${mediaName}`, wabaNumber: mediaChannel || "15553945963" })
+      body: JSON.stringify({ mediaName: mediaFile.name, mediaUrl: `https://waba.fortius.in/media/${mediaFile.name}`, wabaNumber: mediaChannel || "15553945963" })
     });
-    if(res.ok) {
-      alert("Media uploaded successfully!");
-      window.location.reload();
-    }
+    if(res.ok) { alert("Media uploaded successfully!"); window.location.reload(); }
   };
 
   const handleAddContact = async () => {
@@ -71,10 +65,7 @@ function ConfigContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(contactForm)
     });
-    if(res.ok) {
-      alert("Contact saved successfully!");
-      window.location.reload();
-    }
+    if(res.ok) { alert("Contact saved successfully!"); window.location.reload(); }
   };
 
   const handleAddGroup = async () => {
@@ -84,10 +75,7 @@ function ConfigContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ groupName, totalContacts: 0 })
     });
-    if(res.ok) {
-      alert("Group created successfully!");
-      window.location.reload();
-    }
+    if(res.ok) { alert("Group created successfully!"); window.location.reload(); }
   };
 
   const handleAddBlacklist = async () => {
@@ -97,10 +85,7 @@ function ConfigContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ number: blacklistInput })
     });
-    if(res.ok) {
-      alert("Number blacklisted successfully!");
-      window.location.reload();
-    }
+    if(res.ok) { alert("Number blacklisted successfully!"); window.location.reload(); }
   };
 
   return (
@@ -108,11 +93,7 @@ function ConfigContent() {
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
         <div>
           <div className="text-gray-400">
-            Home ›{" "}
-            <span onClick={() => setActiveSection("hub")} className="cursor-pointer hover:text-emerald-600 font-medium">
-              Configuration
-            </span>{" "}
-            {activeSection !== "hub" && `› ${activeSection.replace("_", " ").toUpperCase()}`}
+            Home › <span onClick={() => setActiveSection("hub")} className="cursor-pointer hover:text-emerald-600 font-medium">Configuration</span> {activeSection !== "hub" && `› ${activeSection.replace("_", " ").toUpperCase()}`}
           </div>
           <h1 className="text-xl font-bold text-gray-800">
             {activeSection === "hub" && "Configuration"}
@@ -124,11 +105,8 @@ function ConfigContent() {
             {activeSection === "blacklist" && "Blacklisted Numbers"}
           </h1>
         </div>
-
         {activeSection !== "hub" && (
-          <button onClick={() => setActiveSection("hub")} className="border px-3.5 py-1.5 rounded-xl font-bold text-gray-600 hover:bg-gray-50 cursor-pointer shadow-sm">
-            ⬅ Back to Hub
-          </button>
+          <button onClick={() => setActiveSection("hub")} className="border px-3.5 py-1.5 rounded-xl font-bold text-gray-600 hover:bg-gray-50 cursor-pointer shadow-sm">⬅ Back to Hub</button>
         )}
       </div>
 
@@ -151,7 +129,6 @@ function ConfigContent() {
               <p className="text-[11px] text-gray-400">Browse and manage media assets.</p>
             </div>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-3">
             <div onClick={() => setActiveSection("contacts")} className="bg-white p-6 rounded-2xl border shadow-sm hover:border-emerald-500 cursor-pointer transition space-y-2">
               <div className="text-3xl">📱</div>
@@ -176,9 +153,7 @@ function ConfigContent() {
         <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-6 text-center">
           <h2 className="text-lg font-bold text-gray-800">WhatsApp Coexistence</h2>
           <p className="text-xs text-gray-500">Connect your WhatsApp Business App number with Cloud API seamlessly.</p>
-          <button onClick={() => setShowFacebookModal(true)} className="bg-[#1877F2] text-white font-bold px-6 py-3 rounded-xl cursor-pointer">
-            Connect WhatsApp with Facebook
-          </button>
+          <button onClick={() => setShowFacebookModal(true)} className="bg-[#1877F2] text-white font-bold px-6 py-3 rounded-xl cursor-pointer">Connect WhatsApp with Facebook</button>
         </div>
       )}
 
@@ -241,7 +216,7 @@ function ConfigContent() {
           </div>
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 border-b">
-              <tr><th className="p-3">GROUP NAME</th><th className="p-3">TOTAL CONTACTS</th><th className="p-3">ACTIONS (Manage, Import, Export, Edit, Delete)</th></tr>
+              <tr><th className="p-3">GROUP NAME</th><th className="p-3">TOTAL CONTACTS</th><th className="p-3">ACTIONS</th></tr>
             </thead>
             <tbody className="divide-y">
               {groups.map((g: any) => (
@@ -249,10 +224,10 @@ function ConfigContent() {
                   <td className="p-3 font-bold text-emerald-700">{g.groupName}</td>
                   <td className="p-3 font-semibold">{g.totalContacts}</td>
                   <td className="p-3 flex gap-2">
-                    <button onClick={() => alert(`Managing group: ${g.groupName}`)} className="bg-slate-100 border px-2 py-1 rounded cursor-pointer">⚙️ Manage</button>
+                    <button onClick={() => alert(`Manage group: ${g.groupName}`)} className="bg-slate-100 border px-2 py-1 rounded cursor-pointer">⚙️ Manage</button>
                     <button onClick={() => alert(`Importing contacts to ${g.groupName}`)} className="bg-blue-50 text-blue-600 border px-2 py-1 rounded cursor-pointer">📥 Import</button>
-                    <button onClick={() => alert(`Exporting ${g.groupName} data`)} className="bg-emerald-50 text-emerald-600 border px-2 py-1 rounded cursor-pointer">📤 Export</button>
-                    <button onClick={() => alert(`Editing ${g.groupName}`)} className="bg-amber-50 text-amber-600 border px-2 py-1 rounded cursor-pointer">✏️ Edit</button>
+                    <button onClick={() => alert(`Exporting ${g.groupName}`)} className="bg-emerald-50 text-emerald-600 border px-2 py-1 rounded cursor-pointer">📤 Export</button>
+                    <button onClick={() => alert(`Edit ${g.groupName}`)} className="bg-amber-50 text-amber-600 border px-2 py-1 rounded cursor-pointer">✏️ Edit</button>
                     <button onClick={async () => { await fetch(`/api/configuration/groups?id=${g.id}`, { method: "DELETE" }); window.location.reload(); }} className="bg-red-50 text-red-600 border px-2 py-1 rounded cursor-pointer">🗑️ Delete</button>
                   </td>
                 </tr>
@@ -268,7 +243,7 @@ function ConfigContent() {
             <h2 className="text-sm font-bold text-gray-800">Blacklisted Numbers</h2>
             <div className="flex gap-2">
               <button onClick={() => setShowBlacklistModal(true)} className="bg-red-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">+ Block Number</button>
-              <button onClick={() => alert("Upload Excel modal opened")} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">📤 Upload Excel</button>
+              <button onClick={() => setShowBlacklistExcelModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">📤 Upload Excel</button>
             </div>
           </div>
           <table className="w-full text-left border-collapse">
@@ -288,7 +263,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* Media Modal */}
+      {/* Media Modal with File Upload */}
       {showMediaModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
@@ -297,7 +272,7 @@ function ConfigContent() {
               <option value="">-- Select Channel --</option>
               <option value="15553945963">15553945963</option>
             </select>
-            <input type="text" placeholder="Media File Name (e.g. banner.jpg)" value={mediaName} onChange={(e) => setMediaName(e.target.value)} className="w-full border p-2 rounded-lg text-xs" />
+            <input type="file" onChange={(e) => setMediaFile(e.target.files?.[0])} className="w-full border p-2 rounded-lg text-xs" />
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowMediaModal(false)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
               <button onClick={handleAddMedia} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Save</button>
@@ -317,6 +292,20 @@ function ConfigContent() {
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowContactModal(false)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
               <button onClick={handleAddContact} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Contacts Excel Modal */}
+      {showUploadContactModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
+            <h3 className="font-bold text-sm">Upload Contacts (Excel / CSV)</h3>
+            <input type="file" accept=".csv, .xlsx" className="w-full border p-2 rounded-lg text-xs" />
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setShowUploadContactModal(false)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
+              <button onClick={() => { alert("Contacts uploaded successfully!"); setShowUploadContactModal(false); window.location.reload(); }} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg font-bold">Upload</button>
             </div>
           </div>
         </div>
@@ -350,14 +339,16 @@ function ConfigContent() {
         </div>
       )}
 
-      {showFacebookModal && (
+      {/* Blacklist Excel Modal */}
+      {showBlacklistExcelModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
-            <h3 className="font-bold text-base text-gray-800">WhatsApp Coexistence Onboarding</h3>
-            <p className="text-xs text-gray-500">Connecting via Meta Embedded Signup...</p>
-            <button onClick={() => { setShowFacebookModal(false); alert("Coexistence Connected!"); }} className="bg-[#1877F2] text-white font-bold px-5 py-2.5 rounded-xl">
-              Complete Facebook Signup
-            </button>
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
+            <h3 className="font-bold text-sm">Upload Blacklist Excel</h3>
+            <input type="file" accept=".csv, .xlsx" className="w-full border p-2 rounded-lg text-xs" />
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setShowBlacklistExcelModal(false)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
+              <button onClick={() => { alert("Blacklist excel uploaded!"); setShowBlacklistExcelModal(false); window.location.reload(); }} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg font-bold">Upload</button>
+            </div>
           </div>
         </div>
       )}

@@ -16,16 +16,32 @@ function ConfigContent() {
     }
   };
 
+  // Channels State
   const [channels, setChannels] = useState([
     {
       id: 1,
+      wabaNumber: "17114127744",
+      phoneNumberId: "1403660482826321",
+      wabaBusinessId: "1415443266878597",
+      bspName: "BSP-3",
+      messagingLimit: "Checking...",
+      qualityRating: "Checking...",
+      default: true,
+      displayName: "Arvind Seth",
+      configDate: "19 Oct 2026 11:32:15 AM",
+      webhookUrl: "NA",
+      authEnabled: false,
+      webhookType: "Default",
+    },
+    {
+      id: 2,
       wabaNumber: "15553945963",
       phoneNumberId: "1384456657081014",
       wabaBusinessId: "28402710282733872",
       bspName: "BSP-3",
-      messagingLimit: "2000 | TIER_250",
-      qualityRating: "HIGH | VERIFIED",
-      default: true,
+      messagingLimit: "Checking...",
+      qualityRating: "Checking...",
+      default: false,
       displayName: "Active-08",
       configDate: "06 Oct 2026 11:53:57 AM",
       webhookUrl: "NA",
@@ -34,6 +50,7 @@ function ConfigContent() {
     },
   ]);
 
+  // Media Library State
   const [mediaList, setMediaList] = useState([
     { id: 1, media: "diwali_banner.jpg", url: "https://waba.fortius.in/media/diwali.jpg", wabaNumber: "15553945963", date: "12-Oct-2026" }
   ]);
@@ -41,6 +58,7 @@ function ConfigContent() {
   const [mediaChannel, setMediaChannel] = useState("15553945963");
   const [mediaFile, setMediaFile] = useState<any>(null);
 
+  // Contacts State
   const [contacts, setContacts] = useState([
     { id: 1, number: "919876543210", profileName: "Rahul Sharma", email: "rahul@gmail.com", contactName: "Rahul" }
   ]);
@@ -48,12 +66,21 @@ function ConfigContent() {
   const [showUploadContactModal, setShowUploadContactModal] = useState(false);
   const [contactData, setContactData] = useState({ name: "", number: "", email: "" });
 
+  // Groups State & Modals
   const [groups, setGroups] = useState([
     { id: 1, name: "VIP Broadcast Group", totalContacts: 45 }
   ]);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
+  
+  // Group Action Modals
+  const [manageGroupObj, setManageGroupObj] = useState<any>(null);
+  const [importGroupObj, setImportGroupObj] = useState<any>(null);
+  const [exportGroupObj, setExportGroupObj] = useState<any>(null);
+  const [editGroupObj, setEditGroupObj] = useState<any>(null);
+  const [editGroupNameVal, setEditGroupNameVal] = useState("");
 
+  // Blacklist State
   const [blacklist, setBlacklist] = useState([
     { id: 1, number: "919999888777", date: "10-Oct-2026" }
   ]);
@@ -61,11 +88,13 @@ function ConfigContent() {
   const [blacklistInput, setBlacklistInput] = useState("");
   const [showBlacklistExcelModal, setShowBlacklistExcelModal] = useState(false);
 
+  // Facebook Modal (WABA Register & Coexistence)
   const [showFacebookModal, setShowFacebookModal] = useState(false);
   const [companyWebsite, setCompanyWebsite] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Webhook Modal
   const [selectedChannel, setSelectedChannel] = useState<any>(null);
   const [showWebhookModal, setShowWebhookModal] = useState(false);
   const [webhookInput, setWebhookInput] = useState("");
@@ -93,7 +122,7 @@ function ConfigContent() {
           webhookType: "Default",
         },
       ]);
-      alert("WhatsApp channel connected successfully via Facebook Embedded Signup!");
+      alert("WhatsApp channel connected successfully!");
     }, 2000);
   };
 
@@ -220,6 +249,16 @@ function ConfigContent() {
         </div>
       )}
 
+      {activeSection === "onboarding" && (
+        <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-6 text-center">
+          <h2 className="text-lg font-bold text-gray-800">WhatsApp Coexistence Onboarding</h2>
+          <p className="text-xs text-gray-500">Connect your existing WhatsApp Business App number with Cloud API instantly.</p>
+          <button onClick={() => setShowFacebookModal(true)} className="bg-[#1877F2] text-white font-bold px-6 py-3 rounded-xl cursor-pointer">
+            Connect WhatsApp with Facebook
+          </button>
+        </div>
+      )}
+
       {activeSection === "media_library" && (
         <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
           <div className="flex justify-between items-center">
@@ -289,10 +328,10 @@ function ConfigContent() {
                   <td className="p-3 font-bold text-emerald-700">{g.name}</td>
                   <td className="p-3 font-semibold">{g.totalContacts}</td>
                   <td className="p-3 flex gap-2">
-                    <button onClick={() => alert(`Managing group: ${g.name}`)} className="bg-slate-100 border px-2 py-1 rounded cursor-pointer font-bold">⚙️ Manage</button>
-                    <button onClick={() => alert(`Importing contacts to ${g.name}`)} className="bg-blue-50 text-blue-600 border px-2 py-1 rounded cursor-pointer font-bold">📥 Import</button>
-                    <button onClick={() => alert(`Exporting contacts of ${g.name}`)} className="bg-emerald-50 text-emerald-600 border px-2 py-1 rounded cursor-pointer font-bold">📤 Export</button>
-                    <button onClick={() => { const newName = prompt("Edit Group Name:", g.name); if(newName) setGroups(groups.map(item => item.id === g.id ? {...item, name: newName} : item)); }} className="bg-amber-50 text-amber-600 border px-2 py-1 rounded cursor-pointer font-bold">✏️ Edit</button>
+                    <button onClick={() => setManageGroupObj(g)} className="bg-slate-100 border px-2 py-1 rounded cursor-pointer font-bold">⚙️ Manage</button>
+                    <button onClick={() => setImportGroupObj(g)} className="bg-blue-50 text-blue-600 border px-2 py-1 rounded cursor-pointer font-bold">📥 Import</button>
+                    <button onClick={() => setExportGroupObj(g)} className="bg-emerald-50 text-emerald-600 border px-2 py-1 rounded cursor-pointer font-bold">📤 Export</button>
+                    <button onClick={() => { setEditGroupObj(g); setEditGroupNameVal(g.name); }} className="bg-amber-50 text-amber-600 border px-2 py-1 rounded cursor-pointer font-bold">✏️ Edit</button>
                     <button onClick={() => setGroups(groups.filter(item => item.id !== g.id))} className="bg-red-50 text-red-600 border px-2 py-1 rounded cursor-pointer font-bold">🗑️ Delete</button>
                   </td>
                 </tr>
@@ -335,6 +374,7 @@ function ConfigContent() {
             <h3 className="font-bold text-sm text-gray-800">Upload Media</h3>
             <select value={mediaChannel} onChange={(e) => setMediaChannel(e.target.value)} className="w-full border p-2 rounded-lg">
               <option value="15553945963">15553945963 (Active-08)</option>
+              <option value="17114127744">17114127744 (Arvind Seth)</option>
             </select>
             <input type="file" onChange={(e) => setMediaFile(e.target.files?.[0])} className="w-full border p-2 rounded-lg" />
             <div className="flex justify-end gap-2 pt-2 border-t">
@@ -389,6 +429,61 @@ function ConfigContent() {
         </div>
       )}
 
+      {/* Manage Group Modal */}
+      {manageGroupObj && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
+            <h3 className="font-bold text-sm text-gray-800">Manage Group: {manageGroupObj.name}</h3>
+            <p className="text-gray-500">Total Contacts: {manageGroupObj.totalContacts}</p>
+            <div className="flex justify-end pt-2 border-t">
+              <button onClick={() => setManageGroupObj(null)} className="bg-slate-800 text-white font-bold px-4 py-1.5 rounded-lg">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Group Modal */}
+      {importGroupObj && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
+            <h3 className="font-bold text-sm text-gray-800">Import Contacts to {importGroupObj.name}</h3>
+            <input type="file" accept=".csv, .xlsx" className="w-full border p-2 rounded-lg" />
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button onClick={() => setImportGroupObj(null)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
+              <button onClick={() => { setImportGroupObj(null); alert("Contacts imported to group successfully!"); }} className="bg-blue-600 text-white font-bold px-4 py-1.5 rounded-lg">Import</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Group Modal */}
+      {exportGroupObj && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
+            <h3 className="font-bold text-sm text-gray-800">Export Group: {exportGroupObj.name}</h3>
+            <p className="text-gray-600">Click below to download group contacts in CSV format.</p>
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button onClick={() => setExportGroupObj(null)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
+              <button onClick={() => { setExportGroupObj(null); alert("Group contacts exported successfully!"); }} className="bg-emerald-600 text-white font-bold px-4 py-1.5 rounded-lg">Download CSV</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Group Modal */}
+      {editGroupObj && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
+            <h3 className="font-bold text-sm text-gray-800">Edit Group Name</h3>
+            <input type="text" value={editGroupNameVal} onChange={(e) => setEditGroupNameVal(e.target.value)} className="w-full border p-2 rounded-lg" />
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button onClick={() => setEditGroupObj(null)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
+              <button onClick={() => { setGroups(groups.map(g => g.id === editGroupObj.id ? {...g, name: editGroupNameVal} : g)); setEditGroupObj(null); alert("Group updated!"); }} className="bg-emerald-600 text-white font-bold px-4 py-1.5 rounded-lg">Update</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Blacklist Modal */}
       {showBlacklistModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -417,7 +512,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* Facebook Signup Modal */}
+      {/* Facebook Signup Modal (WABA Register & Coexistence) */}
       {showFacebookModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 text-xs">

@@ -5,11 +5,10 @@ import LogoutButton from "@/components/LogoutButton";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -22,11 +21,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-gray-50 text-xs font-sans">
-      {/* Sidebar Component */}
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header */}
         <header className="bg-white border-b px-6 py-3 flex justify-between items-center shadow-xs relative">
           <div className="text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg font-mono">
             IP: 171.50.181.171
@@ -34,16 +31,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
+              {/* Top Admin Button */}
               <Link
-                href="/dashboard"
+                href="/admin"
                 className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition"
               >
-                <span>🏠</span> Dashboard
+                <span>⚙️</span> Admin
               </Link>
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs">
+
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs hidden sm:block">
                 ACTUAL: ₹1,234,567,890.00
               </div>
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs">
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs hidden sm:block">
                 VIRTUAL: ₹1,234,567,890.00
               </div>
             </div>
@@ -58,15 +57,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   FI
                 </div>
 
-                <div className="text-right">
+                <div className="text-right hidden sm:block">
                   <div className="font-bold text-gray-800 text-xs">Fortius Infocom</div>
                   <div className="text-[10px] text-gray-400 capitalize">Admin Panel</div>
                 </div>
               </div>
 
-              {/* Dropdown Menu */}
               {dropdownOpen && (
-                <div className="absolute right-0 mt-3 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute right-0 mt-3 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-2 z-50">
                   <Link
                     href="/Client/MyProfile/Index"
                     onClick={() => setDropdownOpen(false)}
@@ -94,7 +92,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
-        {/* Main Dashboard Content */}
         <main className="flex-1 p-6 overflow-y-auto">
           {children}
         </main>

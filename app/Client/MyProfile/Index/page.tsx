@@ -5,9 +5,10 @@ import { useState, useEffect } from "react";
 export default function MyProfilePage() {
   const [activeTab, setActiveTab] = useState<"personal" | "security">("personal");
   
-  // Form states for Personal Info
+  // Super Admin profile states
   const [formData, setFormData] = useState({
     username: "animeshfortius",
+    role: "Super Admin",
     mobile: "919140901457",
     email: "animeshfortius@gmail.com",
     address: "",
@@ -27,7 +28,7 @@ export default function MyProfilePage() {
   });
 
   useEffect(() => {
-    // Fetch logged-in Super Admin details
+    // Fetch Super Admin details from API
     fetch("/api/client/profile")
       .then((res) => res.json())
       .then((data) => {
@@ -35,6 +36,7 @@ export default function MyProfilePage() {
           setFormData((prev) => ({
             ...prev,
             username: data.user.username || data.user.name || "animeshfortius",
+            role: data.user.role || "Super Admin",
             email: data.user.email || "animeshfortius@gmail.com",
             mobile: data.user.phone || "919140901457",
             apiKey: data.user.apiKey || "4p47cb81-10e5-4c82-821c-7862a71c674c",
@@ -52,7 +54,7 @@ export default function MyProfilePage() {
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    alert("Profile details saved successfully!");
+    alert("Super Admin profile details saved successfully!");
   };
 
   const handleUpdateSecurity = (e: React.FormEvent) => {
@@ -66,7 +68,7 @@ export default function MyProfilePage() {
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-gray-500 font-sans text-xs">Loading Profile...</div>;
+    return <div className="p-8 text-center text-gray-500 font-sans text-xs">Loading Admin Profile...</div>;
   }
 
   return (
@@ -78,10 +80,10 @@ export default function MyProfilePage() {
           <div className="bg-white border border-gray-200 rounded-2xl p-6 text-center shadow-xs">
             <div className="relative w-20 h-20 mx-auto mb-3">
               <div className="w-20 h-20 bg-slate-900 text-white rounded-full flex items-center justify-center text-xl font-extrabold shadow">
-                👤
+                👑
               </div>
               <span className="absolute bottom-0 right-0 bg-emerald-500 text-white p-1 rounded-full text-[10px] shadow">
-                📷
+                ✓
               </span>
             </div>
 
@@ -139,8 +141,8 @@ export default function MyProfilePage() {
           {activeTab === "personal" ? (
             <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-xs w-full">
               <div className="border-b pb-4 mb-6">
-                <h2 className="font-bold text-gray-900 text-sm">Personal Information[cite: 2]</h2>
-                <p className="text-gray-400 text-[11px]">Keep your account details up to date[cite: 2].</p>
+                <h2 className="font-bold text-gray-900 text-sm">Personal Information</h2>
+                <p className="text-gray-400 text-[11px]">Keep your Super Admin account details up to date.</p>
               </div>
 
               <form onSubmit={handleSaveProfile} className="space-y-4 w-full">
@@ -253,7 +255,7 @@ export default function MyProfilePage() {
                   />
                   <label htmlFor="notif" className="text-gray-700 font-medium">
                     Enable login notifications via SMS/Email <br />
-                    <span className="text-[10px] text-gray-400">Get alerted every time your account is accessed from a new device[cite: 4].</span>
+                    <span className="text-[10px] text-gray-400">Get alerted every time your account is accessed from a new device.</span>
                   </label>
                 </div>
 
@@ -270,17 +272,17 @@ export default function MyProfilePage() {
           ) : (
             <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-xs w-full">
               <div className="border-b pb-4 mb-6">
-                <h2 className="font-bold text-gray-900 text-sm">Security Settings[cite: 3]</h2>
-                <p className="text-gray-400 text-[11px]">Manage your account access and data delivery[cite: 3].</p>
+                <h2 className="font-bold text-gray-900 text-sm">Security Settings</h2>
+                <p className="text-gray-400 text-[11px]">Manage your Super Admin account access and data delivery.</p>
               </div>
 
               <form onSubmit={handleUpdateSecurity} className="space-y-6 w-full">
                 <div className="space-y-4">
-                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Network Security[cite: 3]</h3>
+                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Network Security</h3>
                   <div className="flex items-center justify-between p-4 border border-gray-100 rounded-xl bg-gray-50">
                     <div>
-                      <div className="font-bold text-gray-800">IP Whitelisting[cite: 3]</div>
-                      <div className="text-[10px] text-gray-400">Restrict account access to specific IP addresses[cite: 3].</div>
+                      <div className="font-bold text-gray-800">IP Whitelisting</div>
+                      <div className="text-[10px] text-gray-400">Restrict account access to specific IP addresses.</div>
                     </div>
                     <input
                       type="checkbox"
@@ -292,11 +294,11 @@ export default function MyProfilePage() {
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Real-Time Integration[cite: 3]</h3>
+                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Real-Time Integration</h3>
                   <div className="flex items-center justify-between p-4 border border-gray-100 rounded-xl bg-gray-50">
                     <div>
-                      <div className="font-bold text-gray-800">DLR Webhook (Push Delivery)[cite: 3]</div>
-                      <div className="text-[10px] text-gray-400">Receive delivery status updates via webhook[cite: 3].</div>
+                      <div className="font-bold text-gray-800">DLR Webhook (Push Delivery)</div>
+                      <div className="text-[10px] text-gray-400">Receive delivery status updates via webhook.</div>
                     </div>
                     <input
                       type="checkbox"
@@ -312,7 +314,7 @@ export default function MyProfilePage() {
                     type="submit"
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow transition flex items-center gap-2"
                   >
-                    <span>✔</span> Update Settings[cite: 3]
+                    <span>✔</span> Update Settings
                   </button>
                 </div>
               </form>

@@ -14,19 +14,6 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto text-sm font-medium">
-        {/* Profile Link */}
-        <Link
-          href="/Client/MyProfile/Index"
-          className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-            pathname === "/Client/MyProfile/Index" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
-          }`}
-        >
-          <span>👤</span>
-          <span>My Profile</span>
-        </Link>
-
-        <div className="pt-2 pb-1 text-[10px] uppercase tracking-wider text-slate-500 px-4 font-bold">Menu</div>
-
         {/* Dashboard */}
         <Link
           href="/dashboard"

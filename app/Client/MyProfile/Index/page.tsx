@@ -5,10 +5,9 @@ import { useState, useEffect } from "react";
 export default function MyProfilePage() {
   const [activeTab, setActiveTab] = useState<"personal" | "security">("personal");
   
-  // Super Admin profile states
+  // Profile states
   const [formData, setFormData] = useState({
     username: "animeshfortius",
-    role: "Super Admin",
     mobile: "919140901457",
     email: "animeshfortius@gmail.com",
     address: "",
@@ -19,16 +18,16 @@ export default function MyProfilePage() {
     loginNotification: false,
   });
 
-  const [loading, setLoading] = useState(true);
-
-  // Security toggles state
+  // Security settings state
   const [securitySettings, setSecuritySettings] = useState({
     ipWhitelisting: false,
     dlrWebhook: false,
   });
 
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    // Fetch Super Admin details from API
+    // Fetch Admin/Super Admin profile details from API
     fetch("/api/client/profile")
       .then((res) => res.json())
       .then((data) => {
@@ -36,7 +35,6 @@ export default function MyProfilePage() {
           setFormData((prev) => ({
             ...prev,
             username: data.user.username || data.user.name || "animeshfortius",
-            role: data.user.role || "Super Admin",
             email: data.user.email || "animeshfortius@gmail.com",
             mobile: data.user.phone || "919140901457",
             apiKey: data.user.apiKey || "4p47cb81-10e5-4c82-821c-7862a71c674c",
@@ -54,7 +52,7 @@ export default function MyProfilePage() {
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    alert("Super Admin profile details saved successfully!");
+    alert("Profile details saved successfully!");
   };
 
   const handleUpdateSecurity = (e: React.FormEvent) => {
@@ -67,8 +65,12 @@ export default function MyProfilePage() {
     alert("API Key copied to clipboard!");
   };
 
+  const handleProfilePicUpload = () => {
+    alert("Profile picture upload dialog opened!");
+  };
+
   if (loading) {
-    return <div className="p-8 text-center text-gray-500 font-sans text-xs">Loading Admin Profile...</div>;
+    return <div className="p-8 text-center text-gray-500 font-sans text-xs">Loading Profile...</div>;
   }
 
   return (
@@ -80,11 +82,16 @@ export default function MyProfilePage() {
           <div className="bg-white border border-gray-200 rounded-2xl p-6 text-center shadow-xs">
             <div className="relative w-20 h-20 mx-auto mb-3">
               <div className="w-20 h-20 bg-slate-900 text-white rounded-full flex items-center justify-center text-xl font-extrabold shadow">
-                👑
+                👤
               </div>
-              <span className="absolute bottom-0 right-0 bg-emerald-500 text-white p-1 rounded-full text-[10px] shadow">
-                ✓
-              </span>
+              <button
+                type="button"
+                onClick={handleProfilePicUpload}
+                className="absolute bottom-0 right-0 bg-emerald-500 hover:bg-emerald-600 text-white p-1.5 rounded-full text-[10px] shadow cursor-pointer transition"
+                title="Update Profile Picture"
+              >
+                📷
+              </button>
             </div>
 
             <h2 className="font-bold text-gray-800 text-sm">{formData.username}</h2>
@@ -105,7 +112,7 @@ export default function MyProfilePage() {
                   : "text-gray-600 hover:bg-gray-50"
               }`}
             >
-              <span>👤</span> Personal Info
+              <span>👤</span> Personal Info[cite: 2]
             </button>
 
             <button
@@ -116,33 +123,33 @@ export default function MyProfilePage() {
                   : "text-gray-600 hover:bg-gray-50"
               }`}
             >
-              <span>🔒</span> Security & Settings
+              <span>🔒</span> Security & Settings[cite: 3]
             </button>
           </div>
 
           {/* Quick Summary Card */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs space-y-3">
             <h3 className="font-bold text-gray-800 flex items-center gap-2">
-              <span>⚡</span> Quick Summary
+              <span>⚡</span> Quick Summary[cite: 3]
             </h3>
             <div className="flex justify-between text-gray-500 border-b pb-2">
-              <span>Member Since</span>
-              <span className="font-semibold text-gray-800">Jun 12, 2026</span>
+              <span>Member Since[cite: 3]</span>
+              <span className="font-semibold text-gray-800">Jun 12, 2026[cite: 3]</span>
             </div>
             <div className="flex justify-between text-gray-500">
-              <span>Valid Until</span>
-              <span className="font-semibold text-rose-600">Dec 31, 2040</span>
+              <span>Valid Until[cite: 3]</span>
+              <span className="font-semibold text-rose-600">Dec 31, 2040[cite: 3]</span>
             </div>
           </div>
         </div>
 
-        {/* Right Content Area (Full Width Expanded) */}
+        {/* Right Content Area */}
         <div className="md:col-span-3">
           {activeTab === "personal" ? (
             <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-xs w-full">
               <div className="border-b pb-4 mb-6">
-                <h2 className="font-bold text-gray-900 text-sm">Personal Information</h2>
-                <p className="text-gray-400 text-[11px]">Keep your Super Admin account details up to date.</p>
+                <h2 className="font-bold text-gray-900 text-sm">Personal Information[cite: 2]</h2>
+                <p className="text-gray-400 text-[11px]">Keep your account details up to date[cite: 2].</p>
               </div>
 
               <form onSubmit={handleSaveProfile} className="space-y-4 w-full">
@@ -238,7 +245,7 @@ export default function MyProfilePage() {
                     <button
                       type="button"
                       onClick={copyApiKey}
-                      className="bg-slate-900 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-slate-800 transition"
+                      className="bg-slate-900 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-slate-800 transition cursor-pointer"
                     >
                       📋
                     </button>
@@ -251,18 +258,18 @@ export default function MyProfilePage() {
                     id="notif"
                     checked={formData.loginNotification}
                     onChange={(e) => setFormData(prev => ({ ...prev, loginNotification: e.target.checked }))}
-                    className="w-4 h-4 text-blue-600 rounded border-gray-300"
+                    className="w-4 h-4 text-blue-600 rounded border-gray-300 cursor-pointer"
                   />
-                  <label htmlFor="notif" className="text-gray-700 font-medium">
-                    Enable login notifications via SMS/Email <br />
-                    <span className="text-[10px] text-gray-400">Get alerted every time your account is accessed from a new device.</span>
+                  <label htmlFor="notif" className="text-gray-700 font-medium cursor-pointer">
+                    Enable login notifications via SMS/Email[cite: 4] <br />
+                    <span className="text-[10px] text-gray-400">Get alerted every time your account is accessed from a new device[cite: 4].</span>
                   </label>
                 </div>
 
                 <div className="flex justify-end pt-4">
                   <button
                     type="submit"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow transition flex items-center gap-2"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow transition flex items-center gap-2 cursor-pointer"
                   >
                     <span>💾</span> Save Profile Details
                   </button>
@@ -272,17 +279,17 @@ export default function MyProfilePage() {
           ) : (
             <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-xs w-full">
               <div className="border-b pb-4 mb-6">
-                <h2 className="font-bold text-gray-900 text-sm">Security Settings</h2>
-                <p className="text-gray-400 text-[11px]">Manage your Super Admin account access and data delivery.</p>
+                <h2 className="font-bold text-gray-900 text-sm">Security Settings[cite: 3]</h2>
+                <p className="text-gray-400 text-[11px]">Manage your account access and data delivery[cite: 3].</p>
               </div>
 
               <form onSubmit={handleUpdateSecurity} className="space-y-6 w-full">
                 <div className="space-y-4">
-                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Network Security</h3>
+                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Network Security[cite: 3]</h3>
                   <div className="flex items-center justify-between p-4 border border-gray-100 rounded-xl bg-gray-50">
                     <div>
-                      <div className="font-bold text-gray-800">IP Whitelisting</div>
-                      <div className="text-[10px] text-gray-400">Restrict account access to specific IP addresses.</div>
+                      <div className="font-bold text-gray-800">IP Whitelisting[cite: 3]</div>
+                      <div className="text-[10px] text-gray-400">Restrict account access to specific IP addresses[cite: 3].</div>
                     </div>
                     <input
                       type="checkbox"
@@ -294,11 +301,11 @@ export default function MyProfilePage() {
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Real-Time Integration</h3>
+                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Real-Time Integration[cite: 3]</h3>
                   <div className="flex items-center justify-between p-4 border border-gray-100 rounded-xl bg-gray-50">
                     <div>
-                      <div className="font-bold text-gray-800">DLR Webhook (Push Delivery)</div>
-                      <div className="text-[10px] text-gray-400">Receive delivery status updates via webhook.</div>
+                      <div className="font-bold text-gray-800">DLR Webhook (Push Delivery)[cite: 3]</div>
+                      <div className="text-[10px] text-gray-400">Receive delivery status updates via webhook[cite: 3].</div>
                     </div>
                     <input
                       type="checkbox"
@@ -312,9 +319,9 @@ export default function MyProfilePage() {
                 <div className="flex justify-end pt-4">
                   <button
                     type="submit"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow transition flex items-center gap-2"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow transition flex items-center gap-2 cursor-pointer"
                   >
-                    <span>✔</span> Update Settings
+                    <span>✔</span> Update Settings[cite: 3]
                   </button>
                 </div>
               </form>

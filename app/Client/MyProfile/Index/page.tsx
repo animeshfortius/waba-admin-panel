@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export default function MyProfilePage() {
   const [activeTab, setActiveTab] = useState<"personal" | "security">("personal");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Profile states
   const [formData, setFormData] = useState({
@@ -16,6 +17,7 @@ export default function MyProfilePage() {
     pinCode: "",
     apiKey: "4p47cb81-10e5-4c82-821c-7862a71c674c",
     loginNotification: false,
+    profilePic: "",
   });
 
   // Security settings state
@@ -27,7 +29,6 @@ export default function MyProfilePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch Admin/Super Admin profile details from API
     fetch("/api/client/profile")
       .then((res) => res.json())
       .then((data) => {
@@ -38,6 +39,7 @@ export default function MyProfilePage() {
             email: data.user.email || "info@fortiusinfocom.com",
             mobile: data.user.phone || "8052058888",
             apiKey: data.user.apiKey || "4p47cb81-10e5-4c82-821c-7862a71c674c",
+            profilePic: data.user.profilePic || "",
           }));
         }
       })
@@ -65,8 +67,16 @@ export default function MyProfilePage() {
     alert("API Key copied to clipboard!");
   };
 
-  const handleProfilePicUpload = () => {
-    alert("Profile picture upload dialog opened!");
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData((prev) => ({ ...prev, profilePic: reader.result as string }));
+        alert("Profile picture updated successfully!");
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   if (loading) {
@@ -74,19 +84,34 @@ export default function MyProfilePage() {
   }
 
   return (
-    <div className="w-full px-4 md:px-8 py-6 font-sans text-xs">
+    <div className="w-full pb-12 font-sans text-xs">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         
         {/* Left Sidebar Profile Card */}
         <div className="md:col-span-1 space-y-4">
           <div className="bg-white border border-gray-200 rounded-2xl p-6 text-center shadow-xs">
             <div className="relative w-20 h-20 mx-auto mb-3">
-              <div className="w-20 h-20 bg-slate-900 text-white rounded-full flex items-center justify-center text-xl font-extrabold shadow">
-                👤
-              </div>
+              {formData.profilePic ? (
+                <img
+                  src={formData.profilePic}
+                  alt="Profile"
+                  className="w-20 h-20 rounded-full object-cover shadow border"
+                />
+              ) : (
+                <div className="w-20 h-20 bg-slate-900 text-white rounded-full flex items-center justify-center text-xl font-extrabold shadow">
+                  👤
+                </div>
+              )}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                className="hidden"
+              />
               <button
                 type="button"
-                onClick={handleProfilePicUpload}
+                onClick={() => fileInputRef.current?.click()}
                 className="absolute bottom-0 right-0 bg-emerald-500 hover:bg-emerald-600 text-white p-1.5 rounded-full text-[10px] shadow cursor-pointer transition"
                 title="Update Profile Picture"
               >
@@ -106,7 +131,7 @@ export default function MyProfilePage() {
           <div className="bg-white border border-gray-200 rounded-2xl p-2 shadow-xs space-y-1">
             <button
               onClick={() => setActiveTab("personal")}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold transition ${
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold transition cursor-pointer ${
                 activeTab === "personal"
                   ? "bg-blue-600 text-white shadow"
                   : "text-gray-600 hover:bg-gray-50"
@@ -117,7 +142,7 @@ export default function MyProfilePage() {
 
             <button
               onClick={() => setActiveTab("security")}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold transition ${
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold transition cursor-pointer ${
                 activeTab === "security"
                   ? "bg-blue-600 text-white shadow"
                   : "text-gray-600 hover:bg-gray-50"

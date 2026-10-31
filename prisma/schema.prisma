@@ -8,26 +8,27 @@ datasource db {
 }
 
 model User {
-  id              String               @id @default(uuid())
+  id              String              @id @default(uuid())
   name            String
-  username        String?              @unique
-  email           String               @unique
+  username        String?             @unique
+  email           String              @unique
   password        String
   phone           String?
   expiryDate      String?
-  role            Role                 @default(USER)
-  walletBalance   Float                @default(0.0)
-  actualBalance   Float                @default(0.0)
-  virtualBalance  Float                @default(0.0)
-  perMsgRate      Float                @default(0.8046)
-  utilityRate     Float                @default(0.1550)
-  serviceRate     Float                @default(0.1550)
-  authRate        Float                @default(0.1550)
+  apiKey          String?
+  role            Role                @default(USER)
+  walletBalance   Float               @default(0.0)
+  actualBalance   Float               @default(0.0)
+  virtualBalance  Float               @default(0.0)
+  perMsgRate      Float               @default(0.8046)
+  utilityRate     Float               @default(0.1550)
+  serviceRate     Float               @default(0.1550)
+  authRate        Float               @default(0.1550)
   createdById     String?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  createdBy       User?                @relation("UserHierarchy", fields: [createdById], references: [id])
-  childUsers      User[]               @relation("UserHierarchy")
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  createdBy       User?               @relation("UserHierarchy", fields: [createdById], references: [id])
+  childUsers      User[]              @relation("UserHierarchy")
   wabaAccounts    WabaAccount[]
   transactions    WalletTransaction[]
 }
@@ -55,12 +56,12 @@ model WabaAccount {
 }
 
 model MediaAsset {
-  id          String   @id @default(uuid())
-  userId      String
-  mediaName   String
-  mediaUrl    String
-  wabaNumber  String
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  mediaName  String
+  mediaUrl   String
+  wabaNumber String
+  createdAt  DateTime @default(now())
 }
 
 model WhatsAppContact {

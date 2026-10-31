@@ -5,7 +5,7 @@ import LogoutButton from "@/components/LogoutButton";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -94,7 +94,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </header>
 
-        {/* Main Admin Content */}
+        {/* Main Dashboard Content */}
         <main className="flex-1 p-6 overflow-y-auto">
           {children}
         </main>

@@ -230,14 +230,12 @@ export default function UserManagementPage() {
   useEffect(() => {
     fetchUsers();
     
-    // Logged-in admin ki ID aur Role localStorage ya session se direct set karein
     const adminRole = localStorage.getItem("userRole") || localStorage.getItem("adminRole") || "SUPER_ADMIN";
     const adminId = localStorage.getItem("userId") || localStorage.getItem("adminId") || "";
     
     setCurrentUserRole(adminRole);
     setCurrentAdminId(adminId);
 
-    // Agar API se bhi fetch karna ho toh:
     fetch("/api/admin/me")
       .then((res) => res.json())
       .then((data) => {
@@ -383,18 +381,10 @@ export default function UserManagementPage() {
     }
   };
 
-  // Delete User Handler Function (Sirf Admin/Super Admin ke liye)
- const handleDeleteUser = async () => {
+  // Delete User Handler Function
+  const handleDeleteUser = async () => {
     if (!selectedUser?.id) return;
     
-    console.log("Deleting User ID:", selectedUser.id);
-    console.log("Requester Admin ID:", currentAdminId);
-
-    if (!currentAdminId) {
-      alert("Error: Admin session ID missing! Please relogin.");
-      return;
-    }
-
     if (!confirm(`Are you sure you want to permanently delete "${selectedUser.name || selectedUser.username}"?`)) return;
 
     try {
@@ -403,7 +393,7 @@ export default function UserManagementPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: selectedUser.id,
-          requesterId: currentAdminId,
+          requesterId: currentAdminId || undefined,
         }),
       });
 
@@ -708,16 +698,14 @@ export default function UserManagementPage() {
                 </div>
 
                 <div className="pt-2 flex justify-between items-center">
-                  {/* SIRF ADMIN / SUPER ADMIN KE LIYE DELETE BUTTON */}
-                  {(currentUserRole === "SUPER_ADMIN" || currentUserRole === "ADMIN") && (
-                    <button
-                      type="button"
-                      onClick={handleDeleteUser}
-                      className="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2.5 rounded-xl shadow cursor-pointer text-xs"
-                    >
-                      🗑️ Delete Account
-                    </button>
-                  )}
+                  {/* DELETE ACCOUNT BUTTON RESTORED */}
+                  <button
+                    type="button"
+                    onClick={handleDeleteUser}
+                    className="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2.5 rounded-xl shadow cursor-pointer text-xs"
+                  >
+                    🗑️ Delete Account
+                  </button>
 
                   <div className="flex space-x-3 ml-auto">
                     <button

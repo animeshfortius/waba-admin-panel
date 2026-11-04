@@ -14,8 +14,8 @@ export async function POST(req: Request) {
       where: { id: requesterId },
     });
 
-    // 2. Strict Permission Check: Sirf SUPER_ADMIN ya ADMIN hi delete kar sakta hai
-    if (!requester || (requester.role !== "SUPER_ADMIN" && requester.role !== "ADMIN")) {
+    // 2. Strict Permission Check: Sirf SUPER_ADMIN hi delete kar sakta hai
+    if (!requester || requester.role !== "SUPER_ADMIN") {
       return NextResponse.json(
         { error: "Access Denied: Aapke paas account delete karne ki authority nahi hai!" },
         { status: 403 }

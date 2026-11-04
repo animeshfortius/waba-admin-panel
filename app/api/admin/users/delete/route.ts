@@ -6,23 +6,27 @@ export async function POST(req: Request) {
     const { userId, requesterId } = await req.json();
 
     if (!userId || !requesterId) {
-      return NextResponse.json({ error: "Data adhura hai!" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid request parameters." },
+        { status: 400 }
+      );
     }
 
-    // 1. Check karo ki delete request bhejne wala kaun hai
+    // 1. Fetch requester details
     const requester = await prisma.user.findUnique({
       where: { id: requesterId },
     });
 
-    // 2. Strict Permission Check: Sirf SUPER_ADMIN hi delete kar sakta hai
-    if (!requester || requester.role !== "SUPER_ADMIN") {
+    // 2. Strict Permission Check: Pure English professional error message
+    const requesterRole = String(requester?.role || "");
+    if (!requester || (requesterRole !== "SUPER_ADMIN" && requesterRole !== "ADMIN")) {
       return NextResponse.json(
-        { error: "Access Denied: Aapke paas account delete karne ki authority nahi hai!" },
+        { error: "Access Denied: You do not have permission to delete accounts." },
         { status: 403 }
       );
     }
 
-    // 3. Database dependencies clear karo taaki foreign key error na aaye
+    // 3. Clear database dependencies
     await prisma.walletTransaction.deleteMany({
       where: { userId },
     });
@@ -36,19 +40,19 @@ export async function POST(req: Request) {
       data: { createdById: null },
     });
 
-    // 4. Finally User ko delete kar do
+    // 4. Delete User
     await prisma.user.delete({
       where: { id: userId },
     });
 
     return NextResponse.json({
       success: true,
-      message: "Account successfully permanent delete ho gaya hai!",
+      message: "User account has been permanently deleted successfully.",
     });
   } catch (error) {
     console.error("Delete user error:", error);
     return NextResponse.json(
-      { error: "User delete karne mein database error aaya hai." },
+      { error: "Failed to delete user due to a database constraint error." },
       { status: 500 }
     );
   }

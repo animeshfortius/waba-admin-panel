@@ -381,34 +381,34 @@ export default function UserManagementPage() {
   };
 
   // Delete User Handler Function (Sirf Admin/Super Admin ke liye)
-  const handleDeleteUser = async () => {
-    if (!selectedUser?.id) return;
-    if (!confirm(`Kya aap sach mein "${selectedUser.name || selectedUser.username}" account ko permanently delete karna chahte hain?`)) return;
+ const handleDeleteUser = async () => {
+  if (!selectedUser?.id) return;
+  if (!confirm(`Are you sure you want to permanently delete "${selectedUser.name || selectedUser.username}"?`)) return;
 
-    try {
-      const res = await fetch("/api/admin/users/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: selectedUser.id,
-          requesterId: currentAdminId,
-        }),
-      });
+  try {
+    const res = await fetch("/api/admin/users/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: selectedUser.id,
+        requesterId: currentAdminId,
+      }),
+    });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
-        alert(data.message || "Account successfully deleted!");
-        setSelectedUser(null);
-        setSearchQuery("");
-        fetchUsers();
-      } else {
-        alert(data.error || "Aapke paas account delete karne ki permission nahi hai.");
-      }
-    } catch (err) {
-      console.error("Delete error:", err);
-      alert("Server se connect nahi ho paya.");
+    const data = await res.json();
+    if (res.ok && data.success) {
+      alert(data.message || "User account deleted successfully.");
+      setSelectedUser(null);
+      setSearchQuery("");
+      fetchUsers();
+    } else {
+      alert(data.error || "Access Denied: You do not have permission to delete accounts.");
     }
-  };
+  } catch (err) {
+    console.error("Delete error:", err);
+    alert("Unable to connect to the server.");
+  }
+};
 
   const handleCreateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

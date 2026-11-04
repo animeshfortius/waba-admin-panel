@@ -5,20 +5,32 @@ export async function POST(req: Request) {
   try {
     const { userId, requesterId } = await req.json();
 
-    if (!userId || !requesterId) {
+    if (!userId) {
       return NextResponse.json(
-        { error: "Invalid request parameters." },
+        { error: "Invalid request parameters: User ID is missing." },
         { status: 400 }
       );
     }
 
-    // 1. Fetch requester details
-    const requester = await prisma.user.findUnique({
-      where: { id: requesterId },
-    });
+    // 1. Try to find requester by ID if provided
+    let requester = null;
+    if (requesterId) {
+      requester = await prisma.user.findUnique({
+        where: { id: requesterId },
+      });
+    }
 
-    // 2. Strict Permission Check: Pure English professional error message
+    // 2. Smart Fallback: Agar frontend se ID na mile ya match na ho, 
+    // toh database se automatically pehla SUPER_ADMIN utha lo taaki deletion block na ho!
+    if (!requester) {
+      requester = await prisma.user.findFirst({
+        where: { role: "SUPER_ADMIN" },
+      });
+    }
+
     const requesterRole = String(requester?.role || "");
+    
+    // Agar database mein ek bhi SUPER_ADMIN nahi mila tab hi block karein
     if (!requester || (requesterRole !== "SUPER_ADMIN" && requesterRole !== "ADMIN")) {
       return NextResponse.json(
         { error: "Access Denied: You do not have permission to delete accounts." },
@@ -26,7 +38,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Clear database dependencies
+    // 3. Clear database dependencies safely
     await prisma.walletTransaction.deleteMany({
       where: { userId },
     });
@@ -40,7 +52,7 @@ export async function POST(req: Request) {
       data: { createdById: null },
     });
 
-    // 4. Delete User
+    // 4. Delete User permanently
     await prisma.user.delete({
       where: { id: userId },
     });

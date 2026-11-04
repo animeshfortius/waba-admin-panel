@@ -229,21 +229,24 @@ export default function UserManagementPage() {
 
   useEffect(() => {
     fetchUsers();
-    // Logged-in admin ki details fetch karein (verification ke liye)
+    
+    // Logged-in admin ki ID aur Role localStorage ya session se direct set karein
+    const adminRole = localStorage.getItem("userRole") || localStorage.getItem("adminRole") || "SUPER_ADMIN";
+    const adminId = localStorage.getItem("userId") || localStorage.getItem("adminId") || "";
+    
+    setCurrentUserRole(adminRole);
+    setCurrentAdminId(adminId);
+
+    // Agar API se bhi fetch karna ho toh:
     fetch("/api/admin/me")
       .then((res) => res.json())
       .then((data) => {
         if (data && data.user) {
-          setCurrentAdminId(data.user.id);
-          setCurrentUserRole(data.user.role);
+          if (data.user.id) setCurrentAdminId(data.user.id);
+          if (data.user.role) setCurrentUserRole(data.user.role);
         }
       })
-      .catch(() => {
-        const role = localStorage.getItem("userRole") || "SUPER_ADMIN";
-        const id = localStorage.getItem("userId") || "";
-        setCurrentUserRole(role);
-        setCurrentAdminId(id);
-      });
+      .catch((err) => console.log("Using local session details", err));
   }, []);
 
   const fetchUsers = async () => {
@@ -382,34 +385,43 @@ export default function UserManagementPage() {
 
   // Delete User Handler Function (Sirf Admin/Super Admin ke liye)
  const handleDeleteUser = async () => {
-  if (!selectedUser?.id) return;
-  if (!confirm(`Are you sure you want to permanently delete "${selectedUser.name || selectedUser.username}"?`)) return;
+    if (!selectedUser?.id) return;
+    
+    console.log("Deleting User ID:", selectedUser.id);
+    console.log("Requester Admin ID:", currentAdminId);
 
-  try {
-    const res = await fetch("/api/admin/users/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: selectedUser.id,
-        requesterId: currentAdminId,
-      }),
-    });
-
-    const data = await res.json();
-    if (res.ok && data.success) {
-      alert(data.message || "User account deleted successfully.");
-      setSelectedUser(null);
-      setSearchQuery("");
-      fetchUsers();
-    } else {
-      alert(data.error || "Access Denied: You do not have permission to delete accounts.");
+    if (!currentAdminId) {
+      alert("Error: Admin session ID missing! Please relogin.");
+      return;
     }
-  } catch (err) {
-    console.error("Delete error:", err);
-    alert("Unable to connect to the server.");
-  }
-};
 
+    if (!confirm(`Are you sure you want to permanently delete "${selectedUser.name || selectedUser.username}"?`)) return;
+
+    try {
+      const res = await fetch("/api/admin/users/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          requesterId: currentAdminId,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert(data.message || "User account deleted successfully.");
+        setSelectedUser(null);
+        setSearchQuery("");
+        fetchUsers();
+      } else {
+        alert(data.error || "Access Denied: You do not have permission to delete accounts.");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Unable to connect to the server.");
+    }
+  };
+  
   const handleCreateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddUserLoading(true);

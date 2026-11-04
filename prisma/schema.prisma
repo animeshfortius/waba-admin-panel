@@ -27,7 +27,7 @@ model User {
   createdById     String?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
-  createdBy       User?               @relation("UserHierarchy", fields: [createdById], references: [id])
+  createdBy       User?               @relation("UserHierarchy", fields: [createdById], references: [id], onDelete: Cascade)
   childUsers      User[]              @relation("UserHierarchy")
   wabaAccounts    WabaAccount[]
   transactions    WalletTransaction[]
@@ -40,19 +40,19 @@ model WalletTransaction {
   type        String
   description String
   createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model WabaAccount {
-  id              String   @id @default(uuid())
-  userId          String
-  wabaId          String   @unique
-  phoneNumberId   String
-  displayPhone    String
-  accessToken     String
-  status          String   @default("ACTIVE")
-  createdAt       DateTime @default(now())
-  user            User     @relation(fields: [userId], references: [id])
+  id             String   @id @default(uuid())
+  userId         String
+  wabaId         String   @unique
+  phoneNumberId  String
+  displayPhone   String
+  accessToken    String
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model MediaAsset {

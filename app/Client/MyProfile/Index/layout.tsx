@@ -81,12 +81,12 @@ export default function ClientProfileLayout({
                   </Link>
 
                   <Link
-                    href="/change-password"
-                    onClick={() => setDropdownOpen(false)}
-                    className="flex items-center gap-3 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 transition"
-                  >
-                    <span>🔑</span> Change Password
-                  </Link>
+  href="/Client/ChangePassword/Index"
+  onClick={() => setDropdownOpen(false)}
+  className="flex items-center gap-3 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 transition"
+>
+  <span>🔑</span> Change Password
+</Link>
 
                   <Link
                     href="#"

@@ -182,6 +182,9 @@ export default function UserManagementPage() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("profile");
 
+  const [currentAdminId, setCurrentAdminId] = useState("");
+  const [currentUserRole, setCurrentUserRole] = useState("");
+
   const [whatsappSettings, setWhatsappSettings] = useState({
     whatsappApiEnabled: true,
     secureReporting: false,
@@ -226,6 +229,21 @@ export default function UserManagementPage() {
 
   useEffect(() => {
     fetchUsers();
+    // Logged-in admin ki details fetch karein (verification ke liye)
+    fetch("/api/admin/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.user) {
+          setCurrentAdminId(data.user.id);
+          setCurrentUserRole(data.user.role);
+        }
+      })
+      .catch(() => {
+        const role = localStorage.getItem("userRole") || "SUPER_ADMIN";
+        const id = localStorage.getItem("userId") || "";
+        setCurrentUserRole(role);
+        setCurrentAdminId(id);
+      });
   }, []);
 
   const fetchUsers = async () => {
@@ -359,6 +377,36 @@ export default function UserManagementPage() {
       }
     } catch (err) {
       console.error("Error updating user:", err);
+    }
+  };
+
+  // Delete User Handler Function (Sirf Admin/Super Admin ke liye)
+  const handleDeleteUser = async () => {
+    if (!selectedUser?.id) return;
+    if (!confirm(`Kya aap sach mein "${selectedUser.name || selectedUser.username}" account ko permanently delete karna chahte hain?`)) return;
+
+    try {
+      const res = await fetch("/api/admin/users/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          requesterId: currentAdminId,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert(data.message || "Account successfully deleted!");
+        setSelectedUser(null);
+        setSearchQuery("");
+        fetchUsers();
+      } else {
+        alert(data.error || "Aapke paas account delete karne ki permission nahi hai.");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Server se connect nahi ho paya.");
     }
   };
 
@@ -647,21 +695,34 @@ export default function UserManagementPage() {
                   </div>
                 </div>
 
-                <div className="pt-2 flex justify-end space-x-3">
-                  <button
-                    type="button"
-                    onClick={handleLoginAsUser}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs flex items-center gap-1.5"
-                  >
-                    🚀 Login as User
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleUpdateSettings}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow cursor-pointer text-xs"
-                  >
-                    💾 Update Settings
-                  </button>
+                <div className="pt-2 flex justify-between items-center">
+                  {/* SIRF ADMIN / SUPER ADMIN KE LIYE DELETE BUTTON */}
+                  {(currentUserRole === "SUPER_ADMIN" || currentUserRole === "ADMIN") && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteUser}
+                      className="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2.5 rounded-xl shadow cursor-pointer text-xs"
+                    >
+                      🗑️ Delete Account
+                    </button>
+                  )}
+
+                  <div className="flex space-x-3 ml-auto">
+                    <button
+                      type="button"
+                      onClick={handleLoginAsUser}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs flex items-center gap-1.5"
+                    >
+                      🚀 Login as User
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleUpdateSettings}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow cursor-pointer text-xs"
+                    >
+                      💾 Update Settings
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

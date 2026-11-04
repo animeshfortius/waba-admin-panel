@@ -57,12 +57,12 @@ export default function ClientProfileLayout({
                 className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition select-none"
               >
                 <div className="w-9 h-9 bg-slate-900 text-white font-extrabold rounded-full flex items-center justify-center text-xs shadow tracking-wider">
-                  👤
+                  FI
                 </div>
 
                 <div className="text-right hidden sm:block">
-                  <div className="font-bold text-gray-800 text-xs">animeshfortius</div>
-                  <div className="text-[10px] text-gray-400 capitalize">Reseller</div>
+                  <div className="font-bold text-gray-800 text-xs">Fortius Infocom</div>
+                  <div className="text-[10px] text-gray-400 capitalize">Admin Panel</div>
                 </div>
               </div>
 

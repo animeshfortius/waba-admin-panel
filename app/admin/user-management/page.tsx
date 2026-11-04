@@ -180,15 +180,26 @@ export default function UserManagementPage() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("profile");
+  const [whatsappSubTab, setWhatsappSubTab] = useState("channelList");
 
   const [currentAdminId, setCurrentAdminId] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState("");
 
   const [wabaChannels, setWabaChannels] = useState<any[]>([]);
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<any>(null);
   const [webhookUrlInput, setWebhookUrlInput] = useState("");
   const [tpsInput, setTpsInput] = useState("50");
+
+  const [whatsappSettings, setWhatsappSettings] = useState({
+    whatsappApiEnabled: true,
+    secureReporting: false,
+    internationalAccount: false,
+    chatbotEnabled: true,
+    agentEnabled: false,
+  });
 
   const [showFundModal, setShowFundModal] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
@@ -738,55 +749,108 @@ export default function UserManagementPage() {
           )}
 
           {activeTab === "whatsapp" && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center border-b pb-3">
-                <h3 className="font-bold text-gray-800 text-sm">Channel List[cite: 6]</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {/* Left Sidebar for WhatsApp Tab */}
+              <div className="border-r pr-4 space-y-2 text-gray-700 font-semibold">
+                <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-2">Account Settings[cite: 9]</div>
+                <button type="button" onClick={() => setWhatsappSubTab("accountSettings")} className={`w-full text-left px-3 py-2 rounded-lg ${whatsappSubTab === "accountSettings" ? "bg-emerald-50 text-emerald-700 font-bold" : "hover:bg-gray-50"}`}>Account Settings[cite: 9]</button>
+                <button type="button" onClick={() => setWhatsappSubTab("messageManagement")} className={`w-full text-left px-3 py-2 rounded-lg ${whatsappSubTab === "messageManagement" ? "bg-emerald-50 text-emerald-700 font-bold" : "hover:bg-gray-50"}`}>Message Management[cite: 9]</button>
+                <button type="button" onClick={() => setWhatsappSubTab("channelList")} className={`w-full text-left px-3 py-2 rounded-lg ${whatsappSubTab === "channelList" ? "bg-emerald-50 text-emerald-700 font-bold" : "hover:bg-gray-50"}`}>Channel List[cite: 9]</button>
+                <button type="button" onClick={() => setWhatsappSubTab("bspConfig")} className={`w-full text-left px-3 py-2 rounded-lg ${whatsappSubTab === "bspConfig" ? "bg-emerald-50 text-emerald-700 font-bold" : "hover:bg-gray-50"}`}>BSP Configuration[cite: 9]</button>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-500 uppercase border-b font-bold text-[10px]">
-                      <th className="p-3">User Name[cite: 6]</th>
-                      <th className="p-3">WABA Details[cite: 6]</th>
-                      <th className="p-3">Default[cite: 6]</th>
-                      <th className="p-3">Display Name[cite: 6]</th>
-                      <th className="p-3">ConfigureDate[cite: 6]</th>
-                      <th className="p-3">Webhook Url[cite: 6]</th>
-                      <th className="p-3">TPS[cite: 6]</th>
-                      <th className="p-3 text-right">Action[cite: 6]</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {wabaChannels.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="p-8 text-center text-gray-400">No channels found</td>
-                      </tr>
-                    ) : (
-                      wabaChannels.map((ch: any) => (
-                        <tr key={ch.id} className="hover:bg-gray-50 text-gray-700 font-medium">
-                          <td className="p-3 font-bold text-gray-800">{selectedUser.username || selectedUser.name}[cite: 6]</td>
-                          <td className="p-3 font-mono text-[11px] leading-relaxed">
-                            WABA Number: {ch.wabaNumber || "17118223955"} <br />
-                            Phone ID: {ch.phoneId || "1392605743942712"} <br />
-                            Waba ID: {ch.wabaId || "1606011797347774"}[cite: 6]
-                          </td>
-                          <td className="p-3">
-                            <span className="bg-gray-100 border px-2.5 py-1 rounded-full text-[10px] font-semibold">● Set Default[cite: 6]</span>
-                          </td>
-                          <td className="p-3 font-semibold text-gray-800">{ch.displayName || "Active-08"}[cite: 6]</td>
-                          <td className="p-3 font-mono text-[11px] text-gray-500">{ch.configureDate || "02 Nov 2026 11:40:39 AM"}[cite: 6]</td>
-                          <td className="p-3 text-gray-500">{ch.webhookUrl || "NA"}[cite: 6]</td>
-                          <td className="p-3 font-bold text-gray-800">{ch.tps || 50}[cite: 6]</td>
-                          <td className="p-3 text-right space-x-1">
-                            <button type="button" onClick={() => { setSelectedChannel(ch); setWebhookUrlInput(ch.webhookUrl === "NA" ? "" : ch.webhookUrl); setTpsInput(ch.tps || "50"); setShowConfigModal(true); }} className="p-1.5 bg-blue-50 text-blue-600 rounded border hover:bg-blue-100" title="Configure">⚙️</button>
-                            <button type="button" onClick={() => alert("Channel refreshed")} className="p-1.5 bg-emerald-50 text-emerald-600 rounded border hover:bg-emerald-100" title="Sync">🔄</button>
-                            <button type="button" onClick={() => alert("Channel deleted")} className="p-1.5 bg-rose-50 text-rose-600 rounded border hover:bg-rose-100" title="Delete">🗑️</button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+
+              {/* Main Content Area for WhatsApp Sub-tabs */}
+              <div className="md:col-span-3 space-y-4">
+                {whatsappSubTab === "channelList" && (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center border-b pb-3">
+                      <h3 className="font-bold text-gray-800 text-sm">Channel List[cite: 9]</h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-gray-50 text-gray-500 uppercase border-b font-bold text-[10px]">
+                            <th className="p-3">User Name[cite: 9]</th>
+                            <th className="p-3">WABA Details[cite: 9]</th>
+                            <th className="p-3">Default[cite: 9]</th>
+                            <th className="p-3">Display Name[cite: 9]</th>
+                            <th className="p-3">ConfigureDate[cite: 9]</th>
+                            <th className="p-3">Webhook Url[cite: 9]</th>
+                            <th className="p-3">TPS[cite: 9]</th>
+                            <th className="p-3 text-right">Action[cite: 9]</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {wabaChannels.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} className="p-8 text-center text-gray-400">No channels found</td>
+                            </tr>
+                          ) : (
+                            wabaChannels.map((ch: any) => (
+                              <tr key={ch.id} className="hover:bg-gray-50 text-gray-700 font-medium">
+                                <td className="p-3 font-bold text-gray-800">{selectedUser.username || selectedUser.name}[cite: 9]</td>
+                                <td className="p-3 font-mono text-[11px] leading-relaxed">
+                                  WABA Number: {ch.wabaNumber || "17118223955"} <br />
+                                  Phone ID: {ch.phoneId || "1392605743942712"} <br />
+                                  Waba ID: {ch.wabaId || "1606011797347774"}[cite: 9]
+                                </td>
+                                <td className="p-3">
+                                  <span className="bg-gray-100 border px-2.5 py-1 rounded-full text-[10px] font-semibold">● Set Default[cite: 9]</span>
+                                </td>
+                                <td className="p-3 font-semibold text-gray-800">{ch.displayName || "Active-08"}[cite: 9]</td>
+                                <td className="p-3 font-mono text-[11px] text-gray-500">{ch.configureDate || "02 Nov 2026 11:40:39 AM"}[cite: 9]</td>
+                                <td className="p-3 text-gray-500">{ch.webhookUrl || "NA"}[cite: 9]</td>
+                                <td className="p-3 font-bold text-gray-800">{ch.tps || 50}[cite: 9]</td>
+                                <td className="p-3 text-right space-x-1 whitespace-nowrap">
+                                  {/* 4 Action Buttons */}
+                                  <button type="button" onClick={() => { setSelectedChannel(ch); setWebhookUrlInput(ch.webhookUrl === "NA" ? "" : ch.webhookUrl); setTpsInput(ch.tps || "50"); setShowConfigModal(true); }} className="p-1.5 bg-blue-50 text-blue-600 rounded border hover:bg-blue-100" title="Configure">⚙️[cite: 9]</button>
+                                  <button type="button" onClick={() => setShowSyncModal(true)} className="p-1.5 bg-emerald-50 text-emerald-600 rounded border hover:bg-emerald-100" title="Sync / Repush">🔄[cite: 9, 11]</button>
+                                  <button type="button" onClick={() => setShowDeleteModal(true)} className="p-1.5 bg-rose-50 text-rose-600 rounded border hover:bg-rose-100" title="Delete Channel">🗑️[cite: 9, 13]</button>
+                                  <button type="button" onClick={() => alert("Chat / Session active")} className="p-1.5 bg-green-50 text-green-600 rounded border hover:bg-green-100 font-bold" title="Chat Control">C[cite: 9]</button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {whatsappSubTab === "accountSettings" && (
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-gray-800 text-sm border-b pb-2">WhatsApp Account Settings</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                        <span className="font-semibold text-gray-700">WhatsApp API Enabled</span>
+                        <input type="checkbox" checked={whatsappSettings.whatsappApiEnabled} onChange={(e) => setWhatsappSettings({ ...whatsappSettings, whatsappApiEnabled: e.target.checked })} className="toggle toggle-success cursor-pointer" />
+                      </div>
+                      <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                        <span className="font-semibold text-gray-700">Chatbot Enabled / Disabled</span>
+                        <input type="checkbox" checked={whatsappSettings.chatbotEnabled} onChange={(e) => setWhatsappSettings({ ...whatsappSettings, chatbotEnabled: e.target.checked })} className="toggle toggle-success cursor-pointer" />
+                      </div>
+                      <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                        <span className="font-semibold text-gray-700">Secure Reporting</span>
+                        <input type="checkbox" checked={whatsappSettings.secureReporting} onChange={(e) => setWhatsappSettings({ ...whatsappSettings, secureReporting: e.target.checked })} className="toggle toggle-success cursor-pointer" />
+                      </div>
+                      <div className="flex items-center justify-between border p-4 rounded-xl bg-gray-50">
+                        <span className="font-semibold text-gray-700">International Account</span>
+                        <input type="checkbox" checked={whatsappSettings.internationalAccount} onChange={(e) => setWhatsappSettings({ ...whatsappSettings, internationalAccount: e.target.checked })} className="toggle toggle-success cursor-pointer" />
+                      </div>
+                    </div>
+                    <div className="flex justify-end pt-2">
+                      <button type="button" onClick={() => alert("WhatsApp Account Settings saved successfully!")} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow text-xs">💾 Save WhatsApp Settings</button>
+                    </div>
+                  </div>
+                )}
+
+                {whatsappSubTab === "messageManagement" && (
+                  <div className="p-6 border rounded-xl bg-gray-50 text-center text-gray-500 font-medium">Message Management configuration view[cite: 9]</div>
+                )}
+
+                {whatsappSubTab === "bspConfig" && (
+                  <div className="p-6 border rounded-xl bg-gray-50 text-center text-gray-500 font-medium">BSP Configuration view[cite: 9]</div>
+                )}
               </div>
             </div>
           )}
@@ -958,41 +1022,76 @@ export default function UserManagementPage() {
         </div>
       )}
 
+      {/* Configure Modal */}
       {showConfigModal && selectedChannel && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-lg font-bold text-gray-800">Configure Channel ({selectedChannel.displayName})[cite: 7]</h3>
+              <h3 className="text-lg font-bold text-gray-800">Configure Channel ({selectedChannel.displayName})[cite: 10]</h3>
               <button type="button" onClick={() => setShowConfigModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-gray-600">Webhook URL[cite: 7]</label>
+                <label className="text-xs font-semibold text-gray-600">Webhook URL[cite: 10]</label>
                 <input type="text" value={webhookUrlInput} onChange={(e) => setWebhookUrlInput(e.target.value)} placeholder="Enter Webhook URL" className="w-full border rounded-xl p-3 text-xs mt-1 bg-gray-50 focus:outline-none" />
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-600">TPS[cite: 7]</label>
+                <label className="text-xs font-semibold text-gray-600">TPS[cite: 10]</label>
                 <input type="number" value={tpsInput} onChange={(e) => setTpsInput(e.target.value)} className="w-full border rounded-xl p-3 text-xs mt-1 bg-gray-50 focus:outline-none font-mono" />
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-600">Select User Webhook Type[cite: 7]</label>
+                <label className="text-xs font-semibold text-gray-600">Select User Webhook Type[cite: 10]</label>
                 <select className="w-full border rounded-xl p-3 text-xs mt-1 bg-gray-50 focus:outline-none font-medium">
-                  <option value="Default">Default[cite: 7]</option>
+                  <option value="Default">Default[cite: 10]</option>
                   <option value="Custom">Custom</option>
                 </select>
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-600">Wrapper Client[cite: 7]</label>
+                <label className="text-xs font-semibold text-gray-600">Wrapper Client[cite: 10]</label>
                 <select className="w-full border rounded-xl p-3 text-xs mt-1 bg-gray-50 focus:outline-none font-medium">
-                  <option value="Disabled">Disabled (Panel Mode)[cite: 7]</option>
+                  <option value="Disabled">Disabled (Panel Mode)[cite: 10]</option>
                   <option value="Enabled">Enabled</option>
                 </select>
-                <p className="text-[10px] text-gray-400 mt-1">When enabled, incoming webhooks will NOT be processed in panel.[cite: 7]</p>
+                <p className="text-[10px] text-gray-400 mt-1">When enabled, incoming webhooks will NOT be processed in panel.[cite: 10]</p>
               </div>
             </div>
             <div className="flex justify-end space-x-3 pt-3 border-t">
-              <button type="button" onClick={() => setShowConfigModal(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium">Cancel[cite: 7]</button>
-              <button type="button" onClick={() => { alert("Configuration saved successfully!"); setShowConfigModal(false); }} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold">Save[cite: 7]</button>
+              <button type="button" onClick={() => setShowConfigModal(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium">Cancel[cite: 10]</button>
+              <button type="button" onClick={() => { alert("Configuration saved successfully!"); setShowConfigModal(false); }} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold">Save[cite: 10]</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sync / Repush Modal */}
+      {showSyncModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-lg font-bold text-gray-800">Sync Channel</h3>
+              <button type="button" onClick={() => setShowSyncModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
+            </div>
+            <div className="space-y-3">
+              <p className="text-xs text-gray-600">Today (04-11-2026)[cite: 11]</p>
+            </div>
+            <div className="flex justify-end space-x-3 pt-3 border-t">
+              <button type="button" onClick={() => setShowSyncModal(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium">Close[cite: 11]</button>
+              <button type="button" onClick={() => { alert("Channel repushed successfully!"); setShowSyncModal(false); }} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold">▶ Repush[cite: 11]</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Channel Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
+            <div className="text-3xl">⚠️[cite: 13]</div>
+            <h3 className="text-lg font-bold text-gray-800">Are you sure?[cite: 13]</h3>
+            <p className="text-xs text-gray-600">Do you really want to delete this channel?[cite: 13]</p>
+            <div className="flex justify-center space-x-3 pt-3 border-t">
+              <button type="button" onClick={() => setShowDeleteModal(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium">Cancel[cite: 13]</button>
+              <button type="button" onClick={() => { alert("Channel deleted successfully!"); setShowDeleteModal(false); }} className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold">Yes, delete![cite: 13]</button>
             </div>
           </div>
         </div>

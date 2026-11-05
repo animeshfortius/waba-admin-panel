@@ -187,7 +187,7 @@ export default function UserManagementPage() {
 
   const [wabaChannels, setWabaChannels] = useState<any[]>([]);
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [showRegisterApiModal, setShowRegisterApiModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<any>(null);
   const [webhookUrlInput, setWebhookUrlInput] = useState("");
@@ -804,8 +804,8 @@ export default function UserManagementPage() {
                                 <td className="p-3 text-right space-x-1 whitespace-nowrap">
                                   {/* 4 Action Buttons */}
                                   <button type="button" onClick={() => { setSelectedChannel(ch); setWebhookUrlInput(ch.webhookUrl === "NA" ? "" : ch.webhookUrl); setTpsInput(ch.tps || "50"); setShowConfigModal(true); }} className="p-1.5 bg-blue-50 text-blue-600 rounded border hover:bg-blue-100" title="Configure">⚙️</button>
-                                  <button type="button" onClick={() => setShowSyncModal(true)} className="p-1.5 bg-emerald-50 text-emerald-600 rounded border hover:bg-emerald-100" title="Sync / Repush">🔄</button>
                                   <button type="button" onClick={() => setShowDeleteModal(true)} className="p-1.5 bg-rose-50 text-rose-600 rounded border hover:bg-rose-100" title="Delete Channel">🗑️</button>
+                                  <button type="button" onClick={() => { setSelectedChannel(ch); setShowRegisterApiModal(true); }} className="p-1.5 bg-amber-50 text-amber-600 rounded border hover:bg-amber-100 font-bold" title="Register API">🔑</button>
                                   <button type="button" onClick={() => alert("Chat / Session active")} className="p-1.5 bg-green-50 text-green-600 rounded border hover:bg-green-100 font-bold" title="Chat Control">C</button>
                                 </td>
                               </tr>
@@ -1063,20 +1063,37 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* Sync / Repush Modal */}
-      {showSyncModal && (
+      {/* Register API Confirmation Modal (Key Icon) */}
+      {showRegisterApiModal && selectedChannel && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-lg font-bold text-gray-800">Sync Channel</h3>
-              <button type="button" onClick={() => setShowSyncModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
-            </div>
-            <div className="space-y-3">
-              <p className="text-xs text-gray-600">Today (04-11-2026)</p>
-            </div>
-            <div className="flex justify-end space-x-3 pt-3 border-t">
-              <button type="button" onClick={() => setShowSyncModal(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium">Close</button>
-              <button type="button" onClick={() => { alert("Channel repushed successfully!"); setShowSyncModal(false); }} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold">▶ Repush</button>
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
+            <div className="text-3xl">🔑</div>
+            <h3 className="text-lg font-bold text-gray-800">Are you sure?</h3>
+            <p className="text-xs text-gray-600">Do you really want to call Register API against this number?</p>
+            <div className="flex justify-center space-x-3 pt-3 border-t">
+              <button type="button" onClick={() => setShowRegisterApiModal(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium">Cancel</button>
+              <button type="button" onClick={async () => {
+                try {
+                  const res = await fetch("/api/admin/waba-accounts/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      wabaNumber: selectedChannel?.wabaNumber,
+                      phoneId: selectedChannel?.phoneId,
+                    }),
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    alert("✅ " + data.message);
+                  } else {
+                    alert("❌ Error: " + (data.error || "Failed to register"));
+                  }
+                } catch (err) {
+                  alert("Network error calling Register API");
+                } finally {
+                  setShowRegisterApiModal(false);
+                }
+              }} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow">Yes, Register it!</button>
             </div>
           </div>
         </div>
@@ -1238,4 +1255,3 @@ export default function UserManagementPage() {
     </div>
   );
 }
-

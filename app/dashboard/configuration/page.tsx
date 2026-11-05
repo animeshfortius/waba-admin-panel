@@ -182,7 +182,7 @@ function ConfigContent() {
         alert("User cancelled login or did not fully authorize.");
       }
     }, {
-      config_id: '1405995811146008',
+      config_id: '891599173270116',
       response_type: 'code',
       override_default_response_type: true,
       extras: {

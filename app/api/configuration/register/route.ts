@@ -8,17 +8,14 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { code, website, name, wabaId, phoneNumberId, displayPhone, accessToken } = body;
 
-    if (!code && !wabaId && !phoneNumberId) {
+    // STRICT VALIDATION: Koi bhi dummy fallback nahi! Meta se real ID aana mandatory hai.
+    if (!wabaId || !phoneNumberId) {
+      console.error("Meta Session Missing Payload:", body);
       return NextResponse.json(
-        { error: "Meta WhatsApp authorization details are missing." },
+        { error: "Meta WhatsApp session details (WABA ID / Phone ID) nahi mili. Kripya popup dobara khol kar number select karein." },
         { status: 400 }
       );
     }
-
-    const timestamp = Date.now();
-    const finalWabaId = wabaId || `WABA_${timestamp}`;
-    const finalPhoneId = phoneNumberId || `PHONE_${timestamp}`;
-    const finalDisplayPhone = displayPhone || "+91 98765 43210";
 
     // Get or create default user
     let defaultUser = await prisma.user.findFirst();
@@ -32,15 +29,37 @@ export async function POST(request: Request) {
       });
     }
 
-    // displayName ko yahan se completely remove kar diya hai taaki database column mismatch error dobara kabhi na aaye
+    // Check karein ki kya yeh WABA ID pehle se registered hai
+    const existingAccount = await prisma.wabaAccount.findUnique({
+      where: { wabaId: wabaId },
+    });
+
+    if (existingAccount) {
+      // Agar pehle se hai toh update kar do real data ke sath
+      const updatedAccount = await prisma.wabaAccount.update({
+        where: { wabaId: wabaId },
+        data: {
+          phoneNumberId: phoneNumberId,
+          displayPhone: displayPhone || existingAccount.displayPhone,
+          accessToken: accessToken || code || existingAccount.accessToken,
+          displayName: name || existingAccount.displayName,
+          website: website || existingAccount.website,
+          status: "ACTIVE",
+        },
+      });
+      return NextResponse.json({ success: true, data: updatedAccount });
+    }
+
+    // Naya real account create karo (No Dummy Values)
     const newAccount = await prisma.wabaAccount.create({
       data: {
         userId: defaultUser.id,
-        wabaId: finalWabaId,
-        phoneNumberId: finalPhoneId,
-        displayPhone: finalDisplayPhone,
+        wabaId: wabaId,
+        phoneNumberId: phoneNumberId,
+        displayPhone: displayPhone || "",
         accessToken: accessToken || code || "",
         status: "ACTIVE",
+        displayName: name || "WhatsApp Business",
         website: website || "",
       },
     });

@@ -3,6 +3,14 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
+// Declare global FB object for TypeScript
+declare global {
+  interface Window {
+    FB: any;
+    fbAsyncInit: () => void;
+  }
+}
+
 function ConfigContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -53,6 +61,24 @@ function ConfigContent() {
   const [companyName, setCompanyName] = useState("");
 
   useEffect(() => {
+    // Initialize Facebook SDK
+    window.fbAsyncInit = function () {
+      window.FB.init({
+        appId: '1405995811146008', // Aapki valid Meta App ID
+        cookie: true,
+        xfbml: true,
+        version: 'v18.0'
+      });
+    };
+
+    (function (d, s, id) {
+      var js: any, fjs = d.getElementsByTagName(s)[0];
+      if (d.getElementById(id)) return;
+      js = d.createElement(s); js.id = id;
+      js.src = "https://connect.facebook.net/en_US/sdk.js";
+      fjs.parentNode.insertBefore(js, fjs);
+    }(document, 'script', 'facebook-jssdk'));
+
     const savedGroupsList = localStorage.getItem("configuration_groups_list");
     if (savedGroupsList) {
       setGroups(JSON.parse(savedGroupsList));
@@ -120,26 +146,48 @@ function ConfigContent() {
     alert("Number removed from group!");
   };
 
+  // Official Meta Embedded Signup SDK Handler
   const handleFacebookSignup = () => {
-    const appId = "1405995811146008";
-    const redirectUri = encodeURIComponent(window.location.origin + "/dashboard/configuration?tab=waba_channels");
-    const fbUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=whatsapp_business_management,whatsapp_business_messaging&response_type=code`;
+    if (!window.FB) {
+      alert("Facebook SDK is still loading. Please try again in a moment.");
+      return;
+    }
 
-    const width = 600;
-    const height = 700;
-    const left = window.innerWidth / 2 - width / 2;
-    const top = window.innerHeight / 2 - height / 2;
-
-    const popup = window.open(fbUrl, "MetaEmbeddedSignup", `width=${width},height=${height},top=${top},left=${left}`);
     setShowFacebookModal(false);
 
-    const timer = setInterval(() => {
-      if (popup && popup.closed) {
-        clearInterval(timer);
-        alert("Meta Embedded Signup completed successfully!");
-        window.location.reload();
+    window.FB.login(function (response: any) {
+      if (response.authResponse) {
+        const code = response.authResponse.code || response.authResponse.accessToken;
+        
+        // Send authorization code / token to backend to register channel & fetch WABA details
+        fetch("/api/configuration/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, website: companyWebsite, name: companyName })
+        })
+        .then(res => res.json())
+        .then(data => {
+          alert("WhatsApp Coexistence & Embedded Signup completed successfully!");
+          window.location.reload();
+        })
+        .catch(err => {
+          console.error(err);
+          alert("Error registering channel details.");
+        });
+
+      } else {
+        alert("User cancelled login or did not fully authorize.");
       }
-    }, 1000);
+    }, {
+      config_id: '1405995811146008', // Aapki Meta Business Suite ki Config ID ya App ID
+      response_type: 'code',
+      override_default_response_type: true,
+      extras: {
+        setup: {},
+        featureType: '',
+        sessionInfoVersion: 2
+      }
+    });
   };
 
   return (
@@ -223,10 +271,10 @@ function ConfigContent() {
               <tbody className="divide-y text-gray-700 font-medium">
                 {channels.map((ch) => (
                   <tr key={ch.id} className="hover:bg-slate-50">
-                    <td className="p-3 font-semibold text-slate-800">{ch.displayPhone}</td>
-                    <td className="p-3 font-mono">{ch.phoneNumberId}</td>
-                    <td className="p-3 font-mono">{ch.wabaId}</td>
-                    <td className="p-3 text-emerald-600 font-bold">{ch.status}</td>
+                    <td className="p-3 font-semibold text-slate-800">{ch.displayPhone || ch.display_phone_number}</td>
+                    <td className="p-3 font-mono">{ch.phoneNumberId || ch.phone_number_id}</td>
+                    <td className="p-3 font-mono">{ch.wabaId || ch.waba_id}</td>
+                    <td className="p-3 text-emerald-600 font-bold">{ch.status || "CONNECTED"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -675,7 +723,7 @@ function ConfigContent() {
               <button
                 type="button"
                 onClick={handleFacebookSignup}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs flex items-center gap-2"
+                className="bg-blue-600 hover:bg-blue-700text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs flex items-center gap-2"
               >
                 <span>👤</span> Continue with Facebook
               </button>

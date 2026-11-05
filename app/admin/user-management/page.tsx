@@ -1086,7 +1086,7 @@ export default function UserManagementPage() {
                   if (data.success) {
                     alert("✅ " + data.message);
                   } else {
-                    alert("❌ Error: " + (data.error || "Failed to register"));
+                    alert("❌ Error: " + data.error);
                   }
                 } catch (err) {
                   alert("Network error calling Register API");

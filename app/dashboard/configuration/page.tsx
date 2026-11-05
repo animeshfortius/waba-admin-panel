@@ -60,6 +60,19 @@ function ConfigContent() {
   const [companyWebsite, setCompanyWebsite] = useState("");
   const [companyName, setCompanyName] = useState("");
 
+  // WABA Table Action Menu & Business Profile Modal States
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [selectedProfileChannel, setSelectedProfileChannel] = useState<any>(null);
+  const [profileForm, setProfileForm] = useState({
+    displayName: "",
+    description: "",
+    email: "",
+    address: "",
+    website: "",
+    category: "Other",
+  });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
   useEffect(() => {
     // Initialize Facebook SDK
     window.fbAsyncInit = function () {
@@ -193,6 +206,42 @@ function ConfigContent() {
     });
   };
 
+  const handleOpenProfileModal = (channel: any) => {
+    setSelectedProfileChannel(channel);
+    setProfileForm({
+      displayName: channel.displayName || channel.displayPhone || "100 App",
+      description: channel.description || "",
+      email: channel.email || "",
+      address: channel.address || "",
+      website: channel.website || "",
+      category: channel.category || "Other",
+    });
+    setOpenActionMenuId(null);
+  };
+
+  const handleSaveBusinessProfile = async () => {
+    if (!selectedProfileChannel) return;
+    setIsSavingProfile(true);
+    try {
+      const res = await fetch("/api/configuration/business-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selectedProfileChannel.id, ...profileForm }),
+      });
+      if (res.ok) {
+        alert("Business Profile saved and Meta Business Manager updated successfully!");
+        setSelectedProfileChannel(null);
+        window.location.reload();
+      } else {
+        alert("Failed to update profile on Meta");
+      }
+    } catch (err) {
+      alert("Error saving business profile.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-2 text-xs font-sans">
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
@@ -254,6 +303,7 @@ function ConfigContent() {
         </div>
       )}
 
+      {/* WABA CHANNELS TABLE (WITHOUT BSP NAME, WITH FULL METADATA & 3-DOT MENU) */}
       {activeSection === "waba_channels" && (
         <div className="space-y-6">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
@@ -265,23 +315,206 @@ function ConfigContent() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-600 font-bold border-b uppercase text-[11px]">
-                  <th className="p-3">DISPLAY PHONE</th>
-                  <th className="p-3">PHONE ID</th>
-                  <th className="p-3">WABA ID</th>
-                  <th className="p-3">STATUS</th>
+                  <th className="p-3 whitespace-nowrap">WABA NUMBER</th>
+                  <th className="p-3 whitespace-nowrap">PHONENUMBER ID</th>
+                  <th className="p-3 whitespace-nowrap">WABA BUSINESSID</th>
+                  <th className="p-3 whitespace-nowrap">MESSAGING LIMIT</th>
+                  <th className="p-3 whitespace-nowrap">QUALITY RATING</th>
+                  <th className="p-3 whitespace-nowrap">DEFAULT</th>
+                  <th className="p-3 whitespace-nowrap">DISPLAY NAME</th>
+                  <th className="p-3 whitespace-nowrap">CONFIGURE DATE</th>
+                  <th className="p-3 whitespace-nowrap">WEBHOOK URL</th>
+                  <th className="p-3 whitespace-nowrap">ACTIONS</th>
                 </tr>
               </thead>
               <tbody className="divide-y text-gray-700 font-medium">
                 {channels.map((ch) => (
                   <tr key={ch.id} className="hover:bg-slate-50">
-                    <td className="p-3 font-semibold text-slate-800">{ch.displayPhone || ch.display_phone_number}</td>
-                    <td className="p-3 font-mono">{ch.phoneNumberId || ch.phone_number_id}</td>
-                    <td className="p-3 font-mono">{ch.wabaId || ch.waba_id}</td>
-                    <td className="p-3 text-emerald-600 font-bold">{ch.status || "CONNECTED"}</td>
+                    <td className="p-3 font-semibold text-slate-800 font-mono">{ch.displayPhone || ch.display_phone_number}</td>
+                    <td className="p-3 font-mono text-gray-600">{ch.phoneNumberId || ch.phone_number_id}</td>
+                    <td className="p-3 font-mono text-gray-600">{ch.wabaId || ch.waba_id}</td>
+                    <td className="p-3 text-emerald-600 font-bold whitespace-nowrap">
+                      ✔ {ch.messagingLimit || "UNLIMITED (TIER_UNLIMITED)"}
+                    </td>
+                    <td className="p-3 whitespace-nowrap font-semibold text-slate-700">
+                      ✔ {ch.qualityRating || "UNKNOWN | VERIFIED"}
+                    </td>
+                    <td className="p-3">
+                      <button className="bg-slate-200 text-slate-700 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                        Set Default
+                      </button>
+                    </td>
+                    <td className="p-3 font-bold text-slate-800">{ch.displayName || "100 App"}</td>
+                    <td className="p-3 text-gray-500 whitespace-nowrap">
+                      {new Date(ch.createdAt || Date.now()).toLocaleString()}
+                    </td>
+                    <td className="p-3 text-emerald-600 underline cursor-pointer">{ch.webhookUrl || "NA"}</td>
+                    <td className="p-3 relative">
+                      <button
+                        onClick={() => setOpenActionMenuId(openActionMenuId === ch.id ? null : ch.id)}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 font-bold text-slate-700 text-sm cursor-pointer"
+                      >
+                        ⋮
+                      </button>
+                      {openActionMenuId === ch.id && (
+                        <div className="absolute right-3 top-10 bg-white border rounded-xl shadow-lg z-30 w-40 p-1">
+                          <button
+                            onClick={() => handleOpenProfileModal(ch)}
+                            className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-slate-50 rounded-lg text-slate-700 font-semibold cursor-pointer"
+                          >
+                            <span>✏️</span> Business Profile
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* BUSINESS PROFILE EDIT MODAL WITH LIVE PREVIEW */}
+      {selectedProfileChannel && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-5xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h2 className="text-base font-bold text-gray-800">Business Profile</h2>
+                <p className="text-[11px] text-gray-400">Update your photo and personal details here</p>
+              </div>
+              <button onClick={() => setSelectedProfileChannel(null)} className="text-gray-400 font-bold text-lg cursor-pointer">✕</button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+              <div className="lg:col-span-2 space-y-4">
+                <div className="bg-gray-50 p-4 rounded-xl border border-dashed text-center">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-xl text-slate-500 mb-2">👤</div>
+                  <p className="text-xs font-bold text-blue-600 cursor-pointer">Click to upload</p>
+                  <p className="text-[10px] text-gray-400">PNG, JPG up to 5MB (640x640px recommended)</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">Display Name</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={profileForm.displayName}
+                      className="w-full border p-2 rounded-lg bg-gray-100 text-gray-500 font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">Category</label>
+                    <select
+                      value={profileForm.category}
+                      onChange={(e) => setProfileForm({ ...profileForm, category: e.target.value })}
+                      className="w-full border p-2 rounded-lg bg-white"
+                    >
+                      <option value="Other">Other</option>
+                      <option value="Retail">Retail</option>
+                      <option value="Restaurant">Restaurant</option>
+                      <option value="Education">Education</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">Description</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Tell us about yourself..."
+                    value={profileForm.description}
+                    onChange={(e) => setProfileForm({ ...profileForm, description: e.target.value })}
+                    className="w-full border p-2 rounded-lg bg-white"
+                  />
+                </div>
+
+                <div className="space-y-3 pt-2 border-t">
+                  <h4 className="font-bold text-gray-800">Contact Info</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-1">Email Address</label>
+                      <input
+                        type="email"
+                        placeholder="your.email@example.com"
+                        value={profileForm.email}
+                        onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                        className="w-full border p-2 rounded-lg bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-1">Channel Number</label>
+                      <input
+                        type="text"
+                        disabled
+                        value={selectedProfileChannel.displayPhone || selectedProfileChannel.display_phone_number}
+                        className="w-full border p-2 rounded-lg bg-gray-100 font-mono text-gray-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">Address</label>
+                    <input
+                      type="text"
+                      placeholder="Enter your full address"
+                      value={profileForm.address}
+                      onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
+                      className="w-full border p-2 rounded-lg bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">Website</label>
+                    <input
+                      type="text"
+                      placeholder="https://www.example.com"
+                      value={profileForm.website}
+                      onChange={(e) => setProfileForm({ ...profileForm, website: e.target.value })}
+                      className="w-full border p-2 rounded-lg bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Live WhatsApp Smartphone Preview */}
+              <div className="flex flex-col items-center justify-start bg-slate-50 p-4 rounded-2xl border">
+                <p className="font-bold text-gray-600 mb-2">WhatsApp Profile Preview</p>
+                <div className="w-56 h-[380px] bg-emerald-700 rounded-3xl p-2 border-4 border-slate-800 shadow-xl flex flex-col relative text-white">
+                  <div className="bg-emerald-800 p-2 rounded-t-2xl text-center font-bold text-[10px]">
+                    Template Preview
+                  </div>
+                  <div className="bg-white text-gray-800 flex-1 rounded-b-2xl p-3 flex flex-col items-center space-y-2 text-[10px]">
+                    <div className="w-14 h-14 rounded-full bg-slate-200 flex items-center justify-center text-xl">👤</div>
+                    <h5 className="font-bold text-sm text-gray-800">{profileForm.displayName}</h5>
+                    <p className="text-gray-400 text-center">{profileForm.category}</p>
+                    {profileForm.description && <p className="text-gray-600 text-center bg-gray-50 p-1.5 rounded">{profileForm.description}</p>}
+                    {profileForm.email && <p className="text-blue-600">✉️ {profileForm.email}</p>}
+                    {profileForm.website && <p className="text-emerald-600 underline">🌐 {profileForm.website}</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setSelectedProfileChannel(null)}
+                className="px-4 py-2 border rounded-xl font-bold text-gray-600 hover:bg-gray-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingProfile}
+                onClick={handleSaveBusinessProfile}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-xl font-bold shadow cursor-pointer"
+              >
+                {isSavingProfile ? "Saving & Syncing Meta..." : "💾 Save Profile"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -414,7 +647,6 @@ function ConfigContent() {
               <button onClick={() => setManageGroupObj(null)} className="text-gray-400 font-bold">✕</button>
             </div>
 
-            {/* Form to Add Number to Group */}
             <div className="space-y-2 bg-slate-50 p-3 rounded-xl border">
               <h4 className="font-bold text-gray-700">Add New Number to Group</h4>
               <div className="flex gap-2">
@@ -441,7 +673,6 @@ function ConfigContent() {
               </div>
             </div>
 
-            {/* List of Numbers in Group */}
             <div className="space-y-2">
               <h4 className="font-bold text-gray-700">Group Members ({groupMembers.length})</h4>
               <div className="max-h-60 overflow-y-auto border rounded-xl divide-y">
@@ -645,7 +876,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* Facebook Signup Modal (Updated with full requirements & inputs) */}
+      {/* Facebook Signup Modal */}
       {showFacebookModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans text-xs">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
@@ -707,19 +938,6 @@ function ConfigContent() {
                   className="border rounded-lg px-3 py-2 w-full sm:w-80 bg-white focus:outline-none focus:border-blue-500"
                 />
               </div>
-            </div>
-
-            <div className="space-y-2 pt-1">
-              <h3 className="font-bold text-gray-800 flex items-center gap-1.5 text-xs">
-                👈 To continue you need access to your Facebook business account, including:
-              </h3>
-              <ul className="list-disc list-inside space-y-1 text-gray-600 pl-1">
-                <li>Your company's <span className="text-emerald-600">legal name and address</span></li>
-                <li>A display name and short description</li>
-                <li>A valid email address</li>
-                <li>A valid mobile number</li>
-                <li>A business-owned phone number</li>
-              </ul>
             </div>
 
             <div className="flex justify-start items-center space-x-3 pt-3 border-t">

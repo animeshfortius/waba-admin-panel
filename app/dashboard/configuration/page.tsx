@@ -7,7 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 declare global {
   interface Window {
     FB: any;
-    fbAsyncInit: any; // Changed to any to avoid conflict
+    fbAsyncInit: any;
   }
 }
 
@@ -64,23 +64,25 @@ function ConfigContent() {
     // Initialize Facebook SDK
     window.fbAsyncInit = function () {
       window.FB.init({
-        appId: '1405995811146008', // Aapki valid Meta App ID
+        appId: '1405995811146008',
         cookie: true,
         xfbml: true,
         version: 'v18.0'
       });
     };
 
-    function (d, s, id) {
-      var js: any, fjs = d.getElementsByTagName(s)[0];
-      if (d.getElementById(id)) return;
-      js = d.createElement(s); js.id = id;
+    // Load Facebook SDK Script safely
+    const loadFBSdk = () => {
+      if (document.getElementById('facebook-jssdk')) return;
+      const js = document.createElement('script');
+      js.id = 'facebook-jssdk';
       js.src = "https://connect.facebook.net/en_US/sdk.js";
+      const fjs = document.getElementsByTagName('script')[0];
       if (fjs && fjs.parentNode) {
         fjs.parentNode.insertBefore(js, fjs);
       }
-    }(document, 'script', 'facebook-jssdk'));
-
+    };
+    loadFBSdk();
 
     const savedGroupsList = localStorage.getItem("configuration_groups_list");
     if (savedGroupsList) {
@@ -124,7 +126,6 @@ function ConfigContent() {
     if (manageGroupObj) {
       localStorage.setItem(`group_members_${manageGroupObj.id}`, JSON.stringify(updatedList));
       
-      // Update groups list state & localStorage so total count reflects immediately on main table
       const updatedGroups = groups.map(g => g.id === manageGroupObj.id ? { ...g, totalContacts: updatedList.length } : g);
       setGroups(updatedGroups);
       localStorage.setItem("configuration_groups_list", JSON.stringify(updatedGroups));
@@ -162,7 +163,6 @@ function ConfigContent() {
       if (response.authResponse) {
         const code = response.authResponse.code || response.authResponse.accessToken;
         
-        // Send authorization code / token to backend to register channel & fetch WABA details
         fetch("/api/configuration/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -182,7 +182,7 @@ function ConfigContent() {
         alert("User cancelled login or did not fully authorize.");
       }
     }, {
-      config_id: '1405995811146008', // Aapki Meta Business Suite ki Config ID ya App ID
+      config_id: '1405995811146008',
       response_type: 'code',
       override_default_response_type: true,
       extras: {
@@ -726,7 +726,7 @@ function ConfigContent() {
               <button
                 type="button"
                 onClick={handleFacebookSignup}
-                className="bg-blue-600 hover:bg-blue-700text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs flex items-center gap-2"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs flex items-center gap-2"
               >
                 <span>👤</span> Continue with Facebook
               </button>

@@ -163,7 +163,7 @@ function ConfigContent() {
     alert("Number removed from group!");
   };
 
-  // Official Meta Embedded Signup SDK Handler
+  // Official Meta Embedded Signup SDK Handler with Real Data Capture
   const handleFacebookSignup = () => {
     if (!window.FB) {
       alert("Facebook SDK is still loading. Please try again in a moment.");
@@ -175,16 +175,32 @@ function ConfigContent() {
     window.FB.login(function (response: any) {
       if (response.authResponse) {
         const code = response.authResponse.code || response.authResponse.accessToken;
+        const sessionInfo = response.authResponse.sessionInfo || {};
+        
+        const wabaId = sessionInfo.waba_id || sessionInfo.whatsapp_business_account_id;
+        const phoneNumberId = sessionInfo.phone_number_id;
+        const displayPhone = sessionInfo.display_phone_number;
         
         fetch("/api/configuration/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code, website: companyWebsite, name: companyName })
+          body: JSON.stringify({ 
+            code, 
+            website: companyWebsite, 
+            name: companyName,
+            wabaId,
+            phoneNumberId,
+            displayPhone
+          })
         })
         .then(res => res.json())
         .then(data => {
-          alert("WhatsApp Coexistence & Embedded Signup completed successfully!");
-          window.location.reload();
+          if (data.success) {
+            alert("WhatsApp Coexistence & Embedded Signup completed successfully!");
+            window.location.reload();
+          } else {
+            alert("Error: " + (data.error || "Failed to register channel"));
+          }
         })
         .catch(err => {
           console.error(err);
@@ -303,33 +319,13 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* WABA CHANNELS TABLE (WITHOUT BSP NAME, WITH FULL METADATA & 3-DOT MENU) */}
+      {/* WABA CHANNELS TABLE (CLEAN & LIVE FROM EMBEDDED SIGNUP) */}
       {activeSection === "waba_channels" && (
         <div className="space-y-6">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
-            <div className="flex gap-2">
-              <button onClick={() => setShowFacebookModal(true)} className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer">
-                + Register New WhatsApp
-              </button>
-              <button 
-                onClick={async () => {
-                  const res = await fetch("/api/configuration/register", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ code: "test_code_123", name: "Fortius Infocom" })
-                  });
-                  if(res.ok) {
-                    alert("Test channel added successfully!");
-                    window.location.reload();
-                  } else {
-                    alert("Failed to add test channel");
-                  }
-                }} 
-                className="bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer"
-              >
-                ⚡ Add Test Channel
-              </button>
-            </div>
+            <button onClick={() => setShowFacebookModal(true)} className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer">
+              + Register New WhatsApp
+            </button>
           </div>
           <div className="bg-white rounded-2xl border shadow-sm overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
@@ -351,7 +347,7 @@ function ConfigContent() {
                 {channels.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="p-6 text-center text-gray-400">
-                      No WABA channels found. Click "+ Register New WhatsApp" or "⚡ Add Test Channel".
+                      No WABA channels found. Click "+ Register New WhatsApp" to connect your number.
                     </td>
                   </tr>
                 ) : (

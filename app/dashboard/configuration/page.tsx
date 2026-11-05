@@ -163,7 +163,7 @@ function ConfigContent() {
     alert("Number removed from group!");
   };
 
-  // Official Meta Embedded Signup SDK Handler with Real Data & Display Name Capture
+// Official Meta Embedded Signup SDK Handler for Solution Partners
   const handleFacebookSignup = () => {
     if (!window.FB) {
       alert("Facebook SDK is still loading. Please try again in a moment.");
@@ -197,7 +197,7 @@ function ConfigContent() {
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            alert("WhatsApp Coexistence & Embedded Signup completed successfully!");
+            alert("WhatsApp channel connected successfully!");
             window.location.reload();
           } else {
             alert("Error: " + (data.error || "Failed to register channel"));
@@ -216,9 +216,11 @@ function ConfigContent() {
       response_type: 'code',
       override_default_response_type: true,
       extras: {
-        setup: {},
-        featureType: '',
-        sessionInfoVersion: 2
+        setup: {
+          solutionID: '4584579540486294'
+        },
+        featureType: 'whatsapp_business_app_onboarding',
+        sessionInfoVersion: 3
       }
     });
   };

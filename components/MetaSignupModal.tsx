@@ -1,18 +1,113 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+
+// Declare global FB object for TypeScript
+declare global {
+  interface Window {
+    FB: any;
+    fbAsyncInit: any;
+  }
+}
 
 interface MetaSignupModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onContinueWithFacebook: (companyWebsite: string, companyName: string) => void;
+  onContinueWithFacebook?: (companyWebsite: string, companyName: string) => void;
 }
 
 export default function MetaSignupModal({
   isOpen,
   onClose,
-  onContinueWithFacebook,
 }: MetaSignupModalProps) {
   const [companyWebsite, setCompanyWebsite] = useState("");
   const [companyName, setCompanyName] = useState("");
+
+  useEffect(() => {
+    // Initialize Facebook SDK
+    window.fbAsyncInit = function () {
+      window.FB.init({
+        appId: '1405995811146008',
+        cookie: true,
+        xfbml: true,
+        version: 'v18.0'
+      });
+    };
+
+    // Load Facebook SDK Script safely
+    const loadFBSdk = () => {
+      if (document.getElementById('facebook-jssdk')) return;
+      const js = document.createElement('script');
+      js.id = 'facebook-jssdk';
+      js.src = "https://connect.facebook.net/en_US/sdk.js";
+      const fjs = document.getElementsByTagName('script')[0];
+      if (fjs && fjs.parentNode) {
+        fjs.parentNode.insertBefore(js, fjs);
+      }
+    };
+    loadFBSdk();
+  }, []);
+
+  // Official Meta Embedded Signup SDK Handler for Solution Partners
+  const handleFacebookSignup = () => {
+    if (!window.FB) {
+      alert("Facebook SDK is still loading. Please try again in a moment.");
+      return;
+    }
+
+    onClose();
+
+    window.FB.login(function (response: any) {
+      if (response.authResponse) {
+        const code = response.authResponse.code || response.authResponse.accessToken;
+        const sessionInfo = response.authResponse.sessionInfo || {};
+        
+        const wabaId = sessionInfo.waba_id || sessionInfo.whatsapp_business_account_id;
+        const phoneNumberId = sessionInfo.phone_number_id;
+        const displayPhone = sessionInfo.display_phone_number;
+        const metaDisplayName = sessionInfo.display_name || sessionInfo.name;
+
+        // Automatically send data to backend register API
+        fetch("/api/configuration/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            code, 
+            wabaId,
+            phoneNumberId,
+            displayPhone,
+            website: companyWebsite, 
+            name: metaDisplayName || companyName 
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            alert("WhatsApp channel and credit line connected successfully!");
+            window.location.reload();
+          } else {
+            alert("Error: " + (data.error || "Failed to register channel"));
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          alert("Error registering channel details.");
+        });
+
+      } else {
+        alert("User cancelled login or did not fully authorize.");
+      }
+    }, {
+      config_id: '891599173270116',
+      response_type: 'code',
+      override_default_response_type: true,
+      extras: {
+        setup: {
+          solutionID: '891846553340614'
+        },
+        featureType: 'whatsapp_business_app_onboarding',
+        sessionInfoVersion: 3
+      }
+    });
+  };
 
   if (!isOpen) return null;
 
@@ -26,7 +121,7 @@ export default function MetaSignupModal({
           <button
             type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 font-bold text-lg"
+            className="text-gray-400 hover:text-gray-600 font-bold text-lg cursor-pointer"
           >
             ✕
           </button>
@@ -95,7 +190,7 @@ export default function MetaSignupModal({
         <div className="flex justify-start items-center space-x-3 pt-3 border-t">
           <button
             type="button"
-            onClick={() => onContinueWithFacebook(companyWebsite, companyName)}
+            onClick={handleFacebookSignup}
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs flex items-center gap-2"
           >
             <span>👤</span> Continue with Facebook

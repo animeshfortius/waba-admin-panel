@@ -121,7 +121,7 @@ function ConfigContent() {
   };
 
   const handleFacebookSignup = () => {
-    const appId = "28402710282733872";
+    const appId = "1405995811146008";
     const redirectUri = encodeURIComponent(window.location.origin + "/dashboard/configuration?tab=waba_channels");
     const fbUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=whatsapp_business_management,whatsapp_business_messaging&response_type=code`;
 

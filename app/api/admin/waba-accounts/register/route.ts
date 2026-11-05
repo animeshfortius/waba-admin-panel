@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     const metaResponse = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/register`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${accessToken || process.env.META_SYSTEM_USER_TOKEN}`,
+        "Authorization": `Bearer ${accessToken || process.env.WHATSAPP_SYSTEM_USER_TOKEN}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

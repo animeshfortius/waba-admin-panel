@@ -8,10 +8,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { code, website, name, wabaId, phoneNumberId, displayPhone, accessToken } = body;
 
-    // Graceful check: Agar direct IDs nahi hain lekin authorization code ya fallback available hai toh handle karein
     if (!code && !wabaId && !phoneNumberId) {
       return NextResponse.json(
-        { error: "Meta WhatsApp authorization details are missing from session." },
+        { error: "Meta WhatsApp authorization details are missing." },
         { status: 400 }
       );
     }
@@ -33,7 +32,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // Save WABA account to database
+    // displayName ko yahan se completely remove kar diya hai taaki database column mismatch error dobara kabhi na aaye
     const newAccount = await prisma.wabaAccount.create({
       data: {
         userId: defaultUser.id,
@@ -42,7 +41,6 @@ export async function POST(request: Request) {
         displayPhone: finalDisplayPhone,
         accessToken: accessToken || code || "",
         status: "ACTIVE",
-        displayName: name || displayPhone || "WhatsApp Business",
         website: website || "",
       },
     });

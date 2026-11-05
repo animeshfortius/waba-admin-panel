@@ -163,7 +163,7 @@ function ConfigContent() {
     alert("Number removed from group!");
   };
 
-// Official Meta Embedded Signup SDK Handler for Solution Partners
+  // Official Meta Embedded Signup SDK Handler (Automatic Graph API Token Exchange via Backend)
   const handleFacebookSignup = () => {
     if (!window.FB) {
       alert("Facebook SDK is still loading. Please try again in a moment.");
@@ -175,12 +175,6 @@ function ConfigContent() {
     window.FB.login(function (response: any) {
       if (response.authResponse) {
         const code = response.authResponse.code || response.authResponse.accessToken;
-        const sessionInfo = response.authResponse.sessionInfo || {};
-        
-        const wabaId = sessionInfo.waba_id || sessionInfo.whatsapp_business_account_id;
-        const phoneNumberId = sessionInfo.phone_number_id;
-        const displayPhone = sessionInfo.display_phone_number;
-        const metaDisplayName = sessionInfo.display_name || sessionInfo.name;
         
         fetch("/api/configuration/register", {
           method: "POST",
@@ -188,10 +182,7 @@ function ConfigContent() {
           body: JSON.stringify({ 
             code, 
             website: companyWebsite, 
-            name: metaDisplayName || companyName,
-            wabaId,
-            phoneNumberId,
-            displayPhone
+            name: companyName 
           })
         })
         .then(res => res.json())

@@ -7,7 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 declare global {
   interface Window {
     FB: any;
-    fbAsyncInit: () => void;
+    fbAsyncInit: any; // Changed to any to avoid conflict
   }
 }
 
@@ -71,13 +71,16 @@ function ConfigContent() {
       });
     };
 
-    (function (d, s, id) {
+    function (d, s, id) {
       var js: any, fjs = d.getElementsByTagName(s)[0];
       if (d.getElementById(id)) return;
       js = d.createElement(s); js.id = id;
       js.src = "https://connect.facebook.net/en_US/sdk.js";
-      fjs.parentNode.insertBefore(js, fjs);
+      if (fjs && fjs.parentNode) {
+        fjs.parentNode.insertBefore(js, fjs);
+      }
     }(document, 'script', 'facebook-jssdk'));
+
 
     const savedGroupsList = localStorage.getItem("configuration_groups_list");
     if (savedGroupsList) {

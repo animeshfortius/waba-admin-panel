@@ -8,29 +8,29 @@ datasource db {
 }
 
 model User {
-  id              String              @id @default(uuid())
-  name            String
-  username        String?             @unique
-  email           String              @unique
-  password        String
-  phone           String?
-  expiryDate      String?
-  apiKey          String?
-  role            Role                @default(USER)
-  walletBalance   Float               @default(0.0)
-  actualBalance   Float               @default(0.0)
-  virtualBalance  Float               @default(0.0)
-  perMsgRate      Float               @default(0.8046)
-  utilityRate     Float               @default(0.1550)
-  serviceRate     Float               @default(0.1550)
-  authRate        Float               @default(0.1550)
-  createdById     String?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  createdBy       User?               @relation("UserHierarchy", fields: [createdById], references: [id], onDelete: Cascade)
-  childUsers      User[]              @relation("UserHierarchy")
-  wabaAccounts    WabaAccount[]
-  transactions    WalletTransaction[]
+  id             String               @id @default(uuid())
+  name           String
+  username       String?              @unique
+  email          String               @unique
+  password       String
+  phone          String?
+  expiryDate     String?
+  apiKey         String?
+  role           Role                 @default(USER)
+  walletBalance  Float                @default(0.0)
+  actualBalance  Float                @default(0.0)
+  virtualBalance Float                @default(0.0)
+  perMsgRate     Float                @default(0.8046)
+  utilityRate    Float                @default(0.1550)
+  serviceRate    Float                @default(0.1550)
+  authRate       Float                @default(0.1550)
+  createdById    String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  createdBy      User?                @relation("UserHierarchy", fields: [createdById], references: [id], onDelete: Cascade)
+  childUsers     User[]               @relation("UserHierarchy")
+  wabaAccounts   WabaAccount[]
+  transactions   WalletTransaction[]
 }
 
 model WalletTransaction {
@@ -49,8 +49,19 @@ model WabaAccount {
   wabaId         String   @unique
   phoneNumberId  String
   displayPhone   String
+  displayName    String?  @default("100 App")
   accessToken    String
   status         String   @default("ACTIVE")
+  qualityRating  String?  @default("UNKNOWN | VERIFIED")
+  messagingLimit String?  @default("UNLIMITED (TIER_UNLIMITED)")
+  isDefault      Boolean  @default(false)
+  webhookUrl     String?  @default("NA")
+  description    String?
+  address        String?
+  email          String?
+  website        String?
+  category       String?  @default("Other")
+  profilePicture String?
   createdAt      DateTime @default(now())
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

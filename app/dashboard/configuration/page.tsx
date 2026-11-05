@@ -307,9 +307,29 @@ function ConfigContent() {
       {activeSection === "waba_channels" && (
         <div className="space-y-6">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
-            <button onClick={() => setShowFacebookModal(true)} className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer">
-              + Register New WhatsApp
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => setShowFacebookModal(true)} className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer">
+                + Register New WhatsApp
+              </button>
+              <button 
+                onClick={async () => {
+                  const res = await fetch("/api/configuration/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ code: "test_code_123", name: "Fortius Infocom" })
+                  });
+                  if(res.ok) {
+                    alert("Test channel added successfully!");
+                    window.location.reload();
+                  } else {
+                    alert("Failed to add test channel");
+                  }
+                }} 
+                className="bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer"
+              >
+                ⚡ Add Test Channel
+              </button>
+            </div>
           </div>
           <div className="bg-white rounded-2xl border shadow-sm overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
@@ -328,47 +348,55 @@ function ConfigContent() {
                 </tr>
               </thead>
               <tbody className="divide-y text-gray-700 font-medium">
-                {channels.map((ch) => (
-                  <tr key={ch.id} className="hover:bg-slate-50">
-                    <td className="p-3 font-semibold text-slate-800 font-mono">{ch.displayPhone || ch.display_phone_number}</td>
-                    <td className="p-3 font-mono text-gray-600">{ch.phoneNumberId || ch.phone_number_id}</td>
-                    <td className="p-3 font-mono text-gray-600">{ch.wabaId || ch.waba_id}</td>
-                    <td className="p-3 text-emerald-600 font-bold whitespace-nowrap">
-                      ✔ {ch.messagingLimit || "UNLIMITED (TIER_UNLIMITED)"}
-                    </td>
-                    <td className="p-3 whitespace-nowrap font-semibold text-slate-700">
-                      ✔ {ch.qualityRating || "UNKNOWN | VERIFIED"}
-                    </td>
-                    <td className="p-3">
-                      <button className="bg-slate-200 text-slate-700 px-2.5 py-1 rounded-full text-[10px] font-bold">
-                        Set Default
-                      </button>
-                    </td>
-                    <td className="p-3 font-bold text-slate-800">{ch.displayName || "100 App"}</td>
-                    <td className="p-3 text-gray-500 whitespace-nowrap">
-                      {new Date(ch.createdAt || Date.now()).toLocaleString()}
-                    </td>
-                    <td className="p-3 text-emerald-600 underline cursor-pointer">{ch.webhookUrl || "NA"}</td>
-                    <td className="p-3 relative">
-                      <button
-                        onClick={() => setOpenActionMenuId(openActionMenuId === ch.id ? null : ch.id)}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 font-bold text-slate-700 text-sm cursor-pointer"
-                      >
-                        ⋮
-                      </button>
-                      {openActionMenuId === ch.id && (
-                        <div className="absolute right-3 top-10 bg-white border rounded-xl shadow-lg z-30 w-40 p-1">
-                          <button
-                            onClick={() => handleOpenProfileModal(ch)}
-                            className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-slate-50 rounded-lg text-slate-700 font-semibold cursor-pointer"
-                          >
-                            <span>✏️</span> Business Profile
-                          </button>
-                        </div>
-                      )}
+                {channels.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="p-6 text-center text-gray-400">
+                      No WABA channels found. Click "+ Register New WhatsApp" or "⚡ Add Test Channel".
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  channels.map((ch) => (
+                    <tr key={ch.id} className="hover:bg-slate-50">
+                      <td className="p-3 font-semibold text-slate-800 font-mono">{ch.displayPhone || ch.display_phone_number}</td>
+                      <td className="p-3 font-mono text-gray-600">{ch.phoneNumberId || ch.phone_number_id}</td>
+                      <td className="p-3 font-mono text-gray-600">{ch.wabaId || ch.waba_id}</td>
+                      <td className="p-3 text-emerald-600 font-bold whitespace-nowrap">
+                        ✔ {ch.messagingLimit || "UNLIMITED (TIER_UNLIMITED)"}
+                      </td>
+                      <td className="p-3 whitespace-nowrap font-semibold text-slate-700">
+                        ✔ {ch.qualityRating || "UNKNOWN | VERIFIED"}
+                      </td>
+                      <td className="p-3">
+                        <button className="bg-slate-200 text-slate-700 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                          Set Default
+                        </button>
+                      </td>
+                      <td className="p-3 font-bold text-slate-800">{ch.displayName || "100 App"}</td>
+                      <td className="p-3 text-gray-500 whitespace-nowrap">
+                        {new Date(ch.createdAt || Date.now()).toLocaleString()}
+                      </td>
+                      <td className="p-3 text-emerald-600 underline cursor-pointer">{ch.webhookUrl || "NA"}</td>
+                      <td className="p-3 relative">
+                        <button
+                          onClick={() => setOpenActionMenuId(openActionMenuId === ch.id ? null : ch.id)}
+                          className="p-1.5 rounded-lg hover:bg-slate-100 font-bold text-slate-700 text-sm cursor-pointer"
+                        >
+                          ⋮
+                        </button>
+                        {openActionMenuId === ch.id && (
+                          <div className="absolute right-3 top-10 bg-white border rounded-xl shadow-lg z-30 w-40 p-1">
+                            <button
+                              onClick={() => handleOpenProfileModal(ch)}
+                              className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-slate-50 rounded-lg text-slate-700 font-semibold cursor-pointer"
+                            >
+                              <span>✏️</span> Business Profile
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

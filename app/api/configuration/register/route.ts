@@ -12,9 +12,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Authorization code is missing" }, { status: 400 });
     }
 
-    // Dummy ya generated details (Aap baad mein Meta Graph API token exchange se real details yahan map kar sakte hain)
-    const mockWabaId = "WABA_" + Math.floor(100000 + Math.random() * 900000);
-    const mockPhoneId = "PHONE_" + Math.floor(100000 + Math.random() * 900000);
+    // Use timestamp to ensure unique IDs every single time without collision
+    const timestamp = Date.now();
+    const mockWabaId = "WABA_" + timestamp;
+    const mockPhoneId = "PHONE_" + timestamp;
     const mockDisplayPhone = "+91 98765 43210";
     const mockAccessToken = "EAAG_" + Math.random().toString(36).substring(2);
 
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // Save directly to WabaAccount table using Prisma
+    // Save directly to WabaAccount table using Prisma with unique IDs and displayName
     const newAccount = await prisma.wabaAccount.create({
       data: {
         userId: defaultUser.id,
@@ -39,6 +40,8 @@ export async function POST(request: Request) {
         displayPhone: mockDisplayPhone,
         accessToken: mockAccessToken,
         status: "ACTIVE",
+        displayName: name || "100 App",
+        website: website || "",
       },
     });
 

@@ -217,7 +217,7 @@ function ConfigContent() {
       override_default_response_type: true,
       extras: {
         setup: {
-          solutionID: '4584579540486294'
+          solutionID: '891846553340614'
         },
         featureType: 'whatsapp_business_app_onboarding',
         sessionInfoVersion: 3

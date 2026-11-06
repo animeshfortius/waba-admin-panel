@@ -26,11 +26,18 @@ export async function GET() {
             );
             const data = await res.json();
             
+            // Handle messaging limit tier safely with fallback if missing from Meta
             if (data.messaging_limit_tier) {
               messagingLimit = data.messaging_limit_tier;
+            } else {
+              messagingLimit = "UNASSIGNED";
             }
+
+            // Handle quality rating safely with fallback if missing from Meta
             if (data.quality_rating) {
               qualityRating = data.quality_rating;
+            } else {
+              qualityRating = "UNKNOWN";
             }
 
             // Database mein live stats ko turant persist/update karo

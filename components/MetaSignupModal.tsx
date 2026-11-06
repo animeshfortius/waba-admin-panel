@@ -60,12 +60,13 @@ export default function MetaSignupModal({
         const code = response.authResponse.code || response.authResponse.accessToken;
         const sessionInfo = response.authResponse.sessionInfo || {};
         
+        // Extract real WABA ID and Phone ID from SDK sessionInfo
         const wabaId = sessionInfo.waba_id || sessionInfo.whatsapp_business_account_id;
         const phoneNumberId = sessionInfo.phone_number_id;
         const displayPhone = sessionInfo.display_phone_number;
         const metaDisplayName = sessionInfo.display_name || sessionInfo.name;
 
-        // Automatically send data to backend register API
+        // Automatically send real IDs and data to backend register API
         fetch("/api/configuration/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -10,8 +10,9 @@ export async function POST(request: Request) {
 
     const appId = process.env.NEXT_PUBLIC_META_APP_ID || "1405995811146008";
     const appSecret = process.env.META_APP_SECRET || "";
+    const systemUserToken = process.env.META_SYSTEM_USER_TOKEN || "";
 
-    // 1. Agar code aaya hai, toh token exchange karke automatic real IDs fetch karo
+    // 1. Token Exchange & Auto Fetch IDs
     if (code) {
       try {
         const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${code}&redirect_uri=`;
@@ -21,7 +22,6 @@ export async function POST(request: Request) {
         if (tokenData.access_token) {
           accessToken = tokenData.access_token;
 
-          // A. Debug token se WABA ID nikalne ki koshish karo
           if (!wabaId) {
             const debugUrl = `https://graph.facebook.com/v18.0/debug_token?input_token=${accessToken}&access_token=${appId}|${appSecret}`;
             const debugRes = await fetch(debugUrl);
@@ -37,7 +37,6 @@ export async function POST(request: Request) {
             }
           }
 
-          // B. Agar phir bhi wabaId na mile, toh user ke WABA list se fetch karo
           if (!wabaId) {
             const meUrl = `https://graph.facebook.com/v18.0/me/whatsapp_business_accounts?access_token=${accessToken}`;
             const meRes = await fetch(meUrl);
@@ -48,7 +47,6 @@ export async function POST(request: Request) {
             }
           }
 
-          // C. WABA ID milne par Phone Number ID fetch karo
           if (wabaId && !phoneNumberId) {
             const phoneUrl = `https://graph.facebook.com/v18.0/${wabaId}/phone_numbers?access_token=${accessToken}`;
             const phoneRes = await fetch(phoneUrl);
@@ -65,7 +63,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Final Validation Check
     if (!wabaId || !phoneNumberId) {
       return NextResponse.json(
         { error: "Meta se real WABA ID / Phone ID automatic fetch nahi ho payi. Please try again." },
@@ -73,9 +70,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. AUTOMATIC PHONE NUMBER REGISTRATION API EXECUTION
+    // 2. AUTOMATED APIS: Phone Registration & Credit Line Sharing
     if (phoneNumberId && accessToken) {
       try {
+        // A. Register Phone Number
         const registerUrl = `https://graph.facebook.com/v18.0/${phoneNumberId}/register`;
         const regRes = await fetch(registerUrl, {
           method: "POST",
@@ -89,13 +87,30 @@ export async function POST(request: Request) {
           })
         });
         const regData = await regRes.json();
-        console.log("Phone registration status response:", regData);
+        console.log("Phone registration response:", regData);
+
+        // B. Link Credit Line / Shared Account via META_SYSTEM_USER_TOKEN
+        if (wabaId && systemUserToken) {
+          const creditUrl = `https://graph.facebook.com/v18.0/${wabaId}/shared_whatsapp_business_accounts`;
+          const creditRes = await fetch(creditUrl, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${systemUserToken}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              whatsapp_business_account_id: wabaId
+            })
+          });
+          const creditData = await creditRes.json();
+          console.log("Credit line sharing response:", creditData);
+        }
       } catch (apiErr) {
-        console.error("Automated Phone Registration API error:", apiErr);
+        console.error("Automated Meta API execution error:", apiErr);
       }
     }
 
-    // 3. Save into Database via Prisma
+    // 3. Save to Database
     let defaultUser = await prisma.user.findFirst();
     if (!defaultUser) {
       defaultUser = await prisma.user.create({

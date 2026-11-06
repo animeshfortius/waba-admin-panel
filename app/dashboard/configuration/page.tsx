@@ -259,8 +259,11 @@ function ConfigContent() {
     });
   };
 
-  const handleOpenProfileModal = (channel: any) => {
+  const handleOpenProfileModal = async (channel: any) => {
     setSelectedProfileChannel(channel);
+    setOpenActionMenuId(null);
+
+    // Initial fallback from channel row data
     setProfileForm({
       displayName: channel.displayName || channel.displayPhone || "100 App",
       description: channel.description || "",
@@ -269,7 +272,24 @@ function ConfigContent() {
       website: channel.website || "",
       category: channel.category || "Other",
     });
-    setOpenActionMenuId(null);
+
+    // Fetch live profile details from Meta / DB
+    try {
+      const res = await fetch(`/api/configuration/business-profile?id=${channel.id}`);
+      const result = await res.json();
+      if (result.success && result.data) {
+        setProfileForm({
+          displayName: channel.displayName || channel.displayPhone || "100 App",
+          description: result.data.description || "",
+          email: result.data.email || "",
+          address: result.data.address || "",
+          website: result.data.website || "",
+          category: result.data.category || "Other",
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch live profile details", err);
+    }
   };
 
   const handleSaveBusinessProfile = async () => {

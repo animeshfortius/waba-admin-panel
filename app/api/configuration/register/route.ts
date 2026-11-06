@@ -10,7 +10,8 @@ export async function POST(request: Request) {
 
     const appId = process.env.NEXT_PUBLIC_META_APP_ID || "1405995811146008";
     const appSecret = process.env.META_APP_SECRET || "";
-    const systemUserToken = process.env.META_SYSTEM_USER_TOKEN || "";
+    // Smartping Auth Barrier key
+    const authKey = "aEBsEkOowJHzSfcDzAibzrFidlvLZwkePITKmRahDXdEkHhSWRLTCVQsqElOWWLU";
 
     // 1. Token Exchange & Auto Fetch IDs
     if (code) {
@@ -70,10 +71,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. AUTOMATED APIS: Phone Registration & Credit Line Sharing
+    // 2. AUTOMATED APIS: Phone Registration & Smartping Credit Line Attach
     if (phoneNumberId && accessToken) {
       try {
-        // A. Register Phone Number
+        // A. Register Phone Number with Meta
         const registerUrl = `https://graph.facebook.com/v18.0/${phoneNumberId}/register`;
         const regRes = await fetch(registerUrl, {
           method: "POST",
@@ -89,24 +90,22 @@ export async function POST(request: Request) {
         const regData = await regRes.json();
         console.log("Phone registration response:", regData);
 
-        // B. Link Credit Line / Shared Account via META_SYSTEM_USER_TOKEN
-        if (wabaId && systemUserToken) {
-          const creditUrl = `https://graph.facebook.com/v18.0/${wabaId}/shared_whatsapp_business_accounts`;
-          const creditRes = await fetch(creditUrl, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${systemUserToken}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              whatsapp_business_account_id: wabaId
-            })
-          });
-          const creditData = await creditRes.json();
-          console.log("Credit line sharing response:", creditData);
-        }
+        // B. Attach Credit Line via Smartping Endpoint
+        // Usi phone number (displayPhone ya phoneNumberId) aur wabaId ka use karke
+        const cleanPhone = displayPhone ? displayPhone.replace(/[^0-9]/g, "") : phoneNumberId;
+        const smartpingUrl = `https://wabalens.smartping.io/MetaAPI/metapp/api/v1/wabas/attach?wabaId=${wabaId}&wabaNumber=${cleanPhone}`;
+        
+        const creditRes = await fetch(smartpingUrl, {
+          method: "GET", // ya POST jo bhi Smartping accept kare (Postman ke mutabiq GET/POST ho sakta hai, yahan GET request standard hai query params ke liye)
+          headers: {
+            "Authorization": `Bearer ${authKey}`,
+            "Content-Type": "application/json"
+          }
+        });
+        const creditData = await creditRes.json();
+        console.log("Smartping credit line attach response:", creditData);
       } catch (apiErr) {
-        console.error("Automated Meta API execution error:", apiErr);
+        console.error("Automated API execution error:", apiErr);
       }
     }
 

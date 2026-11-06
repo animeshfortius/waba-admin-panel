@@ -16,12 +16,12 @@ export async function GET() {
 
         try {
           const token = acc.accessToken;
-          // Agar mock token ya invalid token hai toh Meta API fail ho sakti hai, isliye try-catch rakha hai
           if (token && !token.startsWith("mock_token")) {
-            // 1. Fetch Messaging Limit from WABA ID
-            if (acc.wabaId) {
+            
+            // 1. Fetch Messaging Limit from Phone Number ID (Correct Meta Endpoint)
+            if (acc.phoneNumberId) {
               const limitRes = await fetch(
-                `https://graph.facebook.com/v18.0/${acc.wabaId}?fields=messaging_limit_tier`,
+                `https://graph.facebook.com/v18.0/${acc.phoneNumberId}?fields=messaging_limit_tier`,
                 { headers: { Authorization: `Bearer ${token}` } }
               );
               const limitData = await limitRes.json();
@@ -40,6 +40,14 @@ export async function GET() {
               if (ratingData.quality_rating) {
                 qualityRating = ratingData.quality_rating;
               }
+            }
+
+            // 3. Save the fetched stats back to Database so it persists
+            if (messagingLimit !== acc.messagingLimit || qualityRating !== acc.qualityRating) {
+              await prisma.wabaAccount.update({
+                where: { id: acc.id },
+                data: { messagingLimit, qualityRating }
+              }).catch(() => {});
             }
           }
         } catch (metaErr) {

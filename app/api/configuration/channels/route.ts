@@ -8,7 +8,15 @@ export async function GET() {
     const accounts = await prisma.wabaAccount.findMany({
       orderBy: { id: "desc" }
     });
-    return NextResponse.json(accounts);
+
+    // Clean IDs and tokens right from backend before sending to frontend
+    const sanitizedAccounts = accounts.map(acc => ({
+      ...acc,
+      wabaId: acc.wabaId ? acc.wabaId.replace("WABA_", "").trim() : "",
+      phoneNumberId: acc.phoneNumberId ? acc.phoneNumberId.replace("PHONE_", "").trim() : "",
+    }));
+
+    return NextResponse.json(sanitizedAccounts);
   } catch (error) {
     console.error("API Route Error:", error);
     return NextResponse.json({ error: "Failed to fetch channels" }, { status: 500 });
@@ -18,13 +26,19 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    
+    // Validate that required fields are actually provided from Meta Webhook/Embedded Signup
+    if (!body.wabaId || !body.phoneNumberId || !body.accessToken) {
+      return NextResponse.json({ error: "Missing required Meta credentials" }, { status: 400 });
+    }
+
     const newChannel = await prisma.wabaAccount.create({
       data: {
         userId: body.userId || "default_user",
-        wabaId: body.wabaId || "28402710282733872",
-        phoneNumberId: body.phoneNumberId || "1384456657081014",
-        displayPhone: body.displayPhone || "15553945963",
-        accessToken: body.accessToken || "mock_token_12345",
+        wabaId: body.wabaId.replace("WABA_", "").trim(),
+        phoneNumberId: body.phoneNumberId.replace("PHONE_", "").trim(),
+        displayPhone: body.displayPhone || "",
+        accessToken: body.accessToken,
         status: body.status || "ACTIVE",
         messagingLimit: "TIER_NOT_FOUND",
         qualityRating: "UNKNOWN"

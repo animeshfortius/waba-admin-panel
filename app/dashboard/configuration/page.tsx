@@ -968,7 +968,7 @@ function ConfigContent() {
               </button>
               <button
                 type="button"
-                onClick={() => setShowFacebookModal(value => false)}
+                onClick={() => setShowFacebookModal(false)}
                 className="bg-red-500 hover:bg-red-600 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs"
               >
                 Cancel

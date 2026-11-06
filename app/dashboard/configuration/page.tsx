@@ -182,6 +182,30 @@ function ConfigContent() {
     }
   };
 
+  // Handler to Update Webhook URL
+  const handleUpdateWebhook = async (channel: any) => {
+    const newUrl = prompt("Enter new Webhook URL for this channel:", channel.webhookUrl === "NA" ? "" : channel.webhookUrl);
+    if (newUrl === null) return;
+
+    try {
+      const res = await fetch("/api/configuration/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: channel.id, webhookUrl: newUrl }),
+      });
+
+      if (res.ok) {
+        alert("Webhook URL updated successfully!");
+        window.location.reload();
+      } else {
+        alert("Failed to update webhook URL.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error updating webhook URL.");
+    }
+  };
+
   // Official Meta Embedded Signup SDK Handler (Automatic Graph API Token Exchange via Backend)
   const handleFacebookSignup = () => {
     if (!window.FB) {
@@ -387,7 +411,13 @@ function ConfigContent() {
                       <td className="p-3 text-gray-500 whitespace-nowrap">
                         {new Date(ch.createdAt || Date.now()).toLocaleString()}
                       </td>
-                      <td className="p-3 text-emerald-600 underline cursor-pointer">{ch.webhookUrl || "NA"}</td>
+                      <td 
+                        onClick={() => handleUpdateWebhook(ch)}
+                        className="p-3 text-emerald-600 underline cursor-pointer hover:text-emerald-800 font-mono"
+                        title="Click to edit Webhook URL"
+                      >
+                        {ch.webhookUrl || "NA"}
+                      </td>
                       <td className="p-3 relative">
                         <button
                           onClick={() => setOpenActionMenuId(openActionMenuId === ch.id ? null : ch.id)}

@@ -6,47 +6,66 @@ const prisma = new PrismaClient();
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { id, description, address, email, website, category } = body;
+    const { id, displayName, description, email, address, website, category } = body;
 
-    const account = await prisma.wabaAccount.findUnique({ where: { id } });
-    if (!account) {
-      return NextResponse.json({ error: "Account not found" }, { status: 404 });
+    if (!id) {
+      return NextResponse.json({ error: "Channel ID is required" }, { status: 400 });
     }
 
-    // Meta Graph API Sync
-    if (account.accessToken && account.phoneNumberId) {
+    // 1. Channel find karo jisse accessToken aur phoneNumberId mil sake
+    const channel = await prisma.wabaAccount.findUnique({
+      where: { id },
+    });
+
+    if (!channel) {
+      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    }
+
+    // 2. Meta Graph API ko call karke Business Profile update karo (Agar mock token nahi hai)
+    if (channel.accessToken && !channel.accessToken.startsWith("mock_token") && channel.phoneNumberId) {
       try {
-        await fetch(
-          `https://graph.facebook.com/v18.0/${account.phoneNumberId}/whatsapp_business_profile`,
+        const metaRes = await fetch(
+          `https://graph.facebook.com/v18.0/${channel.phoneNumberId}/whatsapp_business_profile`,
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${account.accessToken}`,
+              "Authorization": `Bearer ${channel.accessToken}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
               messaging_product: "whatsapp",
-              about: description,
-              address: address,
-              email: email,
+              about: description || "",
+              address: address || "",
+              description: description || "",
+              email: email || "",
               websites: website ? [website] : [],
-              vertical: category || "OTHER",
+              vertical: category || "Other",
             }),
           }
         );
+        const metaData = await metaRes.json();
+        console.log("Meta BM Profile Sync Response:", metaData);
       } catch (metaErr) {
-        console.error("Meta Graph API Sync Error:", metaErr);
+        console.error("Failed to sync profile with Meta BM:", metaErr);
       }
     }
 
-    // Update in Prisma DB
-    const updated = await prisma.wabaAccount.update({
+    // 3. Apne Database me bhi update save kar lo
+    const updatedChannel = await prisma.wabaAccount.update({
       where: { id },
-      data: { description, address, email, website, category },
+      data: {
+        displayName,
+        description,
+        email,
+        address,
+        website,
+        category,
+      },
     });
 
-    return NextResponse.json({ success: true, data: updated });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ success: true, data: updatedChannel });
+  } catch (error: any) {
+    console.error("Business profile update error:", error);
+    return NextResponse.json({ error: error.message || "Failed to update profile" }, { status: 500 });
   }
 }

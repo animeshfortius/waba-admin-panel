@@ -18,8 +18,8 @@ export async function GET() {
       const cleanWabaId = acc.wabaId ? acc.wabaId.replace("WABA_", "").trim() : "";
       const cleanPhoneId = acc.phoneNumberId ? acc.phoneNumberId.replace("PHONE_", "").trim() : "";
 
-      // 1. Live fetch Messaging Limit from Meta if stale/missing
-      if ((!currentLimit || currentLimit === "UNASSIGNED" || currentLimit === "TIER_NOT_FOUND") && acc.accessToken && cleanWabaId) {
+      // Hamesha Meta se live Messaging Limit fetch karo taaki increase hone par auto-update ho jaye
+      if (acc.accessToken && cleanWabaId) {
         try {
           const limitRes = await fetch(
             `https://graph.facebook.com/v26.0/${cleanWabaId}?fields=messaging_limit_tier`,
@@ -34,7 +34,7 @@ export async function GET() {
         }
       }
 
-      // Format tier nicely for display (Handling TIER_2K, 2000, TIER_10K, etc.)
+      // Format tier nicely for display
       let formattedLimit = currentLimit;
       if (currentLimit === "TIER_2K" || currentLimit === "2000") {
         formattedLimit = "2000 (TIER_2K)";
@@ -46,8 +46,8 @@ export async function GET() {
         formattedLimit = "100000 (TIER_10K)";
       }
 
-      // 2. Live fetch Quality Rating from Meta if unknown
-      if ((!currentRating || currentRating === "UNKNOWN") && acc.accessToken && cleanPhoneId) {
+      // Hamesha Meta se live Quality Rating fetch karo
+      if (acc.accessToken && cleanPhoneId) {
         try {
           const ratingRes = await fetch(
             `https://graph.facebook.com/v26.0/${cleanPhoneId}?fields=quality_rating`,
@@ -62,7 +62,7 @@ export async function GET() {
         }
       }
 
-      // 3. Update DB if fetched values differ from stored ones
+      // Agar Meta se aayi limit database wali se alag hai, toh turant DB update kar do
       if (currentLimit !== acc.messagingLimit || currentRating !== acc.qualityRating) {
         await prisma.wabaAccount.update({
           where: { id: acc.id },

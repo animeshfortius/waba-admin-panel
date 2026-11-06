@@ -16,29 +16,28 @@ export async function GET() {
 
         try {
           const token = acc.accessToken;
-          if (token && !token.startsWith("mock_token")) {
+          if (token && !token.startsWith("mock_token") && acc.wabaId) {
             
-            // 1. Fetch Messaging Limit from WABA ID (Correct Meta Endpoint)
-            if (acc.wabaId) {
-              const limitRes = await fetch(
-                `https://graph.facebook.com/v18.0/${acc.wabaId}?fields=messaging_limit_tier`,
-                { headers: { Authorization: `Bearer ${token}` } }
+            // Query WABA phone_numbers edge to get messaging limits and quality ratings for all numbers under this WABA
+            const res = await fetch(
+              `https://graph.facebook.com/v18.0/${acc.wabaId}/phone_numbers?fields=id,messaging_limit_tier,quality_rating`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            const data = await res.json();
+            
+            if (data && data.data && Array.isArray(data.data)) {
+              // Find the specific phone number matching this account's phoneNumberId
+              const matchedPhone = data.data.find(
+                (p: any) => p.id === acc.phoneNumberId || p.id === String(acc.phoneNumberId)
               );
-              const limitData = await limitRes.json();
-              if (limitData.messaging_limit_tier) {
-                messagingLimit = limitData.messaging_limit_tier;
-              }
-            }
 
-            // 2. Fetch Quality Rating from Phone Number ID (Correct Meta Endpoint)
-            if (acc.phoneNumberId) {
-              const ratingRes = await fetch(
-                `https://graph.facebook.com/v18.0/${acc.phoneNumberId}?fields=quality_rating`,
-                { headers: { Authorization: `Bearer ${token}` } }
-              );
-              const ratingData = await ratingRes.json();
-              if (ratingData.quality_rating) {
-                qualityRating = ratingData.quality_rating;
+              if (matchedPhone) {
+                if (matchedPhone.messaging_limit_tier) {
+                  messagingLimit = matchedPhone.messaging_limit_tier;
+                }
+                if (matchedPhone.quality_rating) {
+                  qualityRating = matchedPhone.quality_rating;
+                }
               }
             }
 

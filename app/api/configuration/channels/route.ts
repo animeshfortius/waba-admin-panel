@@ -9,7 +9,6 @@ export async function GET() {
       orderBy: { id: "desc" }
     });
 
-    // Clean IDs and tokens right from backend before sending to frontend
     const sanitizedAccounts = accounts.map(acc => ({
       ...acc,
       wabaId: acc.wabaId ? acc.wabaId.replace("WABA_", "").trim() : "",
@@ -27,16 +26,25 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    // Validate that required fields are actually provided from Meta Webhook/Embedded Signup
     if (!body.wabaId || !body.phoneNumberId || !body.accessToken) {
       return NextResponse.json({ error: "Missing required Meta credentials" }, { status: 400 });
     }
 
-    const newChannel = await prisma.wabaAccount.create({
-      data: {
+    const cleanWabaId = body.wabaId.replace("WABA_", "").trim();
+    const cleanPhoneId = body.phoneNumberId.replace("PHONE_", "").trim();
+
+    const newChannel = await prisma.wabaAccount.upsert({
+      where: { wabaId: cleanWabaId },
+      update: {
+        phoneNumberId: cleanPhoneId,
+        displayPhone: body.displayPhone || "",
+        accessToken: body.accessToken,
+        status: body.status || "ACTIVE",
+      },
+      create: {
         userId: body.userId || "default_user",
-        wabaId: body.wabaId.replace("WABA_", "").trim(),
-        phoneNumberId: body.phoneNumberId.replace("PHONE_", "").trim(),
+        wabaId: cleanWabaId,
+        phoneNumberId: cleanPhoneId,
         displayPhone: body.displayPhone || "",
         accessToken: body.accessToken,
         status: body.status || "ACTIVE",
@@ -44,9 +52,10 @@ export async function POST(request: Request) {
         qualityRating: "UNKNOWN"
       },
     });
+
     return NextResponse.json(newChannel);
   } catch (error) {
-    console.error("Create Channel Error:", error);
-    return NextResponse.json({ error: "Failed to create channel" }, { status: 500 });
+    console.error("Create/Upsert Channel Error:", error);
+    return NextResponse.json({ error: "Failed to save channel" }, { status: 500 });
   }
 }

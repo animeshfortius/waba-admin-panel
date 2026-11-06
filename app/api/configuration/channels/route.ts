@@ -18,7 +18,7 @@ export async function GET() {
       const cleanWabaId = acc.wabaId ? acc.wabaId.replace("WABA_", "").trim() : "";
       const cleanPhoneId = acc.phoneNumberId ? acc.phoneNumberId.replace("PHONE_", "").trim() : "";
 
-      // Agar limit UNASSIGNED ya TIER_NOT_FOUND hai, toh Meta se live fetch karo
+      // 1. Live fetch Messaging Limit from Meta if stale/missing
       if ((!currentLimit || currentLimit === "UNASSIGNED" || currentLimit === "TIER_NOT_FOUND") && acc.accessToken && cleanWabaId) {
         try {
           const limitRes = await fetch(
@@ -34,7 +34,19 @@ export async function GET() {
         }
       }
 
-      // Agar rating UNKNOWN hai, toh Meta se live fetch karo
+      // Format tier nicely for display (Handling TIER_2K, 2000, TIER_10K, etc.)
+      let formattedLimit = currentLimit;
+      if (currentLimit === "TIER_2K" || currentLimit === "2000") {
+        formattedLimit = "2000 (TIER_2K)";
+      } else if (currentLimit === "TIER_1K" || currentLimit === "1000") {
+        formattedLimit = "1000 (TIER_1K)";
+      } else if (currentLimit === "TIER_10K" || currentLimit === "10000") {
+        formattedLimit = "10000 (TIER_10K)";
+      } else if (currentLimit === "TIER_100K" || currentLimit === "100000") {
+        formattedLimit = "100000 (TIER_10K)";
+      }
+
+      // 2. Live fetch Quality Rating from Meta if unknown
       if ((!currentRating || currentRating === "UNKNOWN") && acc.accessToken && cleanPhoneId) {
         try {
           const ratingRes = await fetch(
@@ -50,7 +62,7 @@ export async function GET() {
         }
       }
 
-      // Agar live data mil gaya aur DB se alag hai, toh DB ko automatically update kar do
+      // 3. Update DB if fetched values differ from stored ones
       if (currentLimit !== acc.messagingLimit || currentRating !== acc.qualityRating) {
         await prisma.wabaAccount.update({
           where: { id: acc.id },
@@ -63,7 +75,7 @@ export async function GET() {
 
       updatedAccounts.push({
         ...acc,
-        messagingLimit: currentLimit,
+        messagingLimit: formattedLimit,
         qualityRating: currentRating,
         wabaId: cleanWabaId,
         phoneNumberId: cleanPhoneId,

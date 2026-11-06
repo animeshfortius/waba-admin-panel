@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. AUTOMATED APIS: Phone Registration & Smartping Credit Line Attach with detailed logging
+    // 2. AUTOMATED APIS: Phone Registration & Smartping Credit Line Attach
     if (phoneNumberId && accessToken) {
       try {
         // A. Register Phone Number with Meta
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
         const regData = await regRes.json();
         console.log("Phone registration response:", regData);
 
-        // B. Attach Credit Line via Smartping Endpoint
+        // B. Attach Credit Line via Smartping Endpoint (Safe Text/JSON Handling)
         const cleanPhone = displayPhone ? displayPhone.replace(/[^0-9]/g, "") : phoneNumberId;
         const smartpingUrl = `https://wabalens.smartping.io/MetaAPI/metapp/api/v1/wabas/attach?wabaId=${wabaId}&wabaNumber=${cleanPhone}`;
         
@@ -102,8 +102,11 @@ export async function POST(request: Request) {
             "Content-Type": "application/json"
           }
         });
-        const creditData = await creditRes.json();
-        console.log("Smartping credit line attach response:", creditData);
+
+        const responseText = await creditRes.text();
+        console.log("Smartping raw response status:", creditRes.status);
+        console.log("Smartping raw response body:", responseText);
+
       } catch (apiErr) {
         console.error("Automated API execution error:", apiErr);
       }

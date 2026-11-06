@@ -16,33 +16,24 @@ export async function GET() {
 
         try {
           const token = acc.accessToken;
-          if (token && !token.startsWith("mock_token")) {
+          // Agar token valid hai aur mock token nahi hai toh Meta se live fetch karo
+          if (token && !token.startsWith("mock_token") && acc.phoneNumberId) {
             
-            // 1. Fetch Messaging Limit from Phone Number ID (Correct Meta Endpoint)
-            if (acc.phoneNumberId) {
-              const limitRes = await fetch(
-                `https://graph.facebook.com/v18.0/${acc.phoneNumberId}?fields=messaging_limit_tier`,
-                { headers: { Authorization: `Bearer ${token}` } }
-              );
-              const limitData = await limitRes.json();
-              if (limitData.messaging_limit_tier) {
-                messagingLimit = limitData.messaging_limit_tier;
-              }
+            // Meta Graph API call to get both messaging limit tier and quality rating using Phone Number ID
+            const res = await fetch(
+              `https://graph.facebook.com/v18.0/${acc.phoneNumberId}?fields=messaging_limit_tier,quality_rating`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            const data = await res.json();
+            
+            if (data.messaging_limit_tier) {
+              messagingLimit = data.messaging_limit_tier;
+            }
+            if (data.quality_rating) {
+              qualityRating = data.quality_rating;
             }
 
-            // 2. Fetch Quality Rating from Phone Number ID
-            if (acc.phoneNumberId) {
-              const ratingRes = await fetch(
-                `https://graph.facebook.com/v18.0/${acc.phoneNumberId}?fields=quality_rating`,
-                { headers: { Authorization: `Bearer ${token}` } }
-              );
-              const ratingData = await ratingRes.json();
-              if (ratingData.quality_rating) {
-                qualityRating = ratingData.quality_rating;
-              }
-            }
-
-            // 3. Save the fetched stats back to Database so it persists
+            // Database mein live stats ko turant persist/update karo
             if (messagingLimit !== acc.messagingLimit || qualityRating !== acc.qualityRating) {
               await prisma.wabaAccount.update({
                 where: { id: acc.id },
@@ -51,7 +42,7 @@ export async function GET() {
             }
           }
         } catch (metaErr) {
-          console.error("Error fetching live Meta stats for WABA:", acc.wabaId, metaErr);
+          console.error("Error fetching live Meta stats for channel:", acc.id, metaErr);
         }
 
         return {
@@ -78,7 +69,9 @@ export async function POST(request: Request) {
         phoneNumberId: body.phoneNumberId || "1384456657081014",
         displayPhone: body.displayPhone || "15553945963",
         accessToken: body.accessToken || "mock_token_12345",
-        status: body.status || "ACTIVE"
+        status: body.status || "ACTIVE",
+        messagingLimit: "TIER_NOT_FOUND",
+        qualityRating: "UNKNOWN"
       },
     });
     return NextResponse.json(newChannel);

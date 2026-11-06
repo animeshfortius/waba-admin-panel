@@ -96,7 +96,7 @@ export async function POST(request: Request) {
         console.log("Hitting Smartping attach URL (POST):", smartpingUrl);
 
         const creditRes = await fetch(smartpingUrl, {
-          method: "POST", // Changed from GET to POST
+          method: "POST",
           headers: {
             "Authorization": `Bearer ${authKey}`,
             "Content-Type": "application/json"
@@ -110,6 +110,34 @@ export async function POST(request: Request) {
       } catch (apiErr) {
         console.error("Automated API execution error:", apiErr);
       }
+    }
+
+    // 2.1 Fetch Live Messaging Limit & Quality Rating from Meta during registration
+    let liveMessagingLimit = "TIER_NOT_FOUND";
+    let liveQualityRating = "UNKNOWN";
+    try {
+      if (accessToken && wabaId) {
+        const limitRes = await fetch(
+          `https://graph.facebook.com/v18.0/${wabaId}?fields=messaging_limit_tier`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const limitData = await limitRes.json();
+        if (limitData.messaging_limit_tier) {
+          liveMessagingLimit = limitData.messaging_limit_tier;
+        }
+      }
+      if (accessToken && phoneNumberId) {
+        const ratingRes = await fetch(
+          `https://graph.facebook.com/v18.0/${phoneNumberId}?fields=quality_rating`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const ratingData = await ratingRes.json();
+        if (ratingData.quality_rating) {
+          liveQualityRating = ratingData.quality_rating;
+        }
+      }
+    } catch (fetchErr) {
+      console.error("Error fetching live tier/rating on register:", fetchErr);
     }
 
     // 3. Save to Database
@@ -133,6 +161,8 @@ export async function POST(request: Request) {
         displayName: name || "WhatsApp Business",
         website: website || "",
         status: "ACTIVE",
+        messagingLimit: liveMessagingLimit,
+        qualityRating: liveQualityRating,
       },
       create: {
         userId: defaultUser.id,
@@ -143,6 +173,8 @@ export async function POST(request: Request) {
         displayName: name || "WhatsApp Business",
         website: website || "",
         status: "ACTIVE",
+        messagingLimit: liveMessagingLimit,
+        qualityRating: liveQualityRating,
       },
     });
 

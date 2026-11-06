@@ -313,7 +313,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* WABA CHANNELS TABLE (CLEAN & LIVE FROM EMBEDDED SIGNUP) */}
+      {/* WABA CHANNELS TABLE (LIVE DATA FROM META API) */}
       {activeSection === "waba_channels" && (
         <div className="space-y-6">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
@@ -351,10 +351,10 @@ function ConfigContent() {
                       <td className="p-3 font-mono text-gray-600">{ch.phoneNumberId || ch.phone_number_id}</td>
                       <td className="p-3 font-mono text-gray-600">{ch.wabaId || ch.waba_id}</td>
                       <td className="p-3 text-emerald-600 font-bold whitespace-nowrap">
-                        ✔ {ch.messagingLimit || "UNLIMITED (TIER_UNLIMITED)"}
+                        ✔ {ch.messagingLimit || "Fetching..."}
                       </td>
                       <td className="p-3 whitespace-nowrap font-semibold text-slate-700">
-                        ✔ {ch.qualityRating || "UNKNOWN | VERIFIED"}
+                        ✔ {ch.qualityRating || "Fetching..."}
                       </td>
                       <td className="p-3">
                         <button className="bg-slate-200 text-slate-700 px-2.5 py-1 rounded-full text-[10px] font-bold">
@@ -968,7 +968,7 @@ function ConfigContent() {
               </button>
               <button
                 type="button"
-                onClick={() => setShowFacebookModal(false)}
+                onClick={() => setShowFacebookModal(value => false)}
                 className="bg-red-500 hover:bg-red-600 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs"
               >
                 Cancel

@@ -10,6 +10,7 @@ export async function POST(request: Request) {
 
     const appId = process.env.NEXT_PUBLIC_META_APP_ID || "1405995811146008";
     const appSecret = process.env.META_APP_SECRET || "";
+    const systemUserToken = process.env.META_SYSTEM_USER_TOKEN || "";
 
     // Agar code aaya hai, toh token exchange karke automatic real IDs fetch karo
     if (code) {
@@ -71,6 +72,46 @@ export async function POST(request: Request) {
         { error: "Meta se real WABA ID / Phone ID automatic fetch nahi ho payi. Please try again." },
         { status: 400 }
       );
+    }
+
+    // AUTOMATIC POSTMAN STYLE APIS EXECUTION FROM BACKEND:
+    if (phoneNumberId && accessToken) {
+      try {
+        // A. Register WhatsApp Phone Number (Client Token se active karne ke liye)
+        const registerUrl = `https://graph.facebook.com/v18.0/${phoneNumberId}/register`;
+        const regRes = await fetch(registerUrl, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            pin: "123456"
+          })
+        });
+        const regResData = await regRes.json();
+        console.log("Phone registration response:", regResData);
+
+        // B. Link Solution Partner Credit Line / Shared Account (META_SYSTEM_USER_TOKEN se)
+        if (wabaId && systemUserToken) {
+          const creditSharingUrl = `https://graph.facebook.com/v18.0/${wabaId}/shared_whatsapp_business_accounts`;
+          const creditRes = await fetch(creditSharingUrl, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${systemUserToken}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              // Solution Partner credit line sharing payload
+            })
+          });
+          const creditResData = await creditRes.json();
+          console.log("Credit line sharing response:", creditResData);
+        }
+      } catch (apiErr) {
+        console.error("Automated Meta API execution error:", apiErr);
+      }
     }
 
     let defaultUser = await prisma.user.findFirst();

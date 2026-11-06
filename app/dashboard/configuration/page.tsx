@@ -69,7 +69,7 @@ function ConfigContent() {
     email: "",
     address: "",
     website: "",
-    category: "Other",
+    category: "OTHER",
   });
   const [profileImageFile, setProfileImageFile] = useState<any>(null);
   const [profileImagePreview, setProfileImagePreview] = useState<string>("");
@@ -274,7 +274,7 @@ function ConfigContent() {
       email: channel.email || "",
       address: channel.address || "",
       website: channel.website || "",
-      category: channel.category || "Other",
+      category: channel.category || "OTHER",
     });
 
     if (channel.profilePicture) {
@@ -288,11 +288,11 @@ function ConfigContent() {
       if (result.success && result.data) {
         setProfileForm({
           displayName: channel.displayName || channel.displayPhone || "100 App",
-          description: result.data.description || "",
-          email: result.data.email || "",
-          address: result.data.address || "",
-          website: result.data.website || "",
-          category: result.data.category || "Other",
+          description: result.data.description || channel.description || "",
+          email: result.data.email || channel.email || "",
+          address: result.data.address || channel.address || "",
+          website: result.data.website || channel.website || "",
+          category: result.data.category || channel.category || "OTHER",
         });
         if (result.data.profilePicture) {
           setProfileImagePreview(result.data.profilePicture);
@@ -552,10 +552,21 @@ function ConfigContent() {
                       onChange={(e) => setProfileForm({ ...profileForm, category: e.target.value })}
                       className="w-full border p-2 rounded-lg bg-white"
                     >
-                      <option value="Other">Other</option>
-                      <option value="Retail">Retail</option>
-                      <option value="Restaurant">Restaurant</option>
-                      <option value="Education">Education</option>
+                      <option value="OTHER">Other</option>
+                      <option value="AUTO">Automotive</option>
+                      <option value="BEAUTY">Beauty, Spa and Salon</option>
+                      <option value="APPAREL">Clothing and Apparel</option>
+                      <option value="EDU">Education</option>
+                      <option value="ENTERTAIN">Entertainment</option>
+                      <option value="FINANCE">Finance and Banking</option>
+                      <option value="GROCERY">Food and Grocery</option>
+                      <option value="HOTEL">Hotel and Lodging</option>
+                      <option value="HEALTH">Medical and Health</option>
+                      <option value="NONPROFIT">Non-profit</option>
+                      <option value="PROF_SERVICES">Professional Services</option>
+                      <option value="RETAIL">Retail and Wholesale</option>
+                      <option value="TRAVEL">Travel and Transportation</option>
+                      <option value="RESTAURANT">Restaurant</option>
                     </select>
                   </div>
                 </div>
@@ -622,21 +633,32 @@ function ConfigContent() {
               {/* Live WhatsApp Smartphone Preview */}
               <div className="flex flex-col items-center justify-start bg-slate-50 p-4 rounded-2xl border">
                 <p className="font-bold text-gray-600 mb-2">WhatsApp Profile Preview</p>
-                <div className="w-56 h-[380px] bg-emerald-700 rounded-3xl p-2 border-4 border-slate-800 shadow-xl flex flex-col relative text-white">
+                <div className="w-56 h-[410px] bg-emerald-700 rounded-3xl p-2 border-4 border-slate-800 shadow-xl flex flex-col relative text-white">
                   <div className="bg-emerald-800 p-2 rounded-t-2xl text-center font-bold text-[10px]">
                     Template Preview
                   </div>
-                  <div className="bg-white text-gray-800 flex-1 rounded-b-2xl p-3 flex flex-col items-center space-y-2 text-[10px]">
+                  <div className="bg-white text-gray-800 flex-1 rounded-b-2xl p-3 flex flex-col items-center space-y-1.5 text-[10px] overflow-y-auto">
                     {profileImagePreview ? (
-                      <img src={profileImagePreview} alt="Logo" className="w-14 h-14 rounded-full object-cover border shadow" />
+                      <img src={profileImagePreview} alt="Logo" className="w-12 h-12 rounded-full object-cover border shadow" />
                     ) : (
-                      <div className="w-14 h-14 rounded-full bg-slate-200 flex items-center justify-center text-xl">👤</div>
+                      <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-xl">👤</div>
                     )}
-                    <h5 className="font-bold text-sm text-gray-800">{profileForm.displayName}</h5>
-                    <p className="text-gray-400 text-center">{profileForm.category}</p>
-                    {profileForm.description && <p className="text-gray-600 text-center bg-gray-50 p-1.5 rounded">{profileForm.description}</p>}
-                    {profileForm.email && <p className="text-blue-600">✉️ {profileForm.email}</p>}
-                    {profileForm.website && <p className="text-emerald-600 underline">🌐 {profileForm.website}</p>}
+                    <h5 className="font-bold text-xs text-gray-900 text-center">{profileForm.displayName || "Business Name"}</h5>
+                    <p className="text-gray-400 font-semibold text-center">{profileForm.category || "OTHER"}</p>
+                    
+                    {profileForm.description ? (
+                      <p className="text-gray-600 text-center bg-gray-50 p-1.5 rounded w-full text-[9px] leading-tight">
+                        {profileForm.description}
+                      </p>
+                    ) : (
+                      <p className="text-gray-300 text-center italic text-[9px]">No description added yet...</p>
+                    )}
+
+                    <div className="w-full space-y-1 pt-1 border-t text-left text-[9px]">
+                      {profileForm.email && <p className="text-blue-600 truncate">✉️ {profileForm.email}</p>}
+                      {profileForm.address && <p className="text-gray-700 truncate">📍 {profileForm.address}</p>}
+                      {profileForm.website && <p className="text-emerald-600 underline truncate">🌐 {profileForm.website}</p>}
+                    </div>
                   </div>
                 </div>
               </div>

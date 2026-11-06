@@ -89,14 +89,14 @@ export async function POST(request: Request) {
         const regData = await regRes.json();
         console.log("Phone registration response:", regData);
 
-        // B. Attach Credit Line via Smartping Endpoint (Safe Text/JSON Handling)
+        // B. Attach Credit Line via Smartping Endpoint (POST Method)
         const cleanPhone = displayPhone ? displayPhone.replace(/[^0-9]/g, "") : phoneNumberId;
         const smartpingUrl = `https://wabalens.smartping.io/MetaAPI/metapp/api/v1/wabas/attach?wabaId=${wabaId}&wabaNumber=${cleanPhone}`;
         
-        console.log("Hitting Smartping attach URL:", smartpingUrl);
+        console.log("Hitting Smartping attach URL (POST):", smartpingUrl);
 
         const creditRes = await fetch(smartpingUrl, {
-          method: "GET",
+          method: "POST", // Changed from GET to POST
           headers: {
             "Authorization": `Bearer ${authKey}`,
             "Content-Type": "application/json"

@@ -16,39 +16,74 @@ export async function GET() {
 
         try {
           const token = acc.accessToken;
+          console.log(`--- Checking Channel: ${acc.displayPhone} ---`);
+          console.log(`WABA ID: ${acc.wabaId}, Phone Number ID: ${acc.phoneNumberId}`);
+
           if (token && !token.startsWith("mock_token")) {
             
-            // 1. Fetch Messaging Limit from WABA ID using v26.0
+            // Try fetching via WABA phone_numbers edge (Most reliable for multi-number WABAs)
             if (acc.wabaId) {
+              const res = await fetch(
+                `https://graph.facebook.com/v26.0/${acc.wabaId}/phone_numbers?fields=id,messaging_limit_tier,quality_rating`,
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              const data = await res.json();
+              console.log("Meta WABA phone_numbers response:", JSON.stringify(data));
+
+              if (data && data.data && Array.isArray(data.data)) {
+                const matchedPhone = data.data.find(
+                  (p: any) => p.id === acc.phoneNumberId || p.id === String(acc.phoneNumberId)
+                );
+                if (matchedPhone) {
+                  if (matchedPhone.messaging_limit_tier) {
+                    messagingLimit = matchedPhone.messaging_limit_tier;
+                  }
+                  if (matchedPhone.quality_rating) {
+                    qualityRating = matchedPhone.quality_rating;
+                  }
+                }
+              }
+            }
+
+            // Fallback: Direct WABA fetch if edge didn't yield limit
+            if (messagingLimit === "TIER_NOT_FOUND" && acc.wabaId) {
               const limitRes = await fetch(
                 `https://graph.facebook.com/v26.0/${acc.wabaId}?fields=messaging_limit_tier`,
                 { headers: { Authorization: `Bearer ${token}` } }
               );
               const limitData = await limitRes.json();
+              console.log("Meta Direct WABA limit response:", JSON.stringify(limitData));
               if (limitData && limitData.messaging_limit_tier) {
                 messagingLimit = limitData.messaging_limit_tier;
               }
             }
 
-            // 2. Fetch Quality Rating from Phone Number ID using v26.0
-            if (acc.phoneNumberId) {
+            // Fallback: Direct Phone Number fetch for quality rating if needed
+            if (qualityRating === "UNKNOWN" && acc.phoneNumberId) {
               const ratingRes = await fetch(
                 `https://graph.facebook.com/v26.0/${acc.phoneNumberId}?fields=quality_rating`,
                 { headers: { Authorization: `Bearer ${token}` } }
               );
               const ratingData = await ratingRes.json();
+              console.log("Meta Direct Phone rating response:", JSON.stringify(ratingData));
               if (ratingData && ratingData.quality_rating) {
                 qualityRating = ratingData.quality_rating;
               }
             }
 
-            // Database mein live stats persist karo agar change hue hain
+            console.log(`Final Resolved -> Limit: ${messagingLimit}, Rating: ${qualityRating}`);
+
+            // Database mein live stats persist karo
             if (messagingLimit !== acc.messagingLimit || qualityRating !== acc.qualityRating) {
               await prisma.wabaAccount.update({
                 where: { id: acc.id },
                 data: { messagingLimit, qualityRating }
-              }).catch(() => {});
+              }).catch((dbErr) => {
+                console.error("DB Update Error:", dbErr);
+              });
             }
+          } else {
+            console.log("Skipped live fetch: Token is missing or mock.");
           }
         } catch (metaErr) {
           console.error("Error fetching live Meta stats for channel:", acc.id, metaErr);
@@ -64,6 +99,7 @@ export async function GET() {
 
     return NextResponse.json(updatedAccounts);
   } catch (error) {
+    console.error("API Route Error:", error);
     return NextResponse.json({ error: "Failed to fetch channels" }, { status: 500 });
   }
 }

@@ -16,31 +16,33 @@ export async function GET() {
 
         try {
           const token = acc.accessToken;
-          // Agar token valid hai aur mock token nahi hai toh Meta se live fetch karo
-          if (token && !token.startsWith("mock_token") && acc.phoneNumberId) {
+          if (token && !token.startsWith("mock_token")) {
             
-            // Meta Graph API call to get both messaging limit tier and quality rating using Phone Number ID
-            const res = await fetch(
-              `https://graph.facebook.com/v18.0/${acc.phoneNumberId}?fields=messaging_limit_tier,quality_rating`,
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
-            const data = await res.json();
-            
-            // Handle messaging limit tier safely with fallback if missing from Meta
-            if (data.messaging_limit_tier) {
-              messagingLimit = data.messaging_limit_tier;
-            } else {
-              messagingLimit = "UNASSIGNED";
+            // 1. Fetch Messaging Limit from WABA ID (Correct Meta Endpoint)
+            if (acc.wabaId) {
+              const limitRes = await fetch(
+                `https://graph.facebook.com/v18.0/${acc.wabaId}?fields=messaging_limit_tier`,
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              const limitData = await limitRes.json();
+              if (limitData.messaging_limit_tier) {
+                messagingLimit = limitData.messaging_limit_tier;
+              }
             }
 
-            // Handle quality rating safely with fallback if missing from Meta
-            if (data.quality_rating) {
-              qualityRating = data.quality_rating;
-            } else {
-              qualityRating = "UNKNOWN";
+            // 2. Fetch Quality Rating from Phone Number ID (Correct Meta Endpoint)
+            if (acc.phoneNumberId) {
+              const ratingRes = await fetch(
+                `https://graph.facebook.com/v18.0/${acc.phoneNumberId}?fields=quality_rating`,
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              const ratingData = await ratingRes.json();
+              if (ratingData.quality_rating) {
+                qualityRating = ratingData.quality_rating;
+              }
             }
 
-            // Database mein live stats ko turant persist/update karo
+            // Database mein live stats persist karo
             if (messagingLimit !== acc.messagingLimit || qualityRating !== acc.qualityRating) {
               await prisma.wabaAccount.update({
                 where: { id: acc.id },

@@ -253,7 +253,7 @@ function ConfigContent() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-2 text-xs font-sans">
+    <div className="space-y-6 w-full p-4 text-xs font-sans">
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
         <div>
           <div className="text-gray-400">
@@ -980,7 +980,6 @@ function ConfigContent() {
     </div>
   );
 }
-
 export default function ConfigPage() {
   return (
     <Suspense fallback={<div className="p-8 text-center text-xs text-gray-500">Loading Configuration...</div>}>

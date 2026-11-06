@@ -10,7 +10,6 @@ export async function POST(request: Request) {
 
     const appId = process.env.NEXT_PUBLIC_META_APP_ID || "1405995811146008";
     const appSecret = process.env.META_APP_SECRET || "";
-    // Smartping Auth Barrier key
     const authKey = "aEBsEkOowJHzSfcDzAibzrFidlvLZwkePITKmRahDXdEkHhSWRLTCVQsqElOWWLU";
 
     // 1. Token Exchange & Auto Fetch IDs
@@ -71,7 +70,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. AUTOMATED APIS: Phone Registration & Smartping Credit Line Attach
+    // 2. AUTOMATED APIS: Phone Registration & Smartping Credit Line Attach with detailed logging
     if (phoneNumberId && accessToken) {
       try {
         // A. Register Phone Number with Meta
@@ -91,12 +90,13 @@ export async function POST(request: Request) {
         console.log("Phone registration response:", regData);
 
         // B. Attach Credit Line via Smartping Endpoint
-        // Usi phone number (displayPhone ya phoneNumberId) aur wabaId ka use karke
         const cleanPhone = displayPhone ? displayPhone.replace(/[^0-9]/g, "") : phoneNumberId;
         const smartpingUrl = `https://wabalens.smartping.io/MetaAPI/metapp/api/v1/wabas/attach?wabaId=${wabaId}&wabaNumber=${cleanPhone}`;
         
+        console.log("Hitting Smartping attach URL:", smartpingUrl);
+
         const creditRes = await fetch(smartpingUrl, {
-          method: "GET", // ya POST jo bhi Smartping accept kare (Postman ke mutabiq GET/POST ho sakta hai, yahan GET request standard hai query params ke liye)
+          method: "GET",
           headers: {
             "Authorization": `Bearer ${authKey}`,
             "Content-Type": "application/json"

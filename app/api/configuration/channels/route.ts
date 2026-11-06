@@ -16,32 +16,33 @@ export async function GET() {
 
         try {
           const token = acc.accessToken;
-          if (token && !token.startsWith("mock_token") && acc.wabaId) {
+          if (token && !token.startsWith("mock_token")) {
             
-            // Query WABA phone_numbers edge to get messaging limits and quality ratings for all numbers under this WABA
-            const res = await fetch(
-              `https://graph.facebook.com/v18.0/${acc.wabaId}/phone_numbers?fields=id,messaging_limit_tier,quality_rating`,
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
-            const data = await res.json();
-            
-            if (data && data.data && Array.isArray(data.data)) {
-              // Find the specific phone number matching this account's phoneNumberId
-              const matchedPhone = data.data.find(
-                (p: any) => p.id === acc.phoneNumberId || p.id === String(acc.phoneNumberId)
+            // 1. Fetch Messaging Limit from WABA ID using v26.0
+            if (acc.wabaId) {
+              const limitRes = await fetch(
+                `https://graph.facebook.com/v26.0/${acc.wabaId}?fields=messaging_limit_tier`,
+                { headers: { Authorization: `Bearer ${token}` } }
               );
-
-              if (matchedPhone) {
-                if (matchedPhone.messaging_limit_tier) {
-                  messagingLimit = matchedPhone.messaging_limit_tier;
-                }
-                if (matchedPhone.quality_rating) {
-                  qualityRating = matchedPhone.quality_rating;
-                }
+              const limitData = await limitRes.json();
+              if (limitData && limitData.messaging_limit_tier) {
+                messagingLimit = limitData.messaging_limit_tier;
               }
             }
 
-            // Database mein live stats persist karo
+            // 2. Fetch Quality Rating from Phone Number ID using v26.0
+            if (acc.phoneNumberId) {
+              const ratingRes = await fetch(
+                `https://graph.facebook.com/v26.0/${acc.phoneNumberId}?fields=quality_rating`,
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              const ratingData = await ratingRes.json();
+              if (ratingData && ratingData.quality_rating) {
+                qualityRating = ratingData.quality_rating;
+              }
+            }
+
+            // Database mein live stats persist karo agar change hue hain
             if (messagingLimit !== acc.messagingLimit || qualityRating !== acc.qualityRating) {
               await prisma.wabaAccount.update({
                 where: { id: acc.id },

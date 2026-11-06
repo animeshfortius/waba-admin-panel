@@ -163,6 +163,25 @@ function ConfigContent() {
     alert("Number removed from group!");
   };
 
+  // Handler to Set Default Channel
+  const handleSetDefaultChannel = async (id: string) => {
+    try {
+      const res = await fetch("/api/configuration/default-channel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        alert("Default channel updated successfully!");
+        window.location.reload();
+      } else {
+        alert("Failed to set default channel");
+      }
+    } catch (err) {
+      alert("Error updating default channel.");
+    }
+  };
+
   // Official Meta Embedded Signup SDK Handler (Automatic Graph API Token Exchange via Backend)
   const handleFacebookSignup = () => {
     if (!window.FB) {
@@ -357,8 +376,11 @@ function ConfigContent() {
                         ✔ {ch.qualityRating || "Fetching..."}
                       </td>
                       <td className="p-3">
-                        <button className="bg-slate-200 text-slate-700 px-2.5 py-1 rounded-full text-[10px] font-bold">
-                          Set Default
+                        <button
+                          onClick={() => handleSetDefaultChannel(ch.id)}
+                          className={`${ch.isDefault ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'} px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer`}
+                        >
+                          {ch.isDefault ? "Default ★" : "Set Default"}
                         </button>
                       </td>
                       <td className="p-3 font-bold text-slate-800">{ch.displayName || "100 App"}</td>
@@ -980,6 +1002,7 @@ function ConfigContent() {
     </div>
   );
 }
+
 export default function ConfigPage() {
   return (
     <Suspense fallback={<div className="p-8 text-center text-xs text-gray-500">Loading Configuration...</div>}>

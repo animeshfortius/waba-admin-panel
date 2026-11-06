@@ -108,7 +108,64 @@ function ConfigContent() {
         .then(data => { if(Array.isArray(data)) { setGroups(data); localStorage.setItem("configuration_groups_list", JSON.stringify(data)); } })
         .catch(() => {});
     }
-    fetch("/api/configuration/channels").then(res => res.json()).then(data => { if(Array.isArray(data)) setChannels(data); }).catch(() => {});
+
+    // Fetch channels and enrich with live Meta data client-side to bypass Render timeout
+    fetch("/api/configuration/channels")
+      .then(res => res.json())
+      .then(async (data) => {
+        if (Array.isArray(data)) {
+          // Initial set from database
+          setChannels(data);
+
+          // Client-side background fetch to Meta v26.0 for real-time limits
+          const updatedChannels = await Promise.all(
+            data.map(async (acc) => {
+              if (!acc.accessToken || acc.accessToken.startsWith("mock_token")) {
+                return acc;
+              }
+
+              let messagingLimit = acc.messagingLimit;
+              let qualityRating = acc.qualityRating;
+
+              try {
+                if (acc.wabaId) {
+                  const limitRes = await fetch(
+                    `https://graph.facebook.com/v26.0/${acc.wabaId}?fields=messaging_limit_tier`,
+                    { headers: { Authorization: `Bearer ${acc.accessToken}` } }
+                  );
+                  const limitData = await limitRes.json();
+                  if (limitData && limitData.messaging_limit_tier) {
+                    messagingLimit = limitData.messaging_limit_tier;
+                  }
+                }
+
+                if (acc.phoneNumberId) {
+                  const ratingRes = await fetch(
+                    `https://graph.facebook.com/v26.0/${acc.phoneNumberId}?fields=quality_rating`,
+                    { headers: { Authorization: `Bearer ${acc.accessToken}` } }
+                  );
+                  const ratingData = await ratingRes.json();
+                  if (ratingData && ratingData.quality_rating) {
+                    qualityRating = ratingData.quality_rating;
+                  }
+                }
+              } catch (err) {
+                console.error("Client-side Meta fetch error:", err);
+              }
+
+              return {
+                ...acc,
+                messagingLimit,
+                qualityRating,
+              };
+            })
+          );
+
+          setChannels(updatedChannels);
+        }
+      })
+      .catch(() => {});
+
     fetch("/api/configuration/media").then(res => res.json()).then(data => { if(Array.isArray(data)) setMediaList(data); }).catch(() => {});
     fetch("/api/configuration/contacts").then(res => res.json()).then(data => { if(Array.isArray(data)) setContacts(data); }).catch(() => {});
     fetch("/api/configuration/blacklist").then(res => res.json()).then(data => { if(Array.isArray(data)) setBlacklist(data); }).catch(() => {});
@@ -416,7 +473,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* WABA CHANNELS TABLE (LIVE DATA FROM META API) */}
+      {/* WABA CHANNELS TABLE (LIVE DATA FROM META API VIA CLIENT-SIDE) */}
       {activeSection === "waba_channels" && (
         <div className="space-y-6">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">

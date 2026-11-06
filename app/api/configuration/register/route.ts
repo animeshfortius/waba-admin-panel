@@ -6,18 +6,73 @@ const prisma = new PrismaClient();
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { code, wabaId, phoneNumberId, displayPhone, name, website, accessToken } = body;
+    let { code, wabaId, phoneNumberId, displayPhone, name, website, accessToken } = body;
 
-    // Strict validation: Agar frontend se real IDs nahi aayi toh error do
+    const appId = process.env.NEXT_PUBLIC_META_APP_ID || "1405995811146008";
+    const appSecret = process.env.META_APP_SECRET || "";
+
+    // Agar code aaya hai, toh token exchange karke automatic real IDs fetch karo
+    if (code) {
+      try {
+        const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${code}&redirect_uri=`;
+        const tokenRes = await fetch(tokenUrl);
+        const tokenData = await tokenRes.json();
+
+        if (tokenData.access_token) {
+          accessToken = tokenData.access_token;
+
+          // 1. Debug token se WABA ID nikalne ki koshish karo
+          if (!wabaId) {
+            const debugUrl = `https://graph.facebook.com/v18.0/debug_token?input_token=${accessToken}&access_token=${appId}|${appSecret}`;
+            const debugRes = await fetch(debugUrl);
+            const debugData = await debugRes.json();
+
+            if (debugData.data && debugData.data.granular_scopes) {
+              const wabaScope = debugData.data.granular_scopes.find(
+                (s: any) => s.scope === "whatsapp_business_management"
+              );
+              if (wabaScope && wabaScope.target_ids && wabaScope.target_ids.length > 0) {
+                wabaId = wabaScope.target_ids[0];
+              }
+            }
+          }
+
+          // 2. Agar phir bhi wabaId na mile, toh user ke WABA list se fetch karo
+          if (!wabaId) {
+            const meUrl = `https://graph.facebook.com/v18.0/me/whatsapp_business_accounts?access_token=${accessToken}`;
+            const meRes = await fetch(meUrl);
+            const meData = await meRes.json();
+            if (meData.data && meData.data.length > 0) {
+              wabaId = meData.data[0].id;
+              name = meData.data[0].name || name;
+            }
+          }
+
+          // 3. WABA ID milne par Phone Number ID fetch karo
+          if (wabaId && !phoneNumberId) {
+            const phoneUrl = `https://graph.facebook.com/v18.0/${wabaId}/phone_numbers?access_token=${accessToken}`;
+            const phoneRes = await fetch(phoneUrl);
+            const phoneData = await phoneRes.json();
+            if (phoneData.data && phoneData.data.length > 0) {
+              phoneNumberId = phoneData.data[0].id;
+              displayPhone = phoneData.data[0].display_phone_number || displayPhone;
+              name = phoneData.data[0].verified_name || name;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Auto fetch error:", err);
+      }
+    }
+
+    // Final Validation Check
     if (!wabaId || !phoneNumberId) {
-      console.error("Missing Meta IDs in payload:", body);
       return NextResponse.json(
-        { error: "Meta se real WABA ID / Phone ID receive nahi hui. Please try again." },
+        { error: "Meta se real WABA ID / Phone ID automatic fetch nahi ho payi. Please try again." },
         { status: 400 }
       );
     }
 
-    // Get or create default user
     let defaultUser = await prisma.user.findFirst();
     if (!defaultUser) {
       defaultUser = await prisma.user.create({
@@ -29,7 +84,6 @@ export async function POST(request: Request) {
       });
     }
 
-    // Save/Update Real Data in Database securely
     const newAccount = await prisma.wabaAccount.upsert({
       where: { wabaId: wabaId },
       update: {

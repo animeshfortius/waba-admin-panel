@@ -71,6 +71,8 @@ function ConfigContent() {
     website: "",
     category: "Other",
   });
+  const [profileImageFile, setProfileImageFile] = useState<any>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState<string>("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   useEffect(() => {
@@ -262,6 +264,8 @@ function ConfigContent() {
   const handleOpenProfileModal = async (channel: any) => {
     setSelectedProfileChannel(channel);
     setOpenActionMenuId(null);
+    setProfileImageFile(null);
+    setProfileImagePreview("");
 
     // Initial fallback from channel row data
     setProfileForm({
@@ -272,6 +276,10 @@ function ConfigContent() {
       website: channel.website || "",
       category: channel.category || "Other",
     });
+
+    if (channel.profilePicture) {
+      setProfileImagePreview(channel.profilePicture);
+    }
 
     // Fetch live profile details from Meta / DB
     try {
@@ -286,9 +294,20 @@ function ConfigContent() {
           website: result.data.website || "",
           category: result.data.category || "Other",
         });
+        if (result.data.profilePicture) {
+          setProfileImagePreview(result.data.profilePicture);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch live profile details", err);
+    }
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setProfileImageFile(file);
+      setProfileImagePreview(URL.createObjectURL(file));
     }
   };
 
@@ -296,11 +315,32 @@ function ConfigContent() {
     if (!selectedProfileChannel) return;
     setIsSavingProfile(true);
     try {
+      let uploadedLogoUrl = profileImagePreview;
+
+      // Agar user ne nayi image select ki hai toh pehle upload karo
+      if (profileImageFile) {
+        const formData = new FormData();
+        formData.append("file", profileImageFile);
+        const uploadRes = await fetch("/api/configuration/media", {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+        if (uploadData.url) {
+          uploadedLogoUrl = uploadData.url;
+        }
+      }
+
       const res = await fetch("/api/configuration/business-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: selectedProfileChannel.id, ...profileForm }),
+        body: JSON.stringify({ 
+          id: selectedProfileChannel.id, 
+          ...profileForm,
+          profilePicture: uploadedLogoUrl 
+        }),
       });
+
       if (res.ok) {
         alert("Business Profile saved and Meta Business Manager updated successfully!");
         setSelectedProfileChannel(null);
@@ -479,9 +519,19 @@ function ConfigContent() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
               <div className="lg:col-span-2 space-y-4">
-                <div className="bg-gray-50 p-4 rounded-xl border border-dashed text-center">
-                  <div className="mx-auto w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-xl text-slate-500 mb-2">👤</div>
-                  <p className="text-xs font-bold text-blue-600 cursor-pointer">Click to upload</p>
+                <div className="bg-gray-50 p-4 rounded-xl border border-dashed text-center relative cursor-pointer">
+                  <input 
+                    type="file" 
+                    accept="image/png, image/jpeg" 
+                    onChange={handleImageChange} 
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" 
+                  />
+                  {profileImagePreview ? (
+                    <img src={profileImagePreview} alt="Logo Preview" className="mx-auto w-14 h-14 rounded-full object-cover mb-2 border shadow" />
+                  ) : (
+                    <div className="mx-auto w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-xl text-slate-500 mb-2">👤</div>
+                  )}
+                  <p className="text-xs font-bold text-blue-600">Click to upload logo</p>
                   <p className="text-[10px] text-gray-400">PNG, JPG up to 5MB (640x640px recommended)</p>
                 </div>
 
@@ -577,7 +627,11 @@ function ConfigContent() {
                     Template Preview
                   </div>
                   <div className="bg-white text-gray-800 flex-1 rounded-b-2xl p-3 flex flex-col items-center space-y-2 text-[10px]">
-                    <div className="w-14 h-14 rounded-full bg-slate-200 flex items-center justify-center text-xl">👤</div>
+                    {profileImagePreview ? (
+                      <img src={profileImagePreview} alt="Logo" className="w-14 h-14 rounded-full object-cover border shadow" />
+                    ) : (
+                      <div className="w-14 h-14 rounded-full bg-slate-200 flex items-center justify-center text-xl">👤</div>
+                    )}
                     <h5 className="font-bold text-sm text-gray-800">{profileForm.displayName}</h5>
                     <p className="text-gray-400 text-center">{profileForm.category}</p>
                     {profileForm.description && <p className="text-gray-600 text-center bg-gray-50 p-1.5 rounded">{profileForm.description}</p>}

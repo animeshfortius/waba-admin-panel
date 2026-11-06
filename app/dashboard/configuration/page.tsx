@@ -109,15 +109,13 @@ function ConfigContent() {
         .catch(() => {});
     }
 
-    // Fetch channels and enrich with live Meta data client-side to bypass Render timeout
+    // Fetch channels and enrich with live Meta data client-side with ID prefix cleaning
     fetch("/api/configuration/channels")
       .then(res => res.json())
       .then(async (data) => {
         if (Array.isArray(data)) {
-          // Initial set from database
           setChannels(data);
 
-          // Client-side background fetch to Meta v26.0 for real-time limits
           const updatedChannels = await Promise.all(
             data.map(async (acc) => {
               if (!acc.accessToken || acc.accessToken.startsWith("mock_token")) {
@@ -127,10 +125,17 @@ function ConfigContent() {
               let messagingLimit = acc.messagingLimit;
               let qualityRating = acc.qualityRating;
 
+              // Clean IDs to remove any 'WABA_' or 'PHONE_' prefix strings
+              const rawWabaId = acc.wabaId || acc.waba_id || "";
+              const rawPhoneId = acc.phoneNumberId || acc.phone_number_id || "";
+              
+              const cleanWabaId = rawWabaId.replace("WABA_", "").trim();
+              const cleanPhoneId = rawPhoneId.replace("PHONE_", "").trim();
+
               try {
-                if (acc.wabaId) {
+                if (cleanWabaId) {
                   const limitRes = await fetch(
-                    `https://graph.facebook.com/v26.0/${acc.wabaId}?fields=messaging_limit_tier`,
+                    `https://graph.facebook.com/v26.0/${cleanWabaId}?fields=messaging_limit_tier`,
                     { headers: { Authorization: `Bearer ${acc.accessToken}` } }
                   );
                   const limitData = await limitRes.json();
@@ -139,9 +144,9 @@ function ConfigContent() {
                   }
                 }
 
-                if (acc.phoneNumberId) {
+                if (cleanPhoneId) {
                   const ratingRes = await fetch(
-                    `https://graph.facebook.com/v26.0/${acc.phoneNumberId}?fields=quality_rating`,
+                    `https://graph.facebook.com/v26.0/${cleanPhoneId}?fields=quality_rating`,
                     { headers: { Authorization: `Bearer ${acc.accessToken}` } }
                   );
                   const ratingData = await ratingRes.json();

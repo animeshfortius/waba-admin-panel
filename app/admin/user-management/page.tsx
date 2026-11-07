@@ -1080,6 +1080,7 @@ export default function UserManagementPage() {
                     body: JSON.stringify({
                       wabaNumber: selectedChannel?.wabaNumber,
                       phoneId: selectedChannel?.phoneId,
+                      accessToken: selectedChannel?.accessToken, // ✅ Pass access token if available
                     }),
                   });
                   const data = await res.json();

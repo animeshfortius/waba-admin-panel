@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       const cleanWabaId = acc.wabaId ? acc.wabaId.replace("WABA_", "").trim() : "";
       const cleanPhoneId = acc.phoneNumberId ? acc.phoneNumberId.replace("PHONE_", "").trim() : "";
 
-      // Live fetch from Meta
+      // Live fetch limit from Meta
       if (acc.accessToken && cleanWabaId) {
         try {
           const limitRes = await fetch(
@@ -40,6 +40,7 @@ export async function GET(request: Request) {
         }
       }
 
+      // Live fetch rating from Meta
       if (acc.accessToken && cleanPhoneId) {
         try {
           const ratingRes = await fetch(

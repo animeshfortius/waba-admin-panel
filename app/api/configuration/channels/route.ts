@@ -3,6 +3,41 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+// Helper function to convert any Meta tier response into clean format like "2,000 / 24 hrs"
+function formatLimitClean(tier: string | undefined | null): string {
+  if (!tier) return "UNASSIGNED";
+
+  const cleanTier = String(tier).toUpperCase().trim();
+
+  const tierMap: Record<string, string> = {
+    "TIER_250": "250 / 24 hrs",
+    "250": "250 / 24 hrs",
+    "TIER_1K": "1,000 / 24 hrs",
+    "1000": "1,000 / 24 hrs",
+    "TIER_2K": "2,000 / 24 hrs",
+    "TIER_2000": "2,000 / 24 hrs",
+    "2000": "2,000 / 24 hrs",
+    "TIER_10K": "10,000 / 24 hrs",
+    "10000": "10,000 / 24 hrs",
+    "TIER_100K": "100,000 / 24 hrs",
+    "100000": "100,000 / 24 hrs",
+    "UNLIMITED": "Unlimited / 24 hrs"
+  };
+
+  if (tierMap[cleanTier]) {
+    return tierMap[cleanTier];
+  }
+
+  // Dynamic fallback pattern matching
+  if (cleanTier.includes("2K") || cleanTier.includes("2000")) return "2,000 / 24 hrs";
+  if (cleanTier.includes("10K") || cleanTier.includes("10000")) return "10,000 / 24 hrs";
+  if (cleanTier.includes("100K") || cleanTier.includes("100000")) return "100,000 / 24 hrs";
+  if (cleanTier.includes("1K") || cleanTier.includes("1000")) return "1,000 / 24 hrs";
+  if (cleanTier.includes("250")) return "250 / 24 hrs";
+
+  return cleanTier;
+}
+
 export async function GET() {
   try {
     const accounts = await prisma.wabaAccount.findMany({
@@ -26,7 +61,7 @@ export async function GET() {
             { headers: { Authorization: `Bearer ${acc.accessToken}` } }
           );
           const limitData = await limitRes.json();
-          if (limitData.messaging_limit_tier) {
+          if (limitData && limitData.messaging_limit_tier) {
             currentLimit = limitData.messaging_limit_tier;
           }
         } catch (err) {
@@ -34,17 +69,8 @@ export async function GET() {
         }
       }
 
-      // Format tier nicely for display
-      let formattedLimit = currentLimit;
-      if (currentLimit === "TIER_2K" || currentLimit === "2000") {
-        formattedLimit = "2000 (TIER_2K)";
-      } else if (currentLimit === "TIER_1K" || currentLimit === "1000") {
-        formattedLimit = "1000 (TIER_1K)";
-      } else if (currentLimit === "TIER_10K" || currentLimit === "10000") {
-        formattedLimit = "10000 (TIER_10K)";
-      } else if (currentLimit === "TIER_100K" || currentLimit === "100000") {
-        formattedLimit = "100000 (TIER_10K)";
-      }
+      // Format limit cleanly without tier jargon
+      const formattedLimit = formatLimitClean(currentLimit);
 
       // Hamesha Meta se live Quality Rating fetch karo
       if (acc.accessToken && cleanPhoneId) {
@@ -54,7 +80,7 @@ export async function GET() {
             { headers: { Authorization: `Bearer ${acc.accessToken}` } }
           );
           const ratingData = await ratingRes.json();
-          if (ratingData.quality_rating) {
+          if (ratingData && ratingData.quality_rating) {
             currentRating = ratingData.quality_rating;
           }
         } catch (err) {

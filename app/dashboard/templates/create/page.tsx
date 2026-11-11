@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 
 const META_LANGUAGES = [
@@ -57,10 +57,13 @@ export default function CreateWhatsAppTemplateModule() {
   // Header, Body, Footer
   const [mediaType, setMediaType] = useState("None");
   const [headerText, setHeaderText] = useState("");
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaFile, setMediaFile] = useState<File null |>(null);
   const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
   const [bodyText, setBodyText] = useState("Hello {{1}}, welcome to our service!");
   const [footerText, setFooterText] = useState("");
+
+  // Textarea Ref for Selection Formatting
+  const bodyTextareaRef = useRef<HTMLTextAreaElement null |>(null);
 
   // Variable Samples State
   const [variableSamples, setVariableSamples] = useState<{ [key: string]: string }>({ "1": "Animesh" });
@@ -143,7 +146,6 @@ export default function CreateWhatsAppTemplateModule() {
     }
   };
 
-  // Helper Functions for Variables
   const addVariableToHeader = () => {
     const matches = headerText.match(/\{\{\d+\}\}/g);
     const nextVar = matches ? matches.length + 1 : 1;
@@ -156,12 +158,66 @@ export default function CreateWhatsAppTemplateModule() {
     setBodyText((prev) => prev + ` {{${nextVar}}}`);
   };
 
-  const applyFormatting = (type: string) => {
-    if (type === "bold") setBodyText((prev) => prev + "*bold*");
-    if (type === "italic") setBodyText((prev) => prev + "_italic_");
-    if (type === "strike") setBodyText((prev) => prev + "~strikethrough~");
-    if (type === "code") setBodyText((prev) => prev + "```code```");
-    if (type === "emoji") setBodyText((prev) => prev + "😊");
+  // Smart Selection Formatting Wrapper
+  const applyFormatting = (wrapper: string) => {
+    const textarea = bodyTextareaRef.current;
+    if (!textarea) {
+      setBodyText((prev) => prev + `${wrapper}text${wrapper}`);
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = bodyText.substring(start, end);
+
+    if (selectedText.length > 0) {
+      const updatedText = bodyText.substring(0, start) + wrapper + selectedText + wrapper + bodyText.substring(end);
+      setBodyText(updatedText);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + wrapper.length, end + wrapper.length);
+      }, 0);
+    } else {
+      const updatedText = bodyText.substring(0, start) + wrapper + "text" + wrapper + bodyText.substring(end);
+      setBodyText(updatedText);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + wrapper.length, start + wrapper.length + 4);
+      }, 0);
+    }
+  };
+
+  // Real-time WhatsApp Preview Formatter
+  const renderFormattedPreview = (text: string) => {
+    if (!text) return "Your message body content will appear here...";
+
+    let previewText = text;
+    Object.keys(variableSamples).forEach((key) => {
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, "g");
+      previewText = previewText.replace(regex, `[${variableSamples[key] || "val"}]`);
+    });
+
+    return previewText.split("\n").map((line, lineIdx) => {
+      return (
+        <div key={lineIdx} className="min-h-[16px]">
+          {line.split(" ").map((word, wordIdx) => {
+            if (word.startsWith("*") && word.endsWith("*") && word.length > 2) {
+              return <strong key={wordIdx} className="font-bold text-white">{word.slice(1, -1)} </strong>;
+            }
+            if (word.startsWith("_") && word.endsWith("_") && word.length > 2) {
+              return <em key={wordIdx} className="italic text-slate-200">{word.slice(1, -1)} </em>;
+            }
+            if (word.startsWith("~") && word.endsWith("~") && word.length > 2) {
+              return <span key={wordIdx} className="line-through text-slate-300">{word.slice(1, -1)} </span>;
+            }
+            if (word.startsWith("```") && word.endsWith("```") && word.length > 6) {
+              return <code key={wordIdx} className="font-mono bg-slate-800 px-1 rounded text-emerald-300">{word.slice(3, -3)} </code>;
+            }
+            return <span key={wordIdx}>{word} </span>;
+          })}
+        </div>
+      );
+    });
   };
 
   // Button Management
@@ -855,7 +911,7 @@ export default function CreateWhatsAppTemplateModule() {
                 </div>
               )}
 
-              {/* BODY TEXT SECTION */}
+              {/* BODY TEXT SECTION WITH SMART SELECTION FORMATTING */}
               <div className="space-y-2 border-t pt-4">
                 <div className="flex justify-between items-center">
                   <label className="block font-bold text-gray-600">MESSAGE BODY *</label>
@@ -864,6 +920,7 @@ export default function CreateWhatsAppTemplateModule() {
 
                 <div className="border rounded-2xl bg-gray-50 overflow-hidden focus-within:ring-1 focus-within:ring-emerald-500">
                   <textarea
+                    ref={bodyTextareaRef}
                     rows={4}
                     value={bodyText}
                     onChange={(e) => setBodyText(e.target.value)}
@@ -873,11 +930,11 @@ export default function CreateWhatsAppTemplateModule() {
                   />
                   <div className="flex items-center justify-between border-t bg-white px-3 py-2 text-xs">
                     <div className="flex items-center space-x-2 border-r pr-3">
-                      <button type="button" onClick={() => applyFormatting("emoji")} className="hover:bg-gray-100 p-1 rounded font-bold">😊</button>
-                      <button type="button" onClick={() => applyFormatting("bold")} className="hover:bg-gray-100 p-1 rounded font-bold">B</button>
-                      <button type="button" onClick={() => applyFormatting("italic")} className="hover:bg-gray-100 p-1 rounded italic font-bold">I</button>
-                      <button type="button" onClick={() => applyFormatting("strike")} className="hover:bg-gray-100 p-1 rounded line-through font-bold">S</button>
-                      <button type="button" onClick={() => applyFormatting("code")} className="hover:bg-gray-100 p-1 rounded font-mono font-bold">{"</>"}</button>
+                      <button type="button" onClick={() => applyFormatting("😊")} className="hover:bg-gray-100 p-1 rounded font-bold" title="Emoji">😊</button>
+                      <button type="button" onClick={() => applyFormatting("*")} className="hover:bg-gray-100 p-1 rounded font-bold" title="Bold (*text*)">B</button>
+                      <button type="button" onClick={() => applyFormatting("_")} className="hover:bg-gray-100 p-1 rounded italic font-bold" title="Italic (_text_)">I</button>
+                      <button type="button" onClick={() => applyFormatting("~")} className="hover:bg-gray-100 p-1 rounded line-through font-bold" title="Strikethrough (~text~)">S</button>
+                      <button type="button" onClick={() => applyFormatting("```")} className="hover:bg-gray-100 p-1 rounded font-mono font-bold" title="Monospace (```text```)">{"</>"}</button>
                     </div>
                     <button
                       type="button"
@@ -989,7 +1046,7 @@ export default function CreateWhatsAppTemplateModule() {
                             type="text"
                             placeholder={
                               btn.type === "Visit website"
-                                ? "https://example.com"
+                                ? "[https://example.com](https://example.com)"
                                 : btn.type === "Call Phone Number"
                                 ? "+919876543210"
                                 : "OFFER20"
@@ -1038,7 +1095,7 @@ export default function CreateWhatsAppTemplateModule() {
           )}
         </div>
 
-        {/* Right Live WhatsApp Phone Preview */}
+        {/* Right Live WhatsApp Phone Preview with Real-time Formatting */}
         <div className="lg:col-span-1">
           <div className="sticky top-6 bg-slate-900 p-4 rounded-3xl border-4 border-slate-700 shadow-2xl w-full max-w-xs mx-auto text-white space-y-3">
             <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-[10px] text-slate-400 font-mono">
@@ -1066,8 +1123,9 @@ export default function CreateWhatsAppTemplateModule() {
                 </div>
               )}
 
+              {/* Live Formatted Body Preview */}
               <div className="text-slate-100 leading-relaxed text-xs whitespace-pre-wrap">
-                {bodyText || "Your message body content will appear here..."}
+                {renderFormattedPreview(bodyText)}
               </div>
 
               {footerText && (

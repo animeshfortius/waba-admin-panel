@@ -7,9 +7,16 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { action, userId, wabaId, name, language, category, headerType, headerText, bodyText, footerText, buttons, metaTemplateId, templateId, newCategory } = body;
 
-    const wabaAccount = await prisma.wabaAccount.findFirst({
-      where: { userId, wabaId },
+    // Flexible lookup: Try matching userId + wabaId first, fallback to wabaId alone
+    let wabaAccount = await prisma.wabaAccount.findFirst({
+      where: userId ? { userId, wabaId } : { wabaId },
     });
+
+    if (!wabaAccount) {
+      wabaAccount = await prisma.wabaAccount.findFirst({
+        where: { wabaId },
+      });
+    }
 
     if (!wabaAccount || !wabaAccount.accessToken) {
       return NextResponse.json({ success: false, error: "WABA Account not configured properly" }, { status: 404 });
@@ -44,13 +51,13 @@ export async function POST(req: Request) {
         where: { id: templateId },
         data: {
           category: newCategory || "UTILITY",
-          status: "PENDING", // Meta puts it under review/updates in Business Manager
+          status: "PENDING",
         },
       });
 
       return NextResponse.json({
         success: true,
-        message: `Category change request to ${newCategory || "UTILITY"} submitted to Meta! It will reflect in Business Manager.`,
+        message: `Category change request to ${newCategory || "UTILITY"} submitted to Meta!`,
       });
     }
 
@@ -112,7 +119,7 @@ export async function POST(req: Request) {
 
     const savedTemplate = await prisma.whatsAppTemplate.create({
       data: {
-        userId,
+        userId: wabaAccount.userId || userId || "default_user",
         wabaId: wabaAccount.wabaId,
         wabaNumber: wabaAccount.displayPhone,
         metaTemplateId: createData.id,
@@ -144,7 +151,10 @@ export async function PUT(req: Request) {
   try {
     const { templateId, metaTemplateId, userId, wabaId, headerType, headerText, bodyText, footerText, buttons } = await req.json();
 
-    const wabaAccount = await prisma.wabaAccount.findFirst({ where: { userId, wabaId } });
+    let wabaAccount = await prisma.wabaAccount.findFirst({ where: userId ? { userId, wabaId } : { wabaId } });
+    if (!wabaAccount) {
+      wabaAccount = await prisma.wabaAccount.findFirst({ where: { wabaId } });
+    }
     if (!wabaAccount) return NextResponse.json({ success: false, error: "WABA Account not found" }, { status: 404 });
 
     const components: any[] = [];
@@ -197,16 +207,21 @@ export async function DELETE(req: Request) {
     const templateId = searchParams.get("templateId");
     const userId = searchParams.get("userId");
 
-    if (!templateId || !userId) {
-      return NextResponse.json({ success: false, error: "Missing parameters" }, { status: 400 });
+    if (!templateId) {
+      return NextResponse.json({ success: false, error: "Missing templateId parameter" }, { status: 400 });
     }
 
     const template = await prisma.whatsAppTemplate.findUnique({ where: { id: templateId } });
     if (!template) return NextResponse.json({ success: false, error: "Template not found" }, { status: 404 });
 
-    const wabaAccount = await prisma.wabaAccount.findFirst({
-      where: { userId, wabaId: template.wabaId },
+    let wabaAccount = await prisma.wabaAccount.findFirst({
+      where: userId ? { userId, wabaId: template.wabaId } : { wabaId: template.wabaId },
     });
+    if (!wabaAccount) {
+      wabaAccount = await prisma.wabaAccount.findFirst({
+        where: { wabaId: template.wabaId },
+      });
+    }
 
     if (wabaAccount && template.name) {
       const cleanWabaId = wabaAccount.wabaId.replace("WABA_", "").trim();

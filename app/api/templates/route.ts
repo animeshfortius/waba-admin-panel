@@ -11,7 +11,7 @@ export async function GET(req: Request) {
 
     // Fetch WabaAccounts globally or by user
     try {
-      if (userId && userId !== "undefined" && userId !== "null") {
+      if (userId && userId !== "undefined" && userId !== "null" && userId !== "emergency_admin_id") {
         accounts = await prisma.wabaAccount.findMany({
           where: { userId },
           select: {
@@ -90,11 +90,9 @@ export async function POST(req: Request) {
     const cleanWabaId = wabaAccount.wabaId.replace("WABA_", "").trim();
     const token = wabaAccount.accessToken;
 
-    // Handle Template Creation and Submission to Meta Graph API
     if (!action) {
       const components: any[] = [];
 
-      // Header Component
       if (headerType && headerType !== "NONE") {
         if (headerType === "TEXT" && headerText) {
           components.push({ type: "HEADER", format: "TEXT", text: headerText });
@@ -103,17 +101,14 @@ export async function POST(req: Request) {
         }
       }
 
-      // Body Component
       if (bodyText) {
         components.push({ type: "BODY", text: bodyText });
       }
 
-      // Footer Component
       if (footerText) {
         components.push({ type: "FOOTER", text: footerText });
       }
 
-      // Buttons Component
       if (buttons && buttons.length > 0) {
         components.push({ type: "BUTTONS", buttons: buttons });
       }
@@ -146,7 +141,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: metaData.error.message }, { status: 400 });
       }
 
-      // Save to Database
       const savedTemplate = await prisma.whatsAppTemplate.create({
         data: {
           userId: wabaAccount.userId || userId || "default_user",

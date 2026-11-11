@@ -198,7 +198,6 @@ export default function UserManagementPage() {
     secureReporting: false,
     internationalAccount: false,
     chatbotEnabled: true,
-    agentEnabled: false,
   });
 
   const [showFundModal, setShowFundModal] = useState(false);
@@ -317,6 +316,15 @@ export default function UserManagementPage() {
         status: "Active",
         expiryDate: found.expiryDate ? String(found.expiryDate).substring(0, 10) : "2026-10-29",
       });
+
+      // Load WhatsApp Toggles from selected user object
+      setWhatsappSettings({
+        whatsappApiEnabled: found.whatsappApiEnabled ?? true,
+        chatbotEnabled: found.chatbotEnabled ?? true,
+        secureReporting: found.secureReporting ?? false,
+        internationalAccount: found.internationalAccount ?? false,
+      });
+
       setShowSuggestions(false);
       setChangePasswordToggle(false);
       setNewPasswordInput("");
@@ -400,6 +408,36 @@ export default function UserManagementPage() {
       }
     } catch (err) {
       console.error("Error updating user:", err);
+    }
+  };
+
+  const handleSaveWhatsappSettings = async () => {
+    if (!selectedUser?.id) {
+      alert("Please select a user first!");
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/update-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          whatsappApiEnabled: whatsappSettings.whatsappApiEnabled,
+          chatbotEnabled: whatsappSettings.chatbotEnabled,
+          secureReporting: whatsappSettings.secureReporting,
+          internationalAccount: whatsappSettings.internationalAccount,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("✅ WhatsApp Account Settings saved successfully!");
+        fetchUsers();
+      } else {
+        alert("❌ Failed to save settings: " + (data.message || "Unknown error"));
+      }
+    } catch (err) {
+      console.error("Error saving whatsapp settings:", err);
+      alert("Network error while saving settings.");
     }
   };
 
@@ -839,7 +877,7 @@ export default function UserManagementPage() {
                       </div>
                     </div>
                     <div className="flex justify-end pt-2">
-                      <button type="button" onClick={() => alert("WhatsApp Account Settings saved successfully!")} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow text-xs">💾 Save WhatsApp Settings</button>
+                      <button type="button" onClick={handleSaveWhatsappSettings} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow text-xs">💾 Save WhatsApp Settings</button>
                     </div>
                   </div>
                 )}

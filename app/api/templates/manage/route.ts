@@ -9,7 +9,6 @@ export async function POST(req: Request) {
     let variableSamples: string[] = [];
     let metaTemplateId, templateId, newCategory;
 
-    // Support both FormData and JSON requests safely
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
       action = formData.get("action")?.toString();
@@ -97,11 +96,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: `Category change request submitted to Meta!` });
     }
 
-    // Build Components for Meta with official Meta-recognized sample handles
+    // Build Components for Meta: Omit header entirely if NONE
     const components: any[] = [];
     const upperHeader = (headerType || "NONE").toUpperCase();
 
-    if (upperHeader !== "NONE") {
+    if (upperHeader !== "NONE" && upperHeader !== "") {
       if (upperHeader === "TEXT" && headerText) {
         components.push({ type: "HEADER", format: "TEXT", text: headerText });
       } else if (upperHeader === "IMAGE" || upperHeader === "VIDEO" || upperHeader === "DOCUMENT") {
@@ -117,8 +116,6 @@ export async function POST(req: Request) {
           format: upperHeader,
           example: { header_handle: [sampleHandle] },
         });
-      } else {
-        components.push({ type: "HEADER", format: upperHeader });
       }
     }
 
@@ -139,7 +136,7 @@ export async function POST(req: Request) {
 
     components.push(bodyComponent);
 
-    if (footerText) {
+    if (footerText && footerText.trim() !== "") {
       components.push({ type: "FOOTER", text: footerText });
     }
 

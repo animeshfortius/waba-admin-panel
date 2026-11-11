@@ -5,7 +5,19 @@ import bcrypt from "bcryptjs";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userId, name, email, phone, role, expiryDate, password } = body;
+    const { 
+      userId, 
+      name, 
+      email, 
+      phone, 
+      role, 
+      expiryDate, 
+      password,
+      whatsappApiEnabled,
+      chatbotEnabled,
+      secureReporting,
+      internationalAccount
+    } = body;
 
     if (!userId) {
       return NextResponse.json(
@@ -21,6 +33,12 @@ export async function POST(req: Request) {
     if (role !== undefined) updateData.role = role;
     if (expiryDate !== undefined) updateData.expiryDate = expiryDate;
 
+    // 🟢 WhatsApp Account Settings Toggles
+    if (whatsappApiEnabled !== undefined) updateData.whatsappApiEnabled = whatsappApiEnabled;
+    if (chatbotEnabled !== undefined) updateData.chatbotEnabled = chatbotEnabled;
+    if (secureReporting !== undefined) updateData.secureReporting = secureReporting;
+    if (internationalAccount !== undefined) updateData.internationalAccount = internationalAccount;
+
     if (password) {
       updateData.password = await bcrypt.hash(password, 10);
     }
@@ -32,7 +50,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "User details updated successfully in database!",
+      message: "User details and WhatsApp settings updated successfully in database!",
       user: updatedUser,
     });
   } catch (error: any) {

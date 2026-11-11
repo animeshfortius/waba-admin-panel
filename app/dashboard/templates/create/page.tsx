@@ -57,13 +57,13 @@ export default function CreateWhatsAppTemplateModule() {
   // Header, Body, Footer
   const [mediaType, setMediaType] = useState("None");
   const [headerText, setHeaderText] = useState("");
-  const [mediaFile, setMediaFile] = useState<File null |>(null);
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
   const [bodyText, setBodyText] = useState("Hello {{1}}, welcome to our service!");
   const [footerText, setFooterText] = useState("");
 
   // Textarea Ref for Selection Formatting
-  const bodyTextareaRef = useRef<HTMLTextAreaElement null |>(null);
+  const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Variable Samples State
   const [variableSamples, setVariableSamples] = useState<{ [key: string]: string }>({ "1": "Animesh" });

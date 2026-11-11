@@ -86,7 +86,7 @@ export default function CreateWhatsAppTemplateModule() {
   useEffect(() => {
     const initUserAndWabas = async () => {
       setLoadingWabas(true);
-      let activeUserId = localStorage.getItem("userId"] || "";
+      let activeUserId = localStorage.getItem("userId") || "";
 
       if (!activeUserId) {
         try {

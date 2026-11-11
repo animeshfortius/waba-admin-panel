@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// POST: Create Template OR Request Category Change (Utility Appeal)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -17,7 +16,7 @@ export async function POST(req: Request) {
       bodyText, 
       footerText, 
       buttons, 
-      variableSamples, // 👈 Added to receive sample values for variables from frontend
+      variableSamples,
       metaTemplateId, 
       templateId, 
       newCategory 
@@ -40,7 +39,6 @@ export async function POST(req: Request) {
     const cleanWabaId = wabaAccount.wabaId.replace("WABA_", "").trim();
     const token = wabaAccount.accessToken;
 
-    // 🟢 ACTION: Request Category Update / Appeal (Marketing -> Utility)
     if (action === "APPEAL_CATEGORY") {
       if (!metaTemplateId) {
         return NextResponse.json({ success: false, error: "Meta Template ID missing" }, { status: 400 });
@@ -52,9 +50,7 @@ export async function POST(req: Request) {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          category: newCategory || "UTILITY",
-        }),
+        body: JSON.stringify({ category: newCategory || "UTILITY" }),
       });
 
       const appealData = await appealRes.json();
@@ -64,25 +60,21 @@ export async function POST(req: Request) {
 
       await prisma.whatsAppTemplate.update({
         where: { id: templateId },
-        data: {
-          category: newCategory || "UTILITY",
-          status: "PENDING",
-        },
+        data: { category: newCategory || "UTILITY", status: "PENDING" },
       });
 
-      return NextResponse.json({
-        success: true,
-        message: `Category change request to ${newCategory || "UTILITY"} submitted to Meta!`,
-      });
+      return NextResponse.json({ success: true, message: `Category change request submitted to Meta!` });
     }
 
-    // 🟢 ACTION: Create New Template on Meta
+    // Build Components for Meta
     const components: any[] = [];
 
+    // 🟢 FORCEFULLY ENSURE HEADER EXAMPLE IS ALWAYS ATTACHED FOR MEDIA TYPES
     if (headerType && headerType !== "NONE") {
-      if (headerType === "TEXT" && headerText) {
+      const upperHeader = headerType.toUpperCase();
+      if (upperHeader === "TEXT" && headerText) {
         components.push({ type: "HEADER", format: "TEXT", text: headerText });
-      } else if (headerType === "IMAGE") {
+      } else if (upperHeader === "IMAGE") {
         components.push({
           type: "HEADER",
           format: "IMAGE",
@@ -92,7 +84,7 @@ export async function POST(req: Request) {
             ]
           }
         });
-      } else if (headerType === "VIDEO") {
+      } else if (upperHeader === "VIDEO") {
         components.push({
           type: "HEADER",
           format: "VIDEO",
@@ -102,7 +94,7 @@ export async function POST(req: Request) {
             ]
           }
         });
-      } else if (headerType === "DOCUMENT") {
+      } else if (upperHeader === "DOCUMENT") {
         components.push({
           type: "HEADER",
           format: "DOCUMENT",
@@ -113,8 +105,12 @@ export async function POST(req: Request) {
           }
         });
       } else {
-        components.push({ type: "HEADER", format: headerType });
+        components.push({ type: "HEADER", format: upperHeader });
       }
+    }
+
+    if (!bodyText) {
+      return NextResponse.json({ success: false, error: "Message body text cannot be empty" }, { status: 400 });
     }
 
     // Construct Body Component with required variable sample values for Meta
@@ -157,8 +153,8 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         name: formattedName,
-        language,
-        category,
+        language: language || "en_US",
+        category: category || "MARKETING",
         components,
       }),
     });
@@ -179,7 +175,7 @@ export async function POST(req: Request) {
         wabaNumber: wabaAccount.displayPhone,
         metaTemplateId: createData.id,
         name: formattedName,
-        language,
+        language: language || "en_US",
         category: createData.category || category,
         status: createData.status || "PENDING",
         headerType: headerType || "NONE",
@@ -249,7 +245,7 @@ export async function PUT(req: Request) {
       },
     });
 
-    return NextResponse.json({ success: true, message: "Template updated on Meta!" });
+    NextResponse.json({ success: true, message: "Template updated on Meta!" });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

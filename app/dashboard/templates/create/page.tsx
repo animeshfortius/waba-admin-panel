@@ -286,6 +286,7 @@ export default function CreateWhatsAppTemplateModule() {
 
     setMediaFile(file);
     setMediaPreviewUrl(URL.createObjectURL(file));
+    setHeaderText(""); // Ensure text header stays cleared on file upload
   };
 
   // Real Meta API Submit Handler
@@ -312,7 +313,7 @@ export default function CreateWhatsAppTemplateModule() {
       subType,
       allowCategoryChange,
       headerType: mediaType !== "None" ? mediaType.toUpperCase() : headerText ? "TEXT" : "NONE",
-      headerText: headerText || null,
+      headerText: mediaType === "None" ? (headerText || null) : null,
       sampleFileName: mediaFile ? mediaFile.name : null,
       bodyText: bodyText,
       footerText: footerText || null,
@@ -812,27 +813,35 @@ export default function CreateWhatsAppTemplateModule() {
               {/* MEDIA HEADER (If not Auth or Carousel) */}
               {category !== "Authentication" && subType !== "Carousel" && (
                 <div className="space-y-2 border-t pt-4">
-                  <label className="block font-bold text-gray-600">MEDIA HEADER • OPTIONAL</label>
-                  <div className="grid grid-cols-5 gap-2">
-                    {["None", "Image", "Video", "Document", "Location"].map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => {
-                          setMediaType(m);
-                          setMediaFile(null);
-                          setMediaPreviewUrl("");
-                        }}
-                        className={`py-2 rounded-xl font-bold text-xs border transition cursor-pointer ${
-                          mediaType === m ? "bg-emerald-600 text-white border-emerald-600" : "bg-gray-50 text-gray-700"
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
+                  {/* Hide header option selector once a media file is uploaded */}
+                  {!mediaFile && (
+                    <>
+                      <label className="block font-bold text-gray-600">MEDIA HEADER • OPTIONAL</label>
+                      <div className="grid grid-cols-5 gap-2">
+                        {["None", "Image", "Video", "Document", "Location"].map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => {
+                              setMediaType(m);
+                              setMediaFile(null);
+                              setMediaPreviewUrl("");
+                              if (m !== "None") {
+                                setHeaderText("");
+                              }
+                            }}
+                            className={`py-2 rounded-xl font-bold text-xs border transition cursor-pointer ${
+                              mediaType === m ? "bg-emerald-600 text-white border-emerald-600" : "bg-gray-50 text-gray-700"
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
 
-                  {mediaType === "None" && (
+                  {mediaType === "None" && !mediaFile && (
                     <div className="space-y-1 pt-2">
                       <div className="flex justify-between text-xs text-gray-500">
                         <span className="font-bold text-gray-600">HEADER TEXT • OPTIONAL</span>
@@ -860,39 +869,39 @@ export default function CreateWhatsAppTemplateModule() {
                   {/* Sample Media Upload Box + Type & Size Instructions */}
                   {(mediaType === "Image" || mediaType === "Video" || mediaType === "Document") && (
                     <div className="border-2 border-dashed border-emerald-300 rounded-2xl p-4 bg-emerald-50/40 space-y-2.5 mt-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div>
-                          <div className="font-bold text-gray-800 text-xs">
-                            Upload Sample {mediaType} for Meta Template Approval *
+                      {!mediaFile ? (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <div className="font-bold text-gray-800 text-xs">
+                              Upload Sample {mediaType} for Meta Template Approval *
+                            </div>
+                            <div className="text-[11px] text-gray-600 mt-0.5">
+                              {mediaType === "Image" && "Allowed Types: JPG, JPEG, PNG • Maximum Size: 5 MB"}
+                              {mediaType === "Video" && "Allowed Types: MP4, 3GP • Maximum Size: 16 MB"}
+                              {mediaType === "Document" && "Allowed Types: PDF • Maximum Size: 100 MB"}
+                            </div>
                           </div>
-                          <div className="text-[11px] text-gray-600 mt-0.5">
-                            {mediaType === "Image" && "Allowed Types: JPG, JPEG, PNG • Maximum Size: 5 MB"}
-                            {mediaType === "Video" && "Allowed Types: MP4, 3GP • Maximum Size: 16 MB"}
-                            {mediaType === "Document" && "Allowed Types: PDF • Maximum Size: 100 MB"}
-                          </div>
+
+                          <label className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl cursor-pointer shadow-xs text-center inline-block">
+                            <span>📤 Choose {mediaType}</span>
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept={
+                                mediaType === "Image"
+                                  ? ".jpg,.jpeg,.png,image/jpeg,image/png"
+                                  : mediaType === "Video"
+                                  ? ".mp4,.3gp,video/mp4,video/3gpp"
+                                  : ".pdf,application/pdf"
+                              }
+                              onChange={handleMediaFileChange}
+                            />
+                          </label>
                         </div>
-
-                        <label className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl cursor-pointer shadow-xs text-center inline-block">
-                          <span>📤 Choose {mediaType}</span>
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept={
-                              mediaType === "Image"
-                                ? ".jpg,.jpeg,.png,image/jpeg,image/png"
-                                : mediaType === "Video"
-                                ? ".mp4,.3gp,video/mp4,video/3gpp"
-                                : ".pdf,application/pdf"
-                            }
-                            onChange={handleMediaFileChange}
-                          />
-                        </label>
-                      </div>
-
-                      {mediaFile && (
+                      ) : (
                         <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-emerald-200 text-[11px]">
                           <span className="font-semibold text-emerald-800 truncate">
-                            ✅ Selected: {mediaFile.name} ({(mediaFile.size / (1024 * 1024)).toFixed(2)} MB)
+                            ✅ {mediaType} Header Uploaded: {mediaFile.name} ({(mediaFile.size / (1024 * 1024)).toFixed(2)} MB)
                           </span>
                           <button
                             type="button"
@@ -900,7 +909,7 @@ export default function CreateWhatsAppTemplateModule() {
                               setMediaFile(null);
                               setMediaPreviewUrl("");
                             }}
-                            className="text-rose-600 font-bold hover:underline ml-2"
+                            className="text-rose-600 font-bold hover:underline ml-2 cursor-pointer"
                           >
                             Remove
                           </button>

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 export default function CreateWhatsAppTemplateModule() {
   const [step, setStep] = useState(1);
+  const [userId, setUserId] = useState("");
+  const [wabaAccounts, setWabaAccounts] = useState<any[]>([]);
 
   // Step 1 States
   const [category, setCategory] = useState<"Marketing" | "Utility" | "Authentication">("Marketing");
@@ -13,7 +15,7 @@ export default function CreateWhatsAppTemplateModule() {
   // Step 2 General Form States
   const [templateName, setTemplateName] = useState("");
   const [language, setLanguage] = useState("English");
-  const [wabaAccount, setWabaAccount] = useState("28402710282733872");
+  const [wabaAccount, setWabaAccount] = useState("");
   const [allowCategoryChange, setAllowCategoryChange] = useState(false);
 
   // Header, Body, Footer
@@ -40,6 +42,40 @@ export default function CreateWhatsAppTemplateModule() {
     { id: 2, mediaType: "Image", mediaUrl: "", text: "Card 2 Offer Details", buttonText: "View Item" },
   ]);
   const [activeCarouselIndex, setActiveCarouselIndex] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Fetch Onboarded WABA Accounts on Load
+  useEffect(() => {
+    const storedUserId = localStorage.getItem("userId") || "";
+    if (storedUserId) {
+      setUserId(storedUserId);
+      fetchWabaAccounts(storedUserId);
+    } else {
+      fetch("/api/admin/me")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.user?.id) {
+            setUserId(data.user.id);
+            fetchWabaAccounts(data.user.id);
+          }
+        });
+    }
+  }, []);
+
+  const fetchWabaAccounts = async (uid: string) => {
+    try {
+      const res = await fetch(`/api/templates?userId=${uid}`);
+      const data = await res.json();
+      if (data.success && data.wabaAccounts) {
+        setWabaAccounts(data.wabaAccounts);
+        if (data.wabaAccounts.length > 0) {
+          setWabaAccount(data.wabaAccounts[0].wabaId);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching WABA accounts:", err);
+    }
+  };
 
   // Helper Functions for Variables
   const addVariableToHeader = () => {
@@ -104,43 +140,64 @@ export default function CreateWhatsAppTemplateModule() {
     setCarouselCards([...carouselCards, newCard]);
   };
 
-  // Submit Handler with localStorage persistence and redirect to Manage Templates
-  const handleSubmitForReview = () => {
+  // Real Meta API Submit Handler
+  const handleSubmitForReview = async () => {
     if (!templateName) {
       alert("Please enter template name");
       return;
     }
+    if (!wabaAccount) {
+      alert("Please select an onboarded WABA account");
+      return;
+    }
 
-    const newTemplate = {
-      id: Date.now().toString(),
-      name: templateName,
-      language: language,
-      templateId: Math.floor(1000000000000000 + Math.random() * 9000000000000000).toString(),
-      wabaNumber: wabaAccount,
-      text: bodyText,
-      category: category,
-      status: "PENDING",
-      created: new Date().toLocaleString("en-GB", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-      modified: "N/A"
+    setSubmitting(true);
+    const payload = {
+      userId,
+      wabaId: wabaAccount,
+      name: templateName.toLowerCase().trim().replace(/[^a-z0-9_]/g, "_"),
+      language: language === "Hindi" ? "hi" : language === "Spanish" ? "es" : language === "Arabic" ? "ar" : "en_US",
+      category: category.toUpperCase(), // MARKETING, UTILITY, AUTHENTICATION
+      headerType: mediaType !== "None" ? mediaType.toUpperCase() : headerText ? "TEXT" : "NONE",
+      headerText: headerText || null,
+      bodyText: bodyText,
+      footerText: footerText || null,
+      buttons: buttons.map((b) => ({
+        type: b.type === "Visit website" ? "URL" : b.type === "Call Phone Number" ? "PHONE_NUMBER" : "QUICK_REPLY",
+        text: b.text,
+        value: b.value || "",
+      })),
     };
 
     try {
-      const existing = JSON.parse(localStorage.getItem("custom_whatsapp_templates") || "[]");
-      localStorage.setItem("custom_whatsapp_templates", JSON.stringify([newTemplate, ...existing]));
-    } catch (e) {
-      console.error(e);
-    }
+      const res = await fetch("/api/templates/manage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    alert("WhatsApp Template submitted successfully to Meta! Status: PENDING ⏳");
-    window.location.href = "/dashboard/templates";
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        alert("✅ WhatsApp Template submitted successfully to Meta! Status: PENDING ⏳");
+        window.location.href = "/dashboard/templates";
+      } else {
+        alert("❌ Meta API Error: " + (data.error || "Failed to submit template"));
+      }
+    } catch (err) {
+      console.error("Error submitting template:", err);
+      alert("Network error while submitting template to Meta.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6 max-w-7xl mx-auto">
-      {/* Top Header */}
+    <div className="w-full bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6 min-h-screen">
+      {/* Top Header - Full Width */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-2xl border shadow-xs gap-3">
         <div>
-          <div className="text-gray-400 font-medium">WhatsApp Manager › Templates</div>
+          <div className="text-gray-400 font-medium">WhatsApp Manager › Templates › Create</div>
           <h1 className="text-xl font-bold text-gray-800">Create & Edit Message Template</h1>
         </div>
         <Link
@@ -354,24 +411,25 @@ export default function CreateWhatsAppTemplateModule() {
               {/* BASIC DETAILS */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-bold text-gray-600 mb-1">TEMPLATE NAME</label>
+                  <label className="block font-bold text-gray-600 mb-1">TEMPLATE NAME *</label>
                   <input
                     type="text"
                     placeholder="e.g. order_update_v1"
                     value={templateName}
                     onChange={(e) => setTemplateName(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono"
+                    required
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-600 mb-1">SELECT LANGUAGE</label>
+                  <label className="block font-bold text-gray-600 mb-1">SELECT LANGUAGE *</label>
                   <select
                     value={language}
                     onChange={(e) => setLanguage(e.target.value)}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold"
                   >
-                    <option value="English">English (en)</option>
+                    <option value="English">English (en_US)</option>
                     <option value="Hindi">Hindi (hi)</option>
                     <option value="Spanish">Spanish (es)</option>
                     <option value="Arabic">Arabic (ar)</option>
@@ -379,14 +437,21 @@ export default function CreateWhatsAppTemplateModule() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-600 mb-1">WABA ACCOUNT</label>
+                  <label className="block font-bold text-gray-600 mb-1">ONBOARDED WABA ACCOUNT *</label>
                   <select
                     value={wabaAccount}
                     onChange={(e) => setWabaAccount(e.target.value)}
-                    className="w-full border rounded-xl p-2.5 bg-gray-100 font-mono text-gray-600"
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-800 font-bold"
                   >
-                    <option value="28402710282733872">28402710282733872 (Default)</option>
-                    <option value="9823410293841029">9823410293841029 (Backup)</option>
+                    {wabaAccounts.length === 0 ? (
+                      <option value="">No WABA accounts found</option>
+                    ) : (
+                      wabaAccounts.map((acc) => (
+                        <option key={acc.id} value={acc.wabaId}>
+                          {acc.displayPhone} — {acc.displayName || "Account"}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>
@@ -617,7 +682,7 @@ export default function CreateWhatsAppTemplateModule() {
               {/* BODY TEXT SECTION */}
               <div className="space-y-2 border-t pt-4">
                 <div className="flex justify-between items-center">
-                  <label className="block font-bold text-gray-600">MESSAGE BODY</label>
+                  <label className="block font-bold text-gray-600">MESSAGE BODY *</label>
                   <span className="text-gray-400">{bodyText.length}/1024</span>
                 </div>
 
@@ -628,6 +693,7 @@ export default function CreateWhatsAppTemplateModule() {
                     onChange={(e) => setBodyText(e.target.value)}
                     placeholder="Enter message body content..."
                     className="w-full p-3 text-xs bg-transparent focus:outline-none resize-y"
+                    required
                   />
                   <div className="flex items-center justify-between border-t bg-white px-3 py-2 text-xs">
                     <div className="flex items-center space-x-2 border-r pr-3">
@@ -739,9 +805,10 @@ export default function CreateWhatsAppTemplateModule() {
                 <button
                   type="button"
                   onClick={handleSubmitForReview}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-7 py-2.5 rounded-xl shadow-md cursor-pointer transition"
+                  disabled={submitting}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-7 py-2.5 rounded-xl shadow-md cursor-pointer transition disabled:opacity-50"
                 >
-                  Submit for Review 🚀
+                  {submitting ? "Submitting to Meta..." : "Submit for Review to Meta 🚀"}
                 </button>
               </div>
 

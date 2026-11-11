@@ -288,9 +288,7 @@ export default function CreateWhatsAppTemplateModule() {
     setMediaPreviewUrl(URL.createObjectURL(file));
   };
 
-  // Real Meta API Submit Handler (Fixed Header & Media Mapping)
-  const handleSubmitForResource = async () => {}; // placeholder
-
+  // Real Meta API Submit Handler with Strict NONE Header Control
   const handleSubmitForReview = async () => {
     if (!templateName.trim()) {
       alert("Please enter template name");
@@ -322,13 +320,16 @@ export default function CreateWhatsAppTemplateModule() {
     formData.append("subType", subType);
     formData.append("allowCategoryChange", String(allowCategoryChange));
 
-    // Properly map header type based on user selection
+    // 🔥 Bulletproof Header Mapping: Strictly NONE when None is selected
     let finalHeaderType = "NONE";
-    if (mediaType !== "None" && mediaType !== "") {
+    if (mediaType === "Image" || mediaType === "Video" || mediaType === "Document") {
       finalHeaderType = mediaType.toUpperCase();
-    } else if (headerText.trim() !== "") {
+    } else if (headerText && headerText.trim() !== "") {
       finalHeaderType = "TEXT";
+    } else {
+      finalHeaderType = "NONE";
     }
+
     formData.append("headerType", finalHeaderType);
     formData.append("headerText", finalHeaderType === "TEXT" ? headerText : "");
 

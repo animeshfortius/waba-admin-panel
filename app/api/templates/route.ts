@@ -7,19 +7,25 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
 
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "User ID required" }, { status: 400 });
+    // Build query filters gracefully (if userId is missing, fetch active WABAs globally so dropdown never fails)
+    const wabaWhere: any = { status: "ACTIVE" };
+    const templateWhere: any = {};
+
+    if (userId) {
+      wabaWhere.userId = userId;
+      templateWhere.userId = userId;
     }
 
     const [templates, wabaAccounts] = await Promise.all([
       prisma.whatsAppTemplate.findMany({
-        where: { userId },
+        where: templateWhere,
         orderBy: { createdAt: "desc" },
       }),
       prisma.wabaAccount.findMany({
-        where: { userId, status: "ACTIVE" },
+        where: wabaWhere,
         select: {
           id: true,
+          userId: true,
           wabaId: true,
           phoneNumberId: true,
           displayPhone: true,
@@ -40,7 +46,7 @@ export async function POST(req: Request) {
     const { action, userId, wabaId, templateId, metaTemplateId } = await req.json();
 
     const wabaAccount = await prisma.wabaAccount.findFirst({
-      where: { userId, wabaId },
+      where: userId ? { userId, wabaId } : { wabaId },
     });
 
     if (!wabaAccount || !wabaAccount.accessToken) {
@@ -115,7 +121,7 @@ export async function POST(req: Request) {
           rejectedReason: tpl.rejected_reason || null,
         },
         create: {
-          userId,
+          userId: wabaAccount.userId || userId || "default_user",
           wabaId: wabaAccount.wabaId,
           wabaNumber: wabaAccount.displayPhone,
           metaTemplateId: tpl.id,

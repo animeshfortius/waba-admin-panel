@@ -141,7 +141,7 @@ export async function POST(req: Request) {
                   file_offset: "0",
                   "Content-Type": mediaFileType,
                 },
-                body: mediaFileBuffer,
+                body: new Uint8Array(mediaFileBuffer), // Fixed TypeScript BodyInit overload issue
               });
               const uploadFileData = await uploadFileRes.json();
 
@@ -154,7 +154,7 @@ export async function POST(req: Request) {
           }
         }
 
-        // Fallback handles if file upload session wasn't used
+        // Fallback handles if file upload session wasn't used or failed
         if (!headerHandle) {
           if (upperHeader === "IMAGE") headerHandle = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
           if (upperHeader === "VIDEO") headerHandle = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";

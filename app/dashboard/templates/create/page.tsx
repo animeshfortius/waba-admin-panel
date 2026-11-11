@@ -289,7 +289,7 @@ export default function CreateWhatsAppTemplateModule() {
     setHeaderText(""); // Ensure text header stays cleared on file upload
   };
 
-  // Real Meta API Submit Handler
+  // Real Meta API Submit Handler (Updated with FormData)
   const handleSubmitForReview = async () => {
     if (!templateName.trim()) {
       alert("Please enter template name");
@@ -303,45 +303,54 @@ export default function CreateWhatsAppTemplateModule() {
     const selectedAccountObj = wabaAccounts.find((acc) => acc.wabaId === wabaAccount);
 
     setSubmitting(true);
-    const payload = {
-      userId: userId || selectedAccountObj?.userId || "default_user",
-      wabaId: wabaAccount,
-      wabaNumber: selectedAccountObj?.displayPhone || "",
-      name: templateName.toLowerCase().trim().replace(/[^a-z0-9_]/g, "_"),
-      language,
-      category: category.toUpperCase(),
-      subType,
-      allowCategoryChange,
-      headerType: mediaType !== "None" ? mediaType.toUpperCase() : headerText ? "TEXT" : "NONE",
-      headerText: mediaType === "None" ? (headerText || null) : null,
-      sampleFileName: mediaFile ? mediaFile.name : null,
-      bodyText: bodyText,
-      footerText: footerText || null,
-      variableSamples: Object.values(variableSamples),
-      buttons: buttons.map((b) => ({
-        type:
-          b.type === "Visit website"
-            ? "URL"
-            : b.type === "Call Phone Number"
-            ? "PHONE_NUMBER"
-            : b.type === "Copy offer code"
-            ? "COPY_CODE"
-            : "QUICK_REPLY",
-        text: b.text,
-        value: b.value || "",
-      })),
-      authConfig:
-        category === "Authentication"
-          ? { codeDeliveryOption, apps, otpExpiryMinutes, addSecurityRecommendation }
-          : null,
-      carouselCards: subType === "Carousel" ? carouselCards : null,
-    };
+    const formData = new FormData();
+    formData.append("userId", userId || selectedAccountObj?.userId || "default_user");
+    formData.append("wabaId", wabaAccount);
+    formData.append("wabaNumber", selectedAccountObj?.displayPhone || "");
+    formData.append("name", templateName.toLowerCase().trim().replace(/[^a-z0-9_]/g, "_"));
+    formData.append("language", language);
+    formData.append("category", category.toUpperCase());
+    formData.append("subType", subType);
+    formData.append("allowCategoryChange", String(allowCategoryChange));
+    formData.append("headerType", mediaType !== "None" ? mediaType.toUpperCase() : headerText ? "TEXT" : "NONE");
+    formData.append("headerText", mediaType === "None" ? (headerText || "") : "");
+    formData.append("bodyText", bodyText);
+    formData.append("footerText", footerText || "");
+    formData.append("variableSamples", JSON.stringify(Object.values(variableSamples)));
+    formData.append(
+      "buttons",
+      JSON.stringify(
+        buttons.map((b) => ({
+          type:
+            b.type === "Visit website"
+              ? "URL"
+              : b.type === "Call Phone Number"
+              ? "PHONE_NUMBER"
+              : b.type === "Copy offer code"
+              ? "COPY_CODE"
+              : "QUICK_REPLY",
+          text: b.text,
+          value: b.value || "",
+        }))
+      )
+    );
+
+    if (category === "Authentication") {
+      formData.append("authConfig", JSON.stringify({ codeDeliveryOption, apps, otpExpiryMinutes, addSecurityRecommendation }));
+    }
+
+    if (subType === "Carousel") {
+      formData.append("carouselCards", JSON.stringify(carouselCards));
+    }
+
+    if (mediaFile) {
+      formData.append("mediaFile", mediaFile);
+    }
 
     try {
       const res = await fetch("/api/templates/manage", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: formData, // FormData handles boundaries automatically
       });
 
       const data = await res.json();
@@ -813,7 +822,6 @@ export default function CreateWhatsAppTemplateModule() {
               {/* MEDIA HEADER (If not Auth or Carousel) */}
               {category !== "Authentication" && subType !== "Carousel" && (
                 <div className="space-y-2 border-t pt-4">
-                  {/* Hide header option selector once a media file is uploaded */}
                   {!mediaFile && (
                     <>
                       <label className="block font-bold text-gray-600">MEDIA HEADER • OPTIONAL</label>

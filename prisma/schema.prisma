@@ -8,29 +8,36 @@ datasource db {
 }
 
 model User {
-  id             String              @id @default(uuid())
-  name           String
-  username       String?             @unique
-  email          String              @unique
-  password       String
-  phone          String?
-  expiryDate     String?
-  apiKey         String?
-  role           Role                @default(USER)
-  walletBalance  Float               @default(0.0)
-  actualBalance  Float               @default(0.0)
-  virtualBalance Float               @default(0.0)
-  perMsgRate     Float               @default(0.8046)
-  utilityRate    Float               @default(0.1550)
-  serviceRate    Float               @default(0.1550)
-  authRate       Float               @default(0.1550)
-  createdById    String?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  createdBy      User?               @relation("UserHierarchy", fields: [createdById], references: [id], onDelete: Cascade)
-  childUsers     User[]              @relation("UserHierarchy")
-  wabaAccounts   WabaAccount[]
-  transactions   WalletTransaction[]
+  id                   String              @id @default(uuid())
+  name                 String
+  username             String?             @unique
+  email                String              @unique
+  password             String
+  phone                String?
+  expiryDate           String?
+  apiKey               String?
+  role                 Role                @default(USER)
+  walletBalance        Float               @default(0.0)
+  actualBalance        Float               @default(0.0)
+  virtualBalance       Float               @default(0.0)
+  perMsgRate           Float               @default(0.8046)
+  utilityRate          Float               @default(0.1550)
+  serviceRate          Float               @default(0.1550)
+  authRate             Float               @default(0.1550)
+  
+  // 👇 WhatsApp Account Settings Toggles
+  whatsappApiEnabled   Boolean             @default(true)
+  chatbotEnabled       Boolean             @default(true)
+  secureReporting      Boolean             @default(false)
+  internationalAccount Boolean             @default(false)
+
+  createdById          String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  createdBy            User?               @relation("UserHierarchy", fields: [createdById], references: [id], onDelete: Cascade)
+  childUsers           User[]              @relation("UserHierarchy")
+  wabaAccounts         WabaAccount[]
+  transactions         WalletTransaction[]
 }
 
 model WalletTransaction {
@@ -104,36 +111,4 @@ enum Role {
   SUPER_ADMIN
   RESELLER
   USER
-}
-{
-  id                    String              @id @default(uuid())
-  name                  String
-  username              String?             @unique
-  email                 String              @unique
-  password              String
-  phone                 String?
-  expiryDate            String?
-  apiKey                String?
-  role                  Role                @default(USER)
-  walletBalance         Float               @default(0.0)
-  actualBalance         Float               @default(0.0)
-  virtualBalance        Float               @default(0.0)
-  perMsgRate            Float               @default(0.8046)
-  utilityRate           Float               @default(0.1550)
-  serviceRate           Float               @default(0.1550)
-  authRate              Float               @default(0.1550)
-
-  // 👇 Yeh 4 settings fields add karne hain:
-  whatsappApiEnabled    Boolean             @default(true)
-  chatbotEnabled        Boolean             @default(true)
-  secureReporting       Boolean             @default(false)
-  internationalAccount  Boolean             @default(false)
-
-  createdById           String?
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  createdBy             User?               @relation("UserHierarchy", fields: [createdById], references: [id], onDelete: Cascade)
-  childUsers            User[]              @relation("UserHierarchy")
-  wabaAccounts          WabaAccount[]
-  transactions          WalletTransaction[]
 }

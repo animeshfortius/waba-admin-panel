@@ -96,12 +96,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: `Category change request submitted to Meta!` });
     }
 
-    // Build Components for Meta: Omit header entirely if NONE
+    // 🔴 STRICT FIX: Build Components for Meta and completely omit HEADER if NONE
     const components: any[] = [];
     const upperHeader = (headerType || "NONE").toUpperCase();
 
-    if (upperHeader !== "NONE" && upperHeader !== "") {
-      if (upperHeader === "TEXT" && headerText) {
+    if (upperHeader && upperHeader !== "NONE" && upperHeader !== "") {
+      if (upperHeader === "TEXT" && headerText && headerText.trim() !== "") {
         components.push({ type: "HEADER", format: "TEXT", text: headerText });
       } else if (upperHeader === "IMAGE" || upperHeader === "VIDEO" || upperHeader === "DOCUMENT") {
         let sampleHandle = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";

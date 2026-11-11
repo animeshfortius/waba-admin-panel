@@ -9,7 +9,11 @@ export async function POST(req: Request) {
     let buttons: any[] = [];
     let variableSamples: string[] = [];
     let metaTemplateId, templateId, newCategory;
+    let mediaFileBuffer: Buffer | null = null;
+    let mediaFileName = "sample.jpg";
+    let mediaFileType = "image/jpeg";
 
+    // Properly parse Multipart FormData from frontend
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
       action = formData.get("action")?.toString();
@@ -31,6 +35,14 @@ export async function POST(req: Request) {
 
       const buttonsStr = formData.get("buttons")?.toString();
       buttons = buttonsStr ? JSON.parse(buttonsStr) : [];
+
+      const file = formData.get("mediaFile") as File | null;
+      if (file && typeof file === "object" && "arrayBuffer" in file) {
+        const arrayBuffer = await file.arrayBuffer();
+        mediaFileBuffer = Buffer.from(arrayBuffer);
+        mediaFileName = file.name || "media_file";
+        mediaFileType = file.type || "application/octet-stream";
+      }
     } else {
       const body = await req.json();
       ({
@@ -98,7 +110,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: `Category change request submitted to Meta!` });
     }
 
-    // Build Components for Meta with foolproof official sample handles
+    // Build Components for Meta with robust sample handles
     const components: any[] = [];
     const upperHeader = (headerType || "NONE").toUpperCase();
 
@@ -106,7 +118,6 @@ export async function POST(req: Request) {
       if (upperHeader === "TEXT" && headerText) {
         components.push({ type: "HEADER", format: "TEXT", text: headerText });
       } else if (upperHeader === "IMAGE" || upperHeader === "VIDEO" || upperHeader === "DOCUMENT") {
-        // Meta strictly requires example handles for media templates during creation
         let sampleHandle = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
         if (upperHeader === "VIDEO") {
           sampleHandle = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";

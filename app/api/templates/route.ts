@@ -30,6 +30,7 @@ export async function GET(req: Request) {
           phoneNumberId: true,
           displayPhone: true,
           displayName: true,
+          accessToken: true,
         },
       }),
     ]);
@@ -40,10 +41,10 @@ export async function GET(req: Request) {
   }
 }
 
-// POST: Retrieve ALL templates from Meta OR Sync a single template status
+// POST: Retrieve ALL templates, Sync single template, or Submit Category Appeal to Meta
 export async function POST(req: Request) {
   try {
-    const { action, userId, wabaId, templateId, metaTemplateId } = await req.json();
+    const { action, userId, wabaId, templateId, metaTemplateId, newCategory } = await req.json();
 
     const wabaAccount = await prisma.wabaAccount.findFirst({
       where: userId ? { userId, wabaId } : { wabaId },
@@ -59,7 +60,43 @@ export async function POST(req: Request) {
     const cleanWabaId = wabaAccount.wabaId.replace("WABA_", "").trim();
     const token = wabaAccount.accessToken;
 
-    // Action 1: Sync Single Template Status from Meta
+    // Action 1: Appeal / Update Category directly to Meta Graph API
+    if (action === "APPEAL_CATEGORY" && metaTemplateId && newCategory) {
+      const metaRes = await fetch(
+        `https://graph.facebook.com/v21.0/${metaTemplateId}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            category: newCategory,
+          }),
+        }
+      );
+      const metaData = await metaRes.json();
+
+      if (metaData.error) {
+        return NextResponse.json({ success: false, error: metaData.error.message }, { status: 400 });
+      }
+
+      const updated = await prisma.whatsAppTemplate.update({
+        where: { id: templateId },
+        data: {
+          category: newCategory,
+          status: "PENDING", // Meta sets appeal/review status to pending
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "Category appeal submitted successfully to Meta!",
+        template: updated,
+      });
+    }
+
+    // Action 2: Sync Single Template Status from Meta
     if (action === "SYNC_SINGLE" && metaTemplateId) {
       const metaRes = await fetch(
         `https://graph.facebook.com/v21.0/${metaTemplateId}?fields=id,name,status,category,language,components,rejected_reason`,
@@ -86,7 +123,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: "Template synced with Meta!", template: updated });
     }
 
-    // Action 2: Retrieve ALL Templates for this WABA from Meta
+    // Action 3: Retrieve ALL Templates for this WABA from Meta
     const metaRes = await fetch(
       `https://graph.facebook.com/v21.0/${cleanWabaId}/message_templates?limit=250`,
       { headers: { Authorization: `Bearer ${token}` } }

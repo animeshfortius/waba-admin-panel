@@ -1,360 +1,549 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function ManageTemplatesPage() {
-  const [templates, setTemplates] = useState([
-    {
-      id: "1",
-      name: "otp_test",
-      language: "English",
-      templateId: "1758713771836411",
-      wabaNumber: "28402710282733872",
-      text: "{{1}} is your verification code. For your security...",
-      category: "Authentication",
-      status: "Approved",
-      created: "08 Oct 2025 12:05 PM",
-      modified: "26 Oct 2026 04:44 PM"
-    },
-    {
-      id: "2",
-      name: "feedback_collection",
-      language: "English",
-      templateId: "1764876244783508",
-      wabaNumber: "28402710282733872",
-      text: "Hi {{1}}, the service request we completed on...",
-      category: "Utility",
-      status: "Approved",
-      created: "08 Oct 2025 12:04 PM",
-      modified: "N/A"
-    }
-  ]);
+  const router = useRouter();
+  const [userId, setUserId] = useState("");
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [wabaAccounts, setWabaAccounts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncingAll, setSyncingAll] = useState(false);
 
-  // Modal States
-  const [selectedPayload, setSelectedPayload] = useState<any>(null);
-  const [showPayloadDrawer, setShowPayloadDrawer] = useState(false);
+  // Filters & Search
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedWabaFilter, setSelectedWabaFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
+
+  // Modals
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  const loadTemplatesData = () => {
-    try {
-      const defaultList = [
-        {
-          id: "1",
-          name: "otp_test",
-          language: "English",
-          templateId: "1758713771836411",
-          wabaNumber: "28402710282733872",
-          text: "{{1}} is your verification code. For your security...",
-          category: "Authentication",
-          status: "Approved",
-          created: "08 Oct 2025 12:05 PM",
-          modified: "26 Oct 2026 04:44 PM"
-        },
-        {
-          id: "2",
-          name: "feedback_collection",
-          language: "English",
-          templateId: "1764876244783508",
-          wabaNumber: "28402710282733872",
-          text: "Hi {{1}}, the service request we completed on...",
-          category: "Utility",
-          status: "Approved",
-          created: "08 Oct 2025 12:04 PM",
-          modified: "N/A"
-        }
-      ];
-
-      const customTpls = JSON.parse(localStorage.getItem("custom_whatsapp_templates") || "[]");
-      setTemplates([...customTpls, ...defaultList]);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  const [payloadTemplate, setPayloadTemplate] = useState<any>(null);
+  const [appealTemplate, setAppealTemplate] = useState<any>(null);
+  const [appealCategory, setAppealCategory] = useState("UTILITY");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    loadTemplatesData();
+    const storedUserId = localStorage.getItem("userId") || "";
+    if (storedUserId) {
+      setUserId(storedUserId);
+      loadData(storedUserId);
+    } else {
+      fetch("/api/admin/me")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.user?.id) {
+            setUserId(data.user.id);
+            loadData(data.user.id);
+          }
+        });
+    }
   }, []);
 
-  const handleSyncTemplates = () => {
-    loadTemplatesData();
-    alert("Template Sync Successfully! Meta templates retrieved.");
-  };
-
-  const handleDelete = (id: string) => {
+  const loadData = async (uid: string) => {
+    setLoading(true);
     try {
-      const customTpls = JSON.parse(localStorage.getItem("custom_whatsapp_templates") || "[]");
-      const newCustom = customTpls.filter((t: any) => t.id !== id);
-      localStorage.setItem("custom_whatsapp_templates", JSON.stringify(newCustom));
-      loadTemplatesData();
-    } catch (e) {
-      console.error(e);
-    }
-    setDeleteId(null);
-  };
-
-  const copyJsonPayload = (tpl: any) => {
-    const jsonString = JSON.stringify({
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: "{{1}}",
-      type: "template",
-      template: {
-        name: tpl.name,
-        language: { code: "en" },
-        components: [
-          {
-            type: "body",
-            parameters: [{ type: "text", text: "{{1}}" }]
-          }
-        ]
+      const res = await fetch(`/api/templates?userId=${uid}`);
+      const data = await res.json();
+      if (data.success) {
+        // Fallback default list if database is empty so you see the structure immediately
+        const dbTemplates = data.templates || [];
+        if (dbTemplates.length === 0) {
+          setTemplates([
+            {
+              id: "1",
+              name: "otp_test",
+              language: "en_US",
+              metaTemplateId: "1758713771836411",
+              wabaNumber: "919876543210",
+              wabaId: "28402710282733872",
+              bodyText: "{{1}} is your verification code. For your security, do not share this code.",
+              category: "AUTHENTICATION",
+              status: "APPROVED",
+              createdAt: new Date().toISOString(),
+            },
+            {
+              id: "2",
+              name: "feedback_collection",
+              language: "en_US",
+              metaTemplateId: "1764876244783508",
+              wabaNumber: "919876543210",
+              wabaId: "28402710282733872",
+              bodyText: "Hi {{1}}, thank you for choosing our service. Please rate your experience.",
+              category: "UTILITY",
+              status: "APPROVED",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        } else {
+          setTemplates(dbTemplates);
+        }
+        setWabaAccounts(data.wabaAccounts || []);
       }
-    }, null, 2);
-
-    navigator.clipboard.writeText(jsonString);
-    alert("Template JSON copied to clipboard successfully!");
+    } catch (err) {
+      console.error("Failed to load templates:", err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  // Retrieve Meta Templates
+  const handleRetrieveMetaTemplates = async () => {
+    setSyncingAll(true);
+    try {
+      const res = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "RETRIEVE_ALL", userId, wabaId: wabaAccounts[0]?.wabaId || "DEFAULT" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("✅ " + data.message);
+        loadData(userId);
+      } else {
+        alert("❌ Error: " + (data.error || "Failed to retrieve"));
+      }
+    } catch (err) {
+      alert("Network error syncing templates.");
+    } finally {
+      setSyncingAll(false);
+    }
+  };
+
+  // Sync Single Template Status
+  const handleSyncSingle = async (tpl: any) => {
+    try {
+      const res = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "SYNC_SINGLE",
+          userId,
+          wabaId: tpl.wabaId,
+          templateId: tpl.id,
+          metaTemplateId: tpl.metaTemplateId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`✅ Synced! Status: ${data.template.status} | Category: ${data.template.category}`);
+        loadData(userId);
+      } else {
+        alert("❌ Sync Error: " + data.error);
+      }
+    } catch (err) {
+      alert("Network error syncing template.");
+    }
+  };
+
+  // Category Appeal / Update Request to Meta
+  const handleAppealSubmit = async () => {
+    if (!appealTemplate) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/templates/manage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "APPEAL_CATEGORY",
+          userId,
+          wabaId: appealTemplate.wabaId,
+          templateId: appealTemplate.id,
+          metaTemplateId: appealTemplate.metaTemplateId,
+          newCategory: appealCategory,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("✅ " + data.message);
+        setAppealTemplate(null);
+        loadData(userId);
+      } else {
+        alert("❌ Meta Appeal Error: " + data.error);
+      }
+    } catch (err) {
+      alert("Failed to submit category appeal to Meta.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Delete Template
+  const handleDeleteTemplate = async (tpl: any) => {
+    if (!confirm(`Delete template "${tpl.name}" permanently?`)) return;
+    try {
+      const res = await fetch(`/api/templates/manage?templateId=${tpl.id}&userId=${userId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("🗑️ " + data.message);
+        loadData(userId);
+      } else {
+        alert("❌ Error: " + data.error);
+      }
+    } catch (err) {
+      alert("Network error deleting template.");
+    }
+  };
+
+  const filteredTemplates = templates.filter((t) => {
+    const matchesSearch =
+      t.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.bodyText?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.wabaNumber?.includes(searchQuery);
+    const matchesWaba = selectedWabaFilter === "ALL" || t.wabaId === selectedWabaFilter;
+    const matchesStatus = statusFilter === "ALL" || t.status === statusFilter;
+    const matchesCategory = categoryFilter === "ALL" || t.category === categoryFilter;
+    return matchesSearch && matchesWaba && matchesStatus && matchesCategory;
+  });
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6 max-w-7xl mx-auto relative">
-      {/* Top Header & Action Buttons */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-2xl border shadow-xs gap-4">
+    <div className="w-full p-6 space-y-6 text-xs font-sans bg-gray-50/50 min-h-screen">
+      {/* Top Header - Full Width */}
+      <div className="bg-white p-5 rounded-2xl border shadow-sm flex flex-wrap justify-between items-center gap-4">
         <div>
-          <div className="text-gray-400 font-medium">Dashboard › WhatsApp Templates</div>
-          <h1 className="text-xl font-bold text-gray-800">WhatsApp Templates</h1>
+          <div className="text-gray-400 text-[11px]">Dashboard › WhatsApp Templates</div>
+          <h1 className="text-xl font-bold text-gray-800">Manage WhatsApp Templates</h1>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Link
-            href="/dashboard/templates/create"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center space-x-1.5"
+            href="/dash/templates"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5"
           >
-            <span>+ Create Templates</span>
+            + Create Templates
           </Link>
+
           <button
-            onClick={handleSyncTemplates}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer"
+            type="button"
+            onClick={handleRetrieveMetaTemplates}
+            disabled={syncingAll}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
           >
-            🔄 Retrieve Meta Templates
-          </button>
-          <button
-            onClick={() => alert("Export in Progress! Your report is being generated.")}
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2.5 rounded-xl border transition cursor-pointer"
-          >
-            📥 Download Templates
+            {syncingAll ? "⏳ Retrieving..." : "🔄 Retrieve Meta Templates"}
           </button>
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="bg-white p-3 rounded-xl border shadow-xs flex items-center justify-between">
-        <input
-          type="text"
-          placeholder="Filter Records..."
-          className="border rounded-lg px-3 py-2 text-xs w-72 bg-gray-50 focus:outline-none"
-        />
-        <div className="text-gray-500 font-semibold">Showing {templates.length} of {templates.length} records</div>
+      {/* Filters Bar */}
+      <div className="bg-white p-4 rounded-2xl border shadow-sm grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
+        <div className="md:col-span-2">
+          <input
+            type="text"
+            placeholder="Search by template name, text, or WABA..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full border rounded-xl px-3.5 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:border-emerald-500"
+          />
+        </div>
+
+        <select
+          value={selectedWabaFilter}
+          onChange={(e) => setSelectedWabaFilter(e.target.value)}
+          className="border rounded-xl px-3 py-2 bg-gray-50 font-medium text-gray-700 focus:outline-none"
+        >
+          <option value="ALL">All WABA Accounts</option>
+          {wabaAccounts.map((acc) => (
+            <option key={acc.id} value={acc.wabaId}>
+              {acc.displayPhone} ({acc.displayName})
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="border rounded-xl px-3 py-2 bg-gray-50 font-medium text-gray-700 focus:outline-none"
+        >
+          <option value="ALL">All Categories</option>
+          <option value="UTILITY">UTILITY</option>
+          <option value="MARKETING">MARKETING</option>
+          <option value="AUTHENTICATION">AUTHENTICATION</option>
+        </select>
+
+        <div className="flex items-center justify-between gap-2">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-full border rounded-xl px-3 py-2 bg-gray-50 font-medium text-gray-700 focus:outline-none"
+          >
+            <option value="ALL">All Status</option>
+            <option value="APPROVED">APPROVED</option>
+            <option value="PENDING">PENDING</option>
+            <option value="REJECTED">REJECTED</option>
+          </select>
+          <span className="text-gray-400 whitespace-nowrap font-semibold">{filteredTemplates.length} records</span>
+        </div>
       </div>
 
-      {/* Templates Table */}
-      <div className="bg-white rounded-2xl border shadow-xs overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-100/70 border-b text-gray-600 font-bold text-[11px]">
-              <th className="p-3">INSIGHTS</th>
-              <th className="p-3">NAME / LANG CODE</th>
-              <th className="p-3">TEXT</th>
-              <th className="p-3">CATEGORY / STATUS</th>
-              <th className="p-3">CREATED / MODIFIED</th>
-              <th className="p-3">API PAYLOAD</th>
-              <th className="p-3 text-center">ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {templates.map((tpl) => (
-              <tr key={tpl.id} className="hover:bg-gray-50/80 transition">
-                <td className="p-3 align-top">
-                  <button className="bg-blue-50 text-blue-600 border border-blue-200 px-2.5 py-1 rounded-lg font-bold text-[10px] hover:bg-blue-100 cursor-pointer">
-                    📊 Insights
-                  </button>
-                </td>
-                <td className="p-3 align-top space-y-0.5">
-                  <div className="font-bold text-gray-900">Name: {tpl.name}</div>
-                  <div className="text-gray-500">Language Code: {tpl.language}</div>
-                  <div className="text-gray-500">Template id: {tpl.templateId}</div>
-                  <div className="text-gray-400 font-mono text-[10px]">WABABusinessId: {tpl.wabaNumber}</div>
-                </td>
-                <td className="p-3 align-top text-gray-600 max-w-xs truncate">
-                  {tpl.text}
-                </td>
-                <td className="p-3 align-top space-y-1">
-                  <div className="font-semibold text-gray-800">{tpl.category}</div>
-                  <div className="inline-flex items-center space-x-1 font-bold text-[10px]">
-                    <span className={tpl.status === "Approved" ? "text-emerald-600" : "text-amber-600"}>
-                      {tpl.status === "Approved" ? "🟢 Approved" : "⏳ PENDING"}
-                    </span>
-                  </div>
-                </td>
-                <td className="p-3 align-top text-gray-500 space-y-0.5 text-[11px]">
-                  <div>Created: {tpl.created}</div>
-                  <div>Modified: {tpl.modified}</div>
-                </td>
-                <td className="p-3 align-top">
-                  <button
-                    onClick={() => {
-                      setSelectedPayload(tpl);
-                      setShowPayloadDrawer(true);
-                    }}
-                    className="border px-3 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 font-bold text-gray-700 cursor-pointer"
-                  >
-                    👁️ View
-                  </button>
-                </td>
-                <td className="p-3 align-top text-center">
-                  <div className="flex items-center justify-center space-x-1">
-                    <button
-                      title="Sync Template Status"
-                      onClick={handleSyncTemplates}
-                      className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg cursor-pointer text-xs"
-                    >
-                      🔄
-                    </button>
-                    <button
-                      title="Preview"
-                      onClick={() => setPreviewTemplate(tpl)}
-                      className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer text-xs"
-                    >
-                      👁️
-                    </button>
-                    <button
-                      title="Use in Campaign"
-                      onClick={() => window.location.href = "/dashboard/campaigns"}
-                      className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg cursor-pointer text-xs font-bold"
-                    >
-                      🚀
-                    </button>
-                    <button
-                      title="Edit"
-                      onClick={() => alert(`Editing template: ${tpl.name}`)}
-                      className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer text-xs"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      title="Copy"
-                      onClick={() => copyJsonPayload(tpl)}
-                      className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer text-xs"
-                    >
-                      📋
-                    </button>
-                    <button
-                      title="Delete"
-                      onClick={() => setDeleteId(tpl.id)}
-                      className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg cursor-pointer text-xs"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </td>
+      {/* Full-Width Table */}
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-100/80 text-gray-700 uppercase border-b font-bold text-[10px] tracking-wider">
+                <th className="p-4">Name / Lang</th>
+                <th className="p-4">WABA Number & ID</th>
+                <th className="p-4 max-w-sm">Body Text</th>
+                <th className="p-4">Category</th>
+                <th className="p-4">Status</th>
+                <th className="p-4">Created Date</th>
+                <th className="p-4 text-center">API Payload</th>
+                <th className="p-4 text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="p-12 text-center text-gray-400 font-medium">
+                    Loading templates...
+                  </td>
+                </tr>
+              ) : filteredTemplates.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="p-12 text-center text-gray-400 font-medium">
+                    No templates found. Click "Retrieve Meta Templates" to sync.
+                  </td>
+                </tr>
+              ) : (
+                filteredTemplates.map((tpl) => (
+                  <tr key={tpl.id} className="hover:bg-gray-50/80 transition align-top">
+                    {/* Name & Language */}
+                    <td className="p-4 space-y-1">
+                      <div className="font-bold text-gray-900 text-xs">{tpl.name}</div>
+                      <div className="text-[11px] text-gray-500">Lang: <span className="font-semibold">{tpl.language || "en_US"}</span></div>
+                    </td>
+
+                    {/* WABA Number & ID (Explicitly separated) */}
+                    <td className="p-4 space-y-1 font-mono text-[11px]">
+                      <div className="font-bold text-emerald-700">📱 {tpl.wabaNumber || "N/A"}</div>
+                      <div className="text-gray-400">ID: {tpl.wabaId || "N/A"}</div>
+                    </td>
+
+                    {/* Body Text */}
+                    <td className="p-4 max-w-sm">
+                      <p className="text-gray-700 whitespace-pre-wrap leading-relaxed line-clamp-3">
+                        {tpl.bodyText}
+                      </p>
+                    </td>
+
+                    {/* Category (Separate Column) */}
+                    <td className="p-4">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                          tpl.category === "UTILITY"
+                            ? "bg-blue-100 text-blue-700"
+                            : tpl.category === "AUTHENTICATION"
+                            ? "bg-purple-100 text-purple-700"
+                            : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
+                        {tpl.category || "MARKETING"}
+                      </span>
+                    </td>
+
+                    {/* Status (Separate Column) */}
+                    <td className="p-4">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
+                          tpl.status === "APPROVED"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : tpl.status === "REJECTED"
+                            ? "bg-rose-100 text-rose-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}
+                      >
+                        ● {tpl.status || "PENDING"}
+                      </span>
+                    </td>
+
+                    {/* Created Date */}
+                    <td className="p-4 font-mono text-[11px] text-gray-500 whitespace-nowrap">
+                      {new Date(tpl.createdAt).toLocaleDateString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </td>
+
+                    {/* API Payload View */}
+                    <td className="p-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setPayloadTemplate(tpl)}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[11px] border cursor-pointer"
+                      >
+                        {"{ }"} View
+                      </button>
+                    </td>
+
+                    {/* Action Buttons */}
+                    <td className="p-4 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
+                        {/* Sync */}
+                        <button
+                          type="button"
+                          onClick={() => handleSyncSingle(tpl)}
+                          title="Sync Status with Meta"
+                          className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg border cursor-pointer"
+                        >
+                          🔄
+                        </button>
+
+                        {/* Mobile Preview */}
+                        <button
+                          type="button"
+                          onClick={() => setPreviewTemplate(tpl)}
+                          title="Real WhatsApp Customer Preview"
+                          className="p-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg border cursor-pointer"
+                        >
+                          👁️
+                        </button>
+
+                        {/* Use in Campaign */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            router.push(
+                              `/dashboard/campaigns?templateId=${tpl.id}&templateName=${tpl.name}&wabaNumber=${tpl.wabaNumber}`
+                            )
+                          }
+                          title="Use in Campaign"
+                          className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg border cursor-pointer"
+                        >
+                          🚀
+                        </button>
+
+                        {/* Category Appeal Button (Direct Meta Request without going to Business Manager) */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAppealTemplate(tpl);
+                            setAppealCategory(tpl.category === "MARKETING" ? "UTILITY" : "MARKETING");
+                          }}
+                          title="Request Category Update (Direct to Meta)"
+                          className="p-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-lg border cursor-pointer font-bold"
+                        >
+                          ⚖️
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTemplate(tpl)}
+                          title="Delete Template"
+                          className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg border cursor-pointer"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* API Payload Drawer / Modal */}
-      {showPayloadDrawer && selectedPayload && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex justify-start">
-          <div className="bg-white w-full max-w-xl h-full shadow-2xl p-6 overflow-y-auto space-y-4 animate-in slide-in-from-left duration-200">
+      {/* REAL WHATSAPP CUSTOMER PREVIEW MODAL */}
+      {previewTemplate && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#efeae2] rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 border-4 border-slate-700">
+            <div className="flex justify-between items-center border-b border-gray-300 pb-2">
+              <span className="font-bold text-gray-700 text-xs">WhatsApp Customer Preview</span>
+              <button onClick={() => setPreviewTemplate(null)} className="font-bold text-gray-600 text-sm">✕</button>
+            </div>
+            
+            {/* Real WhatsApp Chat Bubble */}
+            <div className="bg-white p-3.5 rounded-2xl rounded-tl-none shadow-sm space-y-2 max-w-[280px] text-xs">
+              <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">{previewTemplate.bodyText}</p>
+              <div className="text-right text-[9px] text-gray-400">12:45 PM ✓✓</div>
+            </div>
+
+            <div className="text-center text-[10px] text-gray-500">
+              Template: <span className="font-bold text-emerald-700">{previewTemplate.name}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* API PAYLOAD MODAL */}
+      {payloadTemplate && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b pb-3">
-              <h2 className="text-base font-bold text-gray-800">Template Payload: {selectedPayload.name}</h2>
-              <button
-                onClick={() => setShowPayloadDrawer(false)}
-                className="text-gray-500 font-bold px-2 py-1 hover:bg-gray-100 rounded-lg cursor-pointer"
-              >
-                ✕
-              </button>
+              <h3 className="font-bold text-gray-800 text-sm">API Send Payload ({payloadTemplate.name})</h3>
+              <button onClick={() => setPayloadTemplate(null)} className="font-bold text-gray-500">✕</button>
             </div>
-
-            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-800 text-[11px] space-y-1">
-              <div className="font-bold">Notes:</div>
-              <div>{"{{1}}"} contains the mobile number where the message will be sent.</div>
-              <div>{"{{2}}"}, {"{{3}}"} replace these in body parameters with actual dynamic values.</div>
-              <div>{"{{url}}"} header - used when header contains media (image, video, or document) - replace with media URL.</div>
-              <div>{"{{url}}"} replace with the actual link for URL buttons.</div>
-            </div>
-
-            <div className="flex justify-between items-center pt-2">
-              <span className="font-bold text-gray-700">Template JSON</span>
-              <button
-                onClick={() => copyJsonPayload(selectedPayload)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow-xs cursor-pointer"
-              >
-                📋 Copy JSON
-              </button>
-            </div>
-
-            <pre className="bg-slate-900 text-emerald-400 p-4 rounded-xl font-mono text-[11px] overflow-x-auto shadow-inner">
-              {JSON.stringify({
-                messaging_product: "whatsapp",
-                recipient_type: "individual",
-                to: "{{1}}",
-                type: "template",
-                template: {
-                  name: selectedPayload.name,
-                  language: { code: "en" },
-                  components: [
-                    {
-                      type: "body",
-                      parameters: [
-                        { type: "text", text: "{{2}}" }
-                      ]
-                    }
-                  ]
-                }
-              }, null, 2)}
+            <pre className="bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-x-auto text-[11px] font-mono">
+              {JSON.stringify(
+                {
+                  messaging_product: "whatsapp",
+                  to: "919876543210",
+                  type: "template",
+                  template: {
+                    name: payloadTemplate.name,
+                    language: { code: payloadTemplate.language || "en_US" },
+                    components: payloadTemplate.components || [],
+                  },
+                },
+                null,
+                2
+              )}
             </pre>
           </div>
         </div>
       )}
 
-      {/* Preview Modal */}
-      {previewTemplate && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 p-6 rounded-3xl border-4 border-slate-700 shadow-2xl max-w-sm w-full text-white space-y-3">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-xs">
-              <span className="font-bold text-emerald-400">Template Preview: {previewTemplate.name}</span>
-              <button onClick={() => setPreviewTemplate(null)} className="text-rose-400 font-bold">✕</button>
+      {/* CATEGORY APPEAL / UPDATE MODAL (Direct Meta Request) */}
+      {appealTemplate && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-gray-800 text-sm">⚖️ Request Category Update from Panel</h3>
+              <button onClick={() => setAppealTemplate(null)} className="font-bold text-gray-400">✕</button>
             </div>
-            <div className="bg-emerald-950 p-4 rounded-2xl space-y-2 border border-emerald-800/50">
-              <div className="text-xs text-slate-100 whitespace-pre-wrap">{previewTemplate.text}</div>
+            <p className="text-gray-600 leading-relaxed text-xs">
+              If your template was reclassified (e.g. Utility to Marketing), submit a direct category review request to Meta from here without opening Business Manager.
+            </p>
+            <div>
+              <label className="font-semibold text-gray-700 block mb-1">Current Category</label>
+              <input
+                type="text"
+                readOnly
+                value={appealTemplate.category}
+                className="w-full border rounded-xl p-2.5 bg-gray-100 font-bold text-gray-500"
+              />
             </div>
-            <div className="text-center text-[10px] text-slate-400">
-              Status: <span className="text-emerald-400 font-bold">{previewTemplate.status}</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deleteId && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-2xl shadow-2xl max-w-sm w-full space-y-4 text-center">
-            <div className="text-lg font-bold text-gray-800">Are you sure?</div>
-            <p className="text-gray-500 text-xs">Do you want to delete this template?</p>
-            <div className="flex justify-center space-x-3 pt-2">
-              <button
-                onClick={() => handleDelete(deleteId)}
-                className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
+            <div>
+              <label className="font-semibold text-gray-700 block mb-1">Request New Category</label>
+              <select
+                value={appealCategory}
+                onChange={(e) => setAppealCategory(e.target.value)}
+                className="w-full border rounded-xl p-2.5 bg-gray-50 font-bold text-emerald-700"
               >
-                Yes, Delete It
-              </button>
+                <option value="UTILITY">UTILITY</option>
+                <option value="MARKETING">MARKETING</option>
+                <option value="AUTHENTICATION">AUTHENTICATION</option>
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 pt-3 border-t">
               <button
-                onClick={() => setDeleteId(null)}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
+                onClick={() => setAppealTemplate(null)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl font-bold"
               >
                 Cancel
+              </button>
+              <button
+                onClick={handleAppealSubmit}
+                disabled={submitting}
+                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow"
+              >
+                {submitting ? "Sending Request..." : "Send Request to Meta 🚀"}
               </button>
             </div>
           </div>

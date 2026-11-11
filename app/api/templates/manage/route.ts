@@ -5,9 +5,23 @@ import { prisma } from "@/lib/prisma";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { action, userId, wabaId, name, language, category, headerType, headerText, bodyText, footerText, buttons, metaTemplateId, templateId, newCategory } = body;
+    const { 
+      action, 
+      userId, 
+      wabaId, 
+      name, 
+      language, 
+      category, 
+      headerType, 
+      headerText, 
+      bodyText, 
+      footerText, 
+      buttons, 
+      metaTemplateId, 
+      templateId, 
+      newCategory 
+    } = body;
 
-    // Flexible lookup: Try matching userId + wabaId first, fallback to wabaId alone
     let wabaAccount = await prisma.wabaAccount.findFirst({
       where: userId ? { userId, wabaId } : { wabaId },
     });
@@ -67,6 +81,37 @@ export async function POST(req: Request) {
     if (headerType && headerType !== "NONE") {
       if (headerType === "TEXT" && headerText) {
         components.push({ type: "HEADER", format: "TEXT", text: headerText });
+      } else if (headerType === "IMAGE") {
+        // Meta requires a sample/example image handle or public URL for approval
+        components.push({
+          type: "HEADER",
+          format: "IMAGE",
+          example: {
+            header_handle: [
+              "https://images.unsplash.com/photo-1526947425960-945c6e72858f"
+            ]
+          }
+        });
+      } else if (headerType === "VIDEO") {
+        components.push({
+          type: "HEADER",
+          format: "VIDEO",
+          example: {
+            header_handle: [
+              "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+            ]
+          }
+        });
+      } else if (headerType === "DOCUMENT") {
+        components.push({
+          type: "HEADER",
+          format: "DOCUMENT",
+          example: {
+            header_handle: [
+              "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+            ]
+          }
+        });
       } else {
         components.push({ type: "HEADER", format: headerType });
       }

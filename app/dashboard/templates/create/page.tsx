@@ -289,7 +289,7 @@ export default function CreateWhatsAppTemplateModule() {
     setHeaderText(""); // Ensure text header stays cleared on file upload
   };
 
-  // Real Meta API Submit Handler (Updated with FormData)
+  // Real Meta API Submit Handler (Updated with FormData & Media Validation)
   const handleSubmitForReview = async () => {
     if (!templateName.trim()) {
       alert("Please enter template name");
@@ -297,6 +297,12 @@ export default function CreateWhatsAppTemplateModule() {
     }
     if (!wabaAccount) {
       alert("Please select an onboarded WABA account");
+      return;
+    }
+    
+    // Validation: Ensure media file is provided if media header type is chosen
+    if ((mediaType === "Image" || mediaType === "Video" || mediaType === "Document") && !mediaFile) {
+      alert(`❌ Meta requires an example sample for ${mediaType} header templates. Please upload a sample file.`);
       return;
     }
 

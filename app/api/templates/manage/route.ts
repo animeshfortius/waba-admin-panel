@@ -96,7 +96,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: `Category change request submitted to Meta!` });
     }
 
-    // 🔴 STRICT FIX: Build Components for Meta and completely omit HEADER if NONE
+    // 🔥 STRICT BACKEND CHECK: Completely omit HEADER component if NONE or empty
     const components: any[] = [];
     const upperHeader = (headerType || "NONE").toUpperCase();
 

@@ -62,6 +62,9 @@ export default function CreateWhatsAppTemplateModule() {
   const [bodyText, setBodyText] = useState("Hello {{1}}, welcome to our service!");
   const [footerText, setFooterText] = useState("");
 
+  // Variable Samples State
+  const [variableSamples, setVariableSamples] = useState<{ [key: string]: string }>({ "1": "Animesh" });
+
   // Buttons State
   const [buttons, setButtons] = useState<{ id: string; type: string; text: string; value?: string }[]>([]);
   const [showButtonMenu, setShowButtonMenu] = useState(false);
@@ -81,6 +84,21 @@ export default function CreateWhatsAppTemplateModule() {
   ]);
   const [activeCarouselIndex, setActiveCarouselIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+
+  // Extract variables whenever bodyText changes
+  useEffect(() => {
+    const matches = bodyText.match(/\{\{(\d+)\}\}/g);
+    if (matches) {
+      const vars: { [key: string]: string } = {};
+      matches.forEach((m) => {
+        const num = m.replace(/[{}]/g, "");
+        vars[num] = variableSamples[num] || `Sample ${num}`;
+      });
+      setVariableSamples(vars);
+    } else {
+      setVariableSamples({});
+    }
+  }, [bodyText]);
 
   // Fetch Onboarded WABA Accounts Immediately on Load
   useEffect(() => {
@@ -133,17 +151,17 @@ export default function CreateWhatsAppTemplateModule() {
   };
 
   const addVariableToBody = () => {
-    const matches = bodyText.match(/\{\{\d+\}\}/g);
+    const matches = bodyText.match(/\{\{(\d+)\}\}/g);
     const nextVar = matches ? matches.length + 1 : 1;
     setBodyText((prev) => prev + ` {{${nextVar}}}`);
   };
 
   const applyFormatting = (type: string) => {
-    if (type === "bold") setBodyText((prev) => prev + " *bold* ");
-    if (type === "italic") setBodyText((prev) => prev + " _italic_ ");
-    if (type === "strike") setBodyText((prev) => prev + " ~strikethrough~ ");
-    if (type === "code") setBodyText((prev) => prev + " ```code``` ");
-    if (type === "emoji") setBodyText((prev) => prev + " 😊 ");
+    if (type === "bold") setBodyText((prev) => prev + "*bold*");
+    if (type === "italic") setBodyText((prev) => prev + "_italic_");
+    if (type === "strike") setBodyText((prev) => prev + "~strikethrough~");
+    if (type === "code") setBodyText((prev) => prev + "```code```");
+    if (type === "emoji") setBodyText((prev) => prev + "😊");
   };
 
   // Button Management
@@ -242,6 +260,7 @@ export default function CreateWhatsAppTemplateModule() {
       sampleFileName: mediaFile ? mediaFile.name : null,
       bodyText: bodyText,
       footerText: footerText || null,
+      variableSamples: Object.values(variableSamples),
       buttons: buttons.map((b) => ({
         type:
           b.type === "Visit website"
@@ -869,6 +888,34 @@ export default function CreateWhatsAppTemplateModule() {
                     </button>
                   </div>
                 </div>
+
+                {/* Variable Sample Values Input Box */}
+                {Object.keys(variableSamples).length > 0 && (
+                  <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-200 space-y-2 mt-2">
+                    <label className="block font-bold text-emerald-900 text-[11px]">
+                      🏷️ Variable Sample Values (Required for Meta Approval)
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {Object.keys(variableSamples).map((varKey) => (
+                        <div key={varKey} className="flex items-center space-x-2 bg-white p-2 rounded-lg border">
+                          <span className="font-mono font-bold text-emerald-700 text-xs">{"{{" + varKey + "}}"}</span>
+                          <input
+                            type="text"
+                            placeholder={`Sample value for {{${varKey}}}`}
+                            value={variableSamples[varKey]}
+                            onChange={(e) => {
+                              setVariableSamples({
+                                ...variableSamples,
+                                [varKey]: e.target.value,
+                              });
+                            }}
+                            className="w-full border rounded p-1 text-xs bg-gray-50 focus:bg-white"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* FOOTER SECTION */}
@@ -921,7 +968,6 @@ export default function CreateWhatsAppTemplateModule() {
                   )}
                 </div>
 
-                {/* Added Buttons List with Value Inputs for URL/Phone */}
                 {buttons.length > 0 && (
                   <div className="space-y-2 pt-2">
                     {buttons.map((btn, idx) => (
@@ -995,7 +1041,6 @@ export default function CreateWhatsAppTemplateModule() {
         {/* Right Live WhatsApp Phone Preview */}
         <div className="lg:col-span-1">
           <div className="sticky top-6 bg-slate-900 p-4 rounded-3xl border-4 border-slate-700 shadow-2xl w-full max-w-xs mx-auto text-white space-y-3">
-            {/* Phone Header */}
             <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-[10px] text-slate-400 font-mono">
               <span className="flex items-center space-x-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
@@ -1004,9 +1049,7 @@ export default function CreateWhatsAppTemplateModule() {
               <span>12:45 PM</span>
             </div>
 
-            {/* Chat Bubble Container */}
             <div className="bg-emerald-900/60 p-3 rounded-2xl space-y-2 shadow-inner border border-emerald-800/50">
-              {/* Media Preview */}
               {mediaType !== "None" && category !== "Authentication" && subType !== "Carousel" && (
                 <div className="h-32 bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 font-bold text-xs border border-slate-700 overflow-hidden">
                   {mediaType === "Image" && mediaPreviewUrl ? (
@@ -1017,41 +1060,22 @@ export default function CreateWhatsAppTemplateModule() {
                 </div>
               )}
 
-              {/* Header Text (Optional when None) */}
               {mediaType === "None" && headerText && (
                 <div className="font-bold text-white text-xs border-b border-emerald-700/50 pb-1">
                   {headerText}
                 </div>
               )}
 
-              {/* Carousel Cards Preview */}
-              {subType === "Carousel" && (
-                <div className="bg-slate-800 p-2.5 rounded-xl border border-slate-700 space-y-1.5">
-                  <div className="h-24 bg-slate-700 rounded-lg flex items-center justify-center text-slate-400 text-[10px]">
-                    🖼️ [{carouselCards[activeCarouselIndex]?.mediaType || "Image"}]
-                  </div>
-                  <div className="text-[11px] font-semibold text-slate-200">
-                    {carouselCards[activeCarouselIndex]?.text || "Carousel Card Details"}
-                  </div>
-                  <div className="bg-white text-emerald-800 text-center py-1 rounded-lg font-bold text-[10px]">
-                    {carouselCards[activeCarouselIndex]?.buttonText || "Button"}
-                  </div>
-                </div>
-              )}
-
-              {/* Body Text */}
               <div className="text-slate-100 leading-relaxed text-xs whitespace-pre-wrap">
                 {bodyText || "Your message body content will appear here..."}
               </div>
 
-              {/* Footer Text */}
               {footerText && (
                 <div className="text-[10px] text-slate-400 border-t border-emerald-800/80 pt-1">
                   {footerText}
                 </div>
               )}
 
-              {/* Buttons Preview */}
               {buttons.length > 0 && (
                 <div className="pt-2 space-y-1.5">
                   {buttons.map((b) => (
@@ -1059,28 +1083,11 @@ export default function CreateWhatsAppTemplateModule() {
                       key={b.id}
                       className="bg-white text-emerald-800 text-center py-1.5 rounded-xl font-bold text-xs shadow-xs"
                     >
-                      {b.type === "Visit website" && "↗️ "}
-                      {b.type === "Call Phone Number" && "📞 "}
-                      {b.type === "Copy offer code" && "📑 "}
                       {b.text || "Button"}
                     </div>
                   ))}
                 </div>
               )}
-
-              {/* Auth OTP Code Copy Button */}
-              {category === "Authentication" && (
-                <div className="pt-2 space-y-1">
-                  <div className="bg-white text-emerald-800 text-center py-2 rounded-xl font-bold text-xs shadow-xs flex items-center justify-center space-x-1">
-                    <span>📑 Copy Code</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="text-center text-[10px] text-slate-500 font-mono">
-              Category: <span className="text-emerald-400 font-bold">{category}</span> | Language:{" "}
-              <span className="text-emerald-400 font-bold">{language}</span>
             </div>
           </div>
         </div>

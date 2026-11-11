@@ -286,10 +286,11 @@ export default function CreateWhatsAppTemplateModule() {
 
     setMediaFile(file);
     setMediaPreviewUrl(URL.createObjectURL(file));
-    setHeaderText(""); // Ensure text header stays cleared on file upload
   };
 
-  // Real Meta API Submit Handler (Updated with FormData & Media Validation)
+  // Real Meta API Submit Handler (Fixed Header & Media Mapping)
+  const handleSubmitForResource = async () => {}; // placeholder
+
   const handleSubmitForReview = async () => {
     if (!templateName.trim()) {
       alert("Please enter template name");
@@ -299,11 +300,13 @@ export default function CreateWhatsAppTemplateModule() {
       alert("Please select an onboarded WABA account");
       return;
     }
-    
-    // Validation: Ensure media file is provided if media header type is chosen
-    if ((mediaType === "Image" || mediaType === "Video" || mediaType === "Document") && !mediaFile) {
-      alert(`❌ Meta requires an example sample for ${mediaType} header templates. Please upload a sample file.`);
-      return;
+
+    // Strict validation: Only require media file if mediaType is actually Image, Video, or Document
+    if (mediaType !== "None" && mediaType !== "Location" && mediaType !== "" && !mediaFile) {
+      if (mediaType === "Image" || mediaType === "Video" || mediaType === "Document") {
+        alert(`❌ Please upload a sample ${mediaType} file for Meta template approval!`);
+        return;
+      }
     }
 
     const selectedAccountObj = wabaAccounts.find((acc) => acc.wabaId === wabaAccount);
@@ -318,8 +321,17 @@ export default function CreateWhatsAppTemplateModule() {
     formData.append("category", category.toUpperCase());
     formData.append("subType", subType);
     formData.append("allowCategoryChange", String(allowCategoryChange));
-    formData.append("headerType", mediaType !== "None" ? mediaType.toUpperCase() : headerText ? "TEXT" : "NONE");
-    formData.append("headerText", mediaType === "None" ? (headerText || "") : "");
+
+    // Properly map header type based on user selection
+    let finalHeaderType = "NONE";
+    if (mediaType !== "None" && mediaType !== "") {
+      finalHeaderType = mediaType.toUpperCase();
+    } else if (headerText.trim() !== "") {
+      finalHeaderType = "TEXT";
+    }
+    formData.append("headerType", finalHeaderType);
+    formData.append("headerText", finalHeaderType === "TEXT" ? headerText : "");
+
     formData.append("bodyText", bodyText);
     formData.append("footerText", footerText || "");
     formData.append("variableSamples", JSON.stringify(Object.values(variableSamples)));
@@ -349,14 +361,14 @@ export default function CreateWhatsAppTemplateModule() {
       formData.append("carouselCards", JSON.stringify(carouselCards));
     }
 
-    if (mediaFile) {
+    if (mediaFile && (mediaType === "Image" || mediaType === "Video" || mediaType === "Document")) {
       formData.append("mediaFile", mediaFile);
     }
 
     try {
       const res = await fetch("/api/templates/manage", {
         method: "POST",
-        body: formData, // FormData handles boundaries automatically
+        body: formData,
       });
 
       const data = await res.json();
@@ -828,34 +840,31 @@ export default function CreateWhatsAppTemplateModule() {
               {/* MEDIA HEADER (If not Auth or Carousel) */}
               {category !== "Authentication" && subType !== "Carousel" && (
                 <div className="space-y-2 border-t pt-4">
-                  {!mediaFile && (
-                    <>
-                      <label className="block font-bold text-gray-600">MEDIA HEADER • OPTIONAL</label>
-                      <div className="grid grid-cols-5 gap-2">
-                        {["None", "Image", "Video", "Document", "Location"].map((m) => (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => {
-                              setMediaType(m);
-                              setMediaFile(null);
-                              setMediaPreviewUrl("");
-                              if (m !== "None") {
-                                setHeaderText("");
-                              }
-                            }}
-                            className={`py-2 rounded-xl font-bold text-xs border transition cursor-pointer ${
-                              mediaType === m ? "bg-emerald-600 text-white border-emerald-600" : "bg-gray-50 text-gray-700"
-                            }`}
-                          >
-                            {m}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
+                  <label className="block font-bold text-gray-600">MEDIA HEADER • OPTIONAL</label>
+                  <div className="grid grid-cols-5 gap-2">
+                    {["None", "Image", "Video", "Document", "Location"].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          setMediaType(m);
+                          if (m === "None") {
+                            setMediaFile(null);
+                            setMediaPreviewUrl("");
+                          } else {
+                            setHeaderText("");
+                          }
+                        }}
+                        className={`py-2 rounded-xl font-bold text-xs border transition cursor-pointer ${
+                          mediaType === m ? "bg-emerald-600 text-white border-emerald-600" : "bg-gray-50 text-gray-700"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
 
-                  {mediaType === "None" && !mediaFile && (
+                  {mediaType === "None" && (
                     <div className="space-y-1 pt-2">
                       <div className="flex justify-between text-xs text-gray-500">
                         <span className="font-bold text-gray-600">HEADER TEXT • OPTIONAL</span>

@@ -7,6 +7,7 @@ export default function CreateWhatsAppTemplateModule() {
   const [step, setStep] = useState(1);
   const [userId, setUserId] = useState("");
   const [wabaAccounts, setWabaAccounts] = useState<any[]>([]);
+  const [loadingWabas, setLoadingWabas] = useState(true);
 
   // Step 1 States
   const [category, setCategory] = useState<"Marketing" | "Utility" | "Authentication">("Marketing");
@@ -44,29 +45,39 @@ export default function CreateWhatsAppTemplateModule() {
   const [activeCarouselIndex, setActiveCarouselIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch Onboarded WABA Accounts on Load
+  // Fetch Onboarded WABA Accounts Immediately on Load
   useEffect(() => {
-    const storedUserId = localStorage.getItem("userId") || "";
-    if (storedUserId) {
-      setUserId(storedUserId);
-      fetchWabaAccounts(storedUserId);
-    } else {
-      fetch("/api/admin/me")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.user?.id) {
-            setUserId(data.user.id);
-            fetchWabaAccounts(data.user.id);
+    const initUserAndWabas = async () => {
+      setLoadingWabas(true);
+      let activeUserId = localStorage.getItem("userId") || "";
+
+      if (!activeUserId) {
+        try {
+          const meRes = await fetch("/api/admin/me");
+          const meData = await meRes.json();
+          if (meData?.user?.id) {
+            activeUserId = meData.user.id;
+            localStorage.setItem("userId", activeUserId);
           }
-        });
-    }
+        } catch (err) {
+          console.error("Session fetch fallback:", err);
+        }
+      }
+
+      setUserId(activeUserId);
+      await fetchWabaAccounts(activeUserId);
+      setLoadingWabas(false);
+    };
+
+    initUserAndWabas();
   }, []);
 
   const fetchWabaAccounts = async (uid: string) => {
     try {
-      const res = await fetch(`/api/templates?userId=${uid}`);
+      const url = uid ? `/api/templates?userId=${uid}` : `/api/templates`;
+      const res = await fetch(url);
       const data = await res.json();
-      if (data.success && data.wabaAccounts) {
+      if (data.success && Array.isArray(data.wabaAccounts)) {
         setWabaAccounts(data.wabaAccounts);
         if (data.wabaAccounts.length > 0) {
           setWabaAccount(data.wabaAccounts[0].wabaId);
@@ -142,7 +153,7 @@ export default function CreateWhatsAppTemplateModule() {
 
   // Real Meta API Submit Handler
   const handleSubmitForReview = async () => {
-    if (!templateName) {
+    if (!templateName.trim()) {
       alert("Please enter template name");
       return;
     }
@@ -151,22 +162,46 @@ export default function CreateWhatsAppTemplateModule() {
       return;
     }
 
+    const selectedAccountObj = wabaAccounts.find((acc) => acc.wabaId === wabaAccount);
+
     setSubmitting(true);
     const payload = {
-      userId,
+      userId: userId || selectedAccountObj?.userId || "default_user",
       wabaId: wabaAccount,
+      wabaNumber: selectedAccountObj?.displayPhone || "",
       name: templateName.toLowerCase().trim().replace(/[^a-z0-9_]/g, "_"),
-      language: language === "Hindi" ? "hi" : language === "Spanish" ? "es" : language === "Arabic" ? "ar" : "en_US",
+      language:
+        language === "Hindi"
+          ? "hi"
+          : language === "Spanish"
+          ? "es"
+          : language === "Arabic"
+          ? "ar"
+          : "en_US",
       category: category.toUpperCase(), // MARKETING, UTILITY, AUTHENTICATION
+      subType,
+      allowCategoryChange,
       headerType: mediaType !== "None" ? mediaType.toUpperCase() : headerText ? "TEXT" : "NONE",
       headerText: headerText || null,
       bodyText: bodyText,
       footerText: footerText || null,
       buttons: buttons.map((b) => ({
-        type: b.type === "Visit website" ? "URL" : b.type === "Call Phone Number" ? "PHONE_NUMBER" : "QUICK_REPLY",
+        type:
+          b.type === "Visit website"
+            ? "URL"
+            : b.type === "Call Phone Number"
+            ? "PHONE_NUMBER"
+            : b.type === "Copy offer code"
+            ? "COPY_CODE"
+            : "QUICK_REPLY",
         text: b.text,
         value: b.value || "",
       })),
+      authConfig:
+        category === "Authentication"
+          ? { codeDeliveryOption, apps, otpExpiryMinutes, addSecurityRecommendation }
+          : null,
+      carouselCards: subType === "Carousel" ? carouselCards : null,
     };
 
     try {
@@ -233,10 +268,8 @@ export default function CreateWhatsAppTemplateModule() {
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
         {/* Left Interactive Builder Form */}
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl border shadow-xs space-y-6">
-          
           {/* STEP 1: SET UP TEMPLATE */}
           {step === 1 && (
             <div className="space-y-6">
@@ -388,7 +421,6 @@ export default function CreateWhatsAppTemplateModule() {
           {/* STEP 2: EDIT TEMPLATE */}
           {step === 2 && (
             <div className="space-y-6">
-              
               {/* Header Info Banner */}
               <div className="flex justify-between items-center bg-gray-50 p-3.5 rounded-xl border">
                 <div>
@@ -443,12 +475,14 @@ export default function CreateWhatsAppTemplateModule() {
                     onChange={(e) => setWabaAccount(e.target.value)}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-800 font-bold"
                   >
-                    {wabaAccounts.length === 0 ? (
+                    {loadingWabas ? (
+                      <option value="">Loading onboarded numbers...</option>
+                    ) : wabaAccounts.length === 0 ? (
                       <option value="">No WABA accounts found</option>
                     ) : (
                       wabaAccounts.map((acc) => (
                         <option key={acc.id} value={acc.wabaId}>
-                          {acc.displayPhone} — {acc.displayName || "Account"}
+                          {acc.displayPhone} — {acc.displayName || "Account"} (ID: {acc.wabaId})
                         </option>
                       ))
                     )}
@@ -460,7 +494,7 @@ export default function CreateWhatsAppTemplateModule() {
               {category === "Authentication" && (
                 <div className="border-2 border-emerald-200 rounded-2xl p-4 bg-emerald-50/30 space-y-4">
                   <h3 className="font-bold text-gray-800 text-sm">🔐 Code Delivery Setup</h3>
-                  
+
                   <div className="space-y-2">
                     {[
                       { id: "zero_tap", label: "Zero-tap OTP", desc: "Automatically verifies code without user opening app." },
@@ -536,15 +570,26 @@ export default function CreateWhatsAppTemplateModule() {
                     </button>
                   </div>
 
-                  {/* Expiry Settings */}
-                  <div className="flex items-center space-x-4 bg-white p-3 rounded-xl border">
-                    <label className="font-bold text-gray-700">OTP Code Expiry (Minutes):</label>
-                    <input
-                      type="number"
-                      value={otpExpiryMinutes}
-                      onChange={(e) => setOtpExpiryMinutes(Number(e.target.value))}
-                      className="border rounded-lg p-1.5 w-20 text-center font-bold"
-                    />
+                  {/* Expiry & Security Settings */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-3 rounded-xl border">
+                    <div className="flex items-center space-x-3">
+                      <label className="font-bold text-gray-700">OTP Code Expiry (Minutes):</label>
+                      <input
+                        type="number"
+                        value={otpExpiryMinutes}
+                        onChange={(e) => setOtpExpiryMinutes(Number(e.target.value))}
+                        className="border rounded-lg p-1.5 w-20 text-center font-bold"
+                      />
+                    </div>
+                    <label className="flex items-center space-x-2 cursor-pointer font-semibold text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={addSecurityRecommendation}
+                        onChange={(e) => setAddSecurityRecommendation(e.target.checked)}
+                        className="accent-emerald-600"
+                      />
+                      <span>Add security recommendation</span>
+                    </label>
                   </div>
                 </div>
               )}
@@ -732,7 +777,7 @@ export default function CreateWhatsAppTemplateModule() {
               {/* BUTTONS SECTION */}
               <div className="space-y-3 border-t pt-4 relative">
                 <label className="block font-bold text-gray-600">INTERACTIVE BUTTONS • OPTIONAL</label>
-                
+
                 <div className="relative inline-block">
                   <button
                     type="button"
@@ -764,14 +809,15 @@ export default function CreateWhatsAppTemplateModule() {
                   )}
                 </div>
 
-                {/* Added Buttons List */}
+                {/* Added Buttons List with Value Inputs for URL/Phone */}
                 {buttons.length > 0 && (
                   <div className="space-y-2 pt-2">
                     {buttons.map((btn, idx) => (
-                      <div key={btn.id} className="flex items-center space-x-2 bg-gray-50 p-2.5 rounded-xl border">
-                        <span className="font-bold text-gray-500 w-24">{btn.type}:</span>
+                      <div key={btn.id} className="flex flex-wrap items-center gap-2 bg-gray-50 p-2.5 rounded-xl border">
+                        <span className="font-bold text-gray-500 w-28">{btn.type}:</span>
                         <input
                           type="text"
+                          placeholder="Button Text"
                           value={btn.text}
                           onChange={(e) => {
                             const updated = [...buttons];
@@ -780,6 +826,25 @@ export default function CreateWhatsAppTemplateModule() {
                           }}
                           className="border rounded-lg p-1.5 flex-1 bg-white font-medium"
                         />
+                        {(btn.type === "Visit website" || btn.type === "Call Phone Number" || btn.type === "Copy offer code") && (
+                          <input
+                            type="text"
+                            placeholder={
+                              btn.type === "Visit website"
+                                ? "https://example.com"
+                                : btn.type === "Call Phone Number"
+                                ? "+919876543210"
+                                : "OFFER20"
+                            }
+                            value={btn.value || ""}
+                            onChange={(e) => {
+                              const updated = [...buttons];
+                              updated[idx].value = e.target.value;
+                              setButtons(updated);
+                            }}
+                            className="border rounded-lg p-1.5 flex-1 bg-white font-mono"
+                          />
+                        )}
                         <button
                           type="button"
                           onClick={() => removeButton(btn.id)}
@@ -811,16 +876,13 @@ export default function CreateWhatsAppTemplateModule() {
                   {submitting ? "Submitting to Meta..." : "Submit for Review to Meta 🚀"}
                 </button>
               </div>
-
             </div>
           )}
-
         </div>
 
         {/* Right Live WhatsApp Phone Preview */}
         <div className="lg:col-span-1">
           <div className="sticky top-6 bg-slate-900 p-4 rounded-3xl border-4 border-slate-700 shadow-2xl w-full max-w-xs mx-auto text-white space-y-3">
-            
             {/* Phone Header */}
             <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-[10px] text-slate-400 font-mono">
               <span className="flex items-center space-x-1">
@@ -832,7 +894,6 @@ export default function CreateWhatsAppTemplateModule() {
 
             {/* Chat Bubble Container */}
             <div className="bg-emerald-900/60 p-3 rounded-2xl space-y-2 shadow-inner border border-emerald-800/50">
-              
               {/* Media Preview */}
               {mediaType !== "None" && category !== "Authentication" && subType !== "Carousel" && (
                 <div className="h-32 bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 font-bold text-xs border border-slate-700">
@@ -899,16 +960,14 @@ export default function CreateWhatsAppTemplateModule() {
                   </div>
                 </div>
               )}
-
             </div>
 
             <div className="text-center text-[10px] text-slate-500 font-mono">
-              Category: <span className="text-emerald-400 font-bold">{category}</span> | Language: <span className="text-emerald-400 font-bold">{language}</span>
+              Category: <span className="text-emerald-400 font-bold">{category}</span> | Language:{" "}
+              <span className="text-emerald-400 font-bold">{language}</span>
             </div>
-
           </div>
         </div>
-
       </div>
     </div>
   );

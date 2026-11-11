@@ -211,7 +211,7 @@ export default function ManageTemplatesPage() {
 
         <div className="flex flex-wrap items-center gap-3">
           <Link
-            href="/dash/templates"
+            href="/dashboard/templates/create"
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5"
           >
             + Create Templates

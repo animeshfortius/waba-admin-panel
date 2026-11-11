@@ -9,9 +9,6 @@ export async function POST(req: Request) {
     let buttons: any[] = [];
     let variableSamples: string[] = [];
     let metaTemplateId, templateId, newCategory;
-    let mediaFileBuffer: Buffer | null = null;
-    let mediaFileName = "sample.jpg";
-    let mediaFileType = "image/jpeg";
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -34,14 +31,6 @@ export async function POST(req: Request) {
 
       const buttonsStr = formData.get("buttons")?.toString();
       buttons = buttonsStr ? JSON.parse(buttonsStr) : [];
-
-      const file = formData.get("mediaFile") as File | null;
-      if (file && typeof file === "object" && "arrayBuffer" in file) {
-        const arrayBuffer = await file.arrayBuffer();
-        mediaFileBuffer = Buffer.from(arrayBuffer);
-        mediaFileName = file.name || "media_file";
-        mediaFileType = file.type || "application/octet-stream";
-      }
     } else {
       const body = await req.json();
       ({
@@ -109,7 +98,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: `Category change request submitted to Meta!` });
     }
 
-    // Build Components for Meta
+    // Build Components for Meta with foolproof official sample handles
     const components: any[] = [];
     const upperHeader = (headerType || "NONE").toUpperCase();
 
@@ -117,54 +106,18 @@ export async function POST(req: Request) {
       if (upperHeader === "TEXT" && headerText) {
         components.push({ type: "HEADER", format: "TEXT", text: headerText });
       } else if (upperHeader === "IMAGE" || upperHeader === "VIDEO" || upperHeader === "DOCUMENT") {
-        let headerHandle = "";
-
-        // If user uploaded a file, upload to Meta Resumable Upload session to get a valid handle
-        if (mediaFileBuffer && mediaFileBuffer.length > 0) {
-          try {
-            const initUploadRes = await fetch(
-              `https://graph.facebook.com/v21.0/${cleanWabaId}/uploads?file_length=${mediaFileBuffer.length}&file_type=${encodeURIComponent(mediaFileType)}&file_name=${encodeURIComponent(mediaFileName)}`,
-              {
-                method: "POST",
-                headers: { Authorization: `Bearer ${token}` },
-              }
-            );
-            const initUploadData = await initUploadRes.json();
-
-            if (initUploadData.id) {
-              const uploadSessionId = initUploadData.id;
-
-              const uploadFileRes = await fetch(`https://graph.facebook.com/v21.0/${uploadSessionId}`, {
-                method: "POST",
-                headers: {
-                  Authorization: `OAuth ${token}`,
-                  file_offset: "0",
-                  "Content-Type": mediaFileType,
-                },
-                body: new Uint8Array(mediaFileBuffer), // Fixed TypeScript BodyInit overload issue
-              });
-              const uploadFileData = await uploadFileRes.json();
-
-              if (uploadFileData.h) {
-                headerHandle = uploadFileData.h;
-              }
-            }
-          } catch (uploadErr) {
-            console.error("Meta media upload session error:", uploadErr);
-          }
-        }
-
-        // Fallback handles if file upload session wasn't used or failed
-        if (!headerHandle) {
-          if (upperHeader === "IMAGE") headerHandle = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
-          if (upperHeader === "VIDEO") headerHandle = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
-          if (upperHeader === "DOCUMENT") headerHandle = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+        // Meta strictly requires example handles for media templates during creation
+        let sampleHandle = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
+        if (upperHeader === "VIDEO") {
+          sampleHandle = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+        } else if (upperHeader === "DOCUMENT") {
+          sampleHandle = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
         }
 
         components.push({
           type: "HEADER",
           format: upperHeader,
-          example: { header_handle: [headerHandle] },
+          example: { header_handle: [sampleHandle] },
         });
       } else {
         components.push({ type: "HEADER", format: upperHeader });
@@ -241,7 +194,7 @@ export async function POST(req: Request) {
           language: language || "en_US",
           category: createData.category || category,
           status: createData.status || "PENDING",
-          headerType: headerType || "NONE",
+          headerType: upperHeader,
           headerText: headerText || null,
           bodyText,
           footerText: footerText || null,

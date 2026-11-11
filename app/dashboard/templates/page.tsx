@@ -279,10 +279,10 @@ export default function ManageTemplatesPage() {
 
             <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-800 text-[11px] space-y-1">
               <div className="font-bold">Notes:</div>
-              <div>• {"{{1}}"} - contains the mobile number where the message will be sent.</div>
-              <div>• {"{{2}}"}, {"{{3}}"} - replace these in body parameters with actual dynamic values.</div>
-              <div>• {"{{url}}"} header - used when header contains media (image, video, or document) - replace with media URL.</div>
-              <div>• {"{{url}}"} - replace with the actual link for URL buttons.</div>
+              <div>{"{{1}}"} contains the mobile number where the message will be sent.</div>
+              <div>{"{{2}}"}, {"{{3}}"} replace these in body parameters with actual dynamic values.</div>
+              <div>{"{{url}}"} header - used when header contains media (image, video, or document) - replace with media URL.</div>
+              <div>{"{{url}}"} replace with the actual link for URL buttons.</div>
             </div>
 
             <div className="flex justify-between items-center pt-2">

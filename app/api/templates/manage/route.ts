@@ -17,6 +17,7 @@ export async function POST(req: Request) {
       bodyText, 
       footerText, 
       buttons, 
+      variableSamples, // 👈 Added to receive sample values for variables from frontend
       metaTemplateId, 
       templateId, 
       newCategory 
@@ -82,7 +83,6 @@ export async function POST(req: Request) {
       if (headerType === "TEXT" && headerText) {
         components.push({ type: "HEADER", format: "TEXT", text: headerText });
       } else if (headerType === "IMAGE") {
-        // Meta requires a sample/example image handle or public URL for approval
         components.push({
           type: "HEADER",
           format: "IMAGE",
@@ -117,10 +117,19 @@ export async function POST(req: Request) {
       }
     }
 
-    components.push({
+    // Construct Body Component with required variable sample values for Meta
+    const bodyComponent: any = {
       type: "BODY",
       text: bodyText,
-    });
+    };
+
+    if (variableSamples && Array.isArray(variableSamples) && variableSamples.length > 0) {
+      bodyComponent.example = {
+        body_text: [variableSamples]
+      };
+    }
+
+    components.push(bodyComponent);
 
     if (footerText) {
       components.push({ type: "FOOTER", text: footerText });
@@ -132,6 +141,7 @@ export async function POST(req: Request) {
         buttons: buttons.map((b: any) => {
           if (b.type === "URL") return { type: "URL", text: b.text, url: b.value };
           if (b.type === "PHONE_NUMBER") return { type: "PHONE_NUMBER", text: b.text, phone_number: b.value };
+          if (b.type === "COPY_CODE") return { type: "COPY_CODE", example: b.value || "123456" };
           return { type: "QUICK_REPLY", text: b.text };
         }),
       });

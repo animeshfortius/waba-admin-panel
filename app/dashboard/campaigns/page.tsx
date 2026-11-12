@@ -36,6 +36,9 @@ function CampaignsContent() {
   const [templateType, setTemplateType] = useState("All");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
 
+  // Header Media State for Image/Video/Document templates
+  const [headerMediaUrl, setHeaderMediaUrl] = useState("");
+
   // Dynamic Variable Mapping States
   const [variableMappings, setVariableMappings] = useState<{
     [key: string]: { type: string; value: string };
@@ -194,6 +197,16 @@ function CampaignsContent() {
       alert("Please select an Approved Meta Template.");
       return;
     }
+    if (
+      activeTemplate &&
+      activeTemplate.headerType &&
+      activeTemplate.headerType !== "TEXT" &&
+      activeTemplate.headerType !== "NONE" &&
+      !headerMediaUrl.trim()
+    ) {
+      alert(`Please provide a public URL for the ${activeTemplate.headerType} header.`);
+      return;
+    }
     setStep(3);
   };
 
@@ -220,6 +233,7 @@ function CampaignsContent() {
           templateName: activeTemplate?.name,
           language: activeTemplate?.language || "en_US",
           variables: orderedVars,
+          headerMediaUrl,
           isScheduled,
           scheduleDate,
         }),
@@ -473,7 +487,10 @@ function CampaignsContent() {
                   <label className="block font-bold text-gray-600 mb-1">APPROVED META TEMPLATE *</label>
                   <select
                     value={selectedTemplateId}
-                    onChange={(e) => setSelectedTemplateId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedTemplateId(e.target.value);
+                      setHeaderMediaUrl("");
+                    }}
                     disabled={!selectedCategory}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-700 focus:outline-none font-bold disabled:opacity-50"
                   >
@@ -492,6 +509,25 @@ function CampaignsContent() {
                   </select>
                 </div>
               </div>
+
+              {/* Header Media URL Input if template has Image/Video/Document header */}
+              {activeTemplate &&
+                activeTemplate.headerType &&
+                activeTemplate.headerType !== "TEXT" &&
+                activeTemplate.headerType !== "NONE" && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-2">
+                    <label className="block font-bold text-blue-900">
+                      HEADER {activeTemplate.headerType} URL * (Public Link for {activeTemplate.headerType})
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={`Enter public ${activeTemplate.headerType.toLowerCase()} URL (e.g. https://...)...`}
+                      value={headerMediaUrl}
+                      onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                      className="w-full border rounded-xl p-2.5 bg-white text-xs font-mono focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                )}
 
               {activeTemplate && (
                 <div className="bg-gray-50 border rounded-2xl p-4 space-y-4">
@@ -647,14 +683,24 @@ function CampaignsContent() {
             </div>
 
             <div className="bg-emerald-900/60 p-3.5 rounded-2xl space-y-2 shadow-inner border border-emerald-800/50">
-              {activeTemplate?.headerText && (
-                <div className="font-bold text-white text-xs border-b border-emerald-800/60 pb-1">
-                  {activeTemplate.headerText}
+              {/* Header Preview */}
+              {activeTemplate?.headerType && activeTemplate.headerType !== "NONE" && (
+                <div className="border-b border-emerald-800/60 pb-1.5 text-xs font-semibold text-slate-200">
+                  {activeTemplate.headerType === "TEXT" ? (
+                    <div>{activeTemplate.headerText || "Header Text"}</div>
+                  ) : (
+                    <div className="bg-slate-800 p-2 rounded-xl text-center text-[10px] font-mono text-emerald-400 truncate">
+                      📎 [{activeTemplate.headerType} Header Media]
+                      {headerMediaUrl && <div className="text-white truncate mt-0.5">{headerMediaUrl}</div>}
+                    </div>
+                  )}
                 </div>
               )}
+
               <div className="text-slate-100 leading-relaxed text-xs whitespace-pre-wrap">
                 {livePreviewBody}
               </div>
+
               {activeTemplate?.footerText && (
                 <div className="text-[10px] text-slate-300 pt-1">{activeTemplate.footerText}</div>
               )}

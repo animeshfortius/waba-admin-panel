@@ -10,7 +10,8 @@ export async function POST(req: Request) {
       numbers,
       templateName,
       language,
-      variables,
+      variables, // body variables
+      headerMediaUrl, // Header media URL if template has image/doc header
       isScheduled,
       scheduleDate,
     } = body;
@@ -44,7 +45,6 @@ export async function POST(req: Request) {
     const cleanPhoneId = wabaAccount.phoneNumberId.replace("PHONE_", "").trim();
     const accessToken = wabaAccount.accessToken.trim();
 
-    // Clean and filter variables to ensure valid format
     const cleanVariables = Array.isArray(variables) ? variables.filter((v) => v !== undefined && v !== null) : [];
 
     let sentCount = 0;
@@ -57,24 +57,34 @@ export async function POST(req: Request) {
         formattedNumber = `91${formattedNumber}`;
       }
 
-      const templateObj: any = {
-        name: templateName,
-        language: {
-          code: language || "en_US",
-        },
-      };
+      const templateComponents: any[] = [];
 
-      // Only attach components if variables exist
+      // If header media is provided (Image/Video/Document template)
+      if (headerMediaUrl) {
+        // Detect media type or default to image/document
+        const isDoc = headerMediaUrl.match(/\.(pdf|doc|docx)$/i);
+        templateComponents.push({
+          type: "header",
+          parameters: [
+            {
+              type: isDoc ? "document" : "image",
+              [isDoc ? "document" : "image"]: {
+                link: headerMediaUrl,
+              },
+            },
+          ],
+        });
+      }
+
+      // Body parameters
       if (cleanVariables.length > 0) {
-        templateObj.components = [
-          {
-            type: "body",
-            parameters: cleanVariables.map((val) => ({
-              type: "text",
-              text: String(val).trim() || " - ",
-            })),
-          },
-        ];
+        templateComponents.push({
+          type: "body",
+          parameters: cleanVariables.map((val) => ({
+            type: "text",
+            text: String(val).trim() || " - ",
+          })),
+        });
       }
 
       const payload = {
@@ -82,7 +92,13 @@ export async function POST(req: Request) {
         recipient_type: "individual",
         to: formattedNumber,
         type: "template",
-        template: templateObj,
+        template: {
+          name: templateName,
+          language: {
+            code: language || "en_US",
+          },
+          ...(templateComponents.length > 0 ? { components: templateComponents } : {}),
+        },
       };
 
       try {

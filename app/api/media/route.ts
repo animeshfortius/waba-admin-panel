@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   }
 }
 
-// POST: Upload media with 30-day automatic expiration & cloud filesystem fallback
+// POST: Upload media with 30-day automatic expiration & fallback
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       const protocol = host.includes("localhost") ? "http" : "https";
       fileUrl = `${protocol}://${host}/uploads/${filename}`;
     } catch (fsErr) {
-      console.warn("Filesystem write restricted, using base64 data URI fallback:", fsErr);
+      console.warn("Filesystem write restricted, using base64 fallback:", fsErr);
       const base64 = buffer.toString("base64");
       const mime = file.type || "application/octet-stream";
       fileUrl = `data:${mime};base64,${base64}`;

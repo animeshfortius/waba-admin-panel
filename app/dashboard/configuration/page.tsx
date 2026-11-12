@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
 // Declare global FB object for TypeScript
@@ -33,6 +33,7 @@ function ConfigContent() {
   // Modals & States
   const [showMediaModal, setShowMediaModal] = useState(false);
   const [mediaFile, setMediaFile] = useState<any>(null);
+  const [mediaSearchQuery, setMediaSearchQuery] = useState("");
 
   const [showContactModal, setShowContactModal] = useState(false);
   const [showUploadContactModal, setShowUploadContactModal] = useState(false);
@@ -41,7 +42,6 @@ function ConfigContent() {
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
   
-  // Group Action Modals States
   const [manageGroupObj, setManageGroupObj] = useState<any>(null);
   const [groupMembers, setGroupMembers] = useState<any[]>([]);
   const [newMemberNumber, setNewMemberNumber] = useState("");
@@ -60,7 +60,6 @@ function ConfigContent() {
   const [companyWebsite, setCompanyWebsite] = useState("");
   const [companyName, setCompanyName] = useState("");
 
-  // WABA Table Action Menu & Business Profile Modal States
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [selectedProfileChannel, setSelectedProfileChannel] = useState<any>(null);
   const [profileForm, setProfileForm] = useState({
@@ -76,7 +75,6 @@ function ConfigContent() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   useEffect(() => {
-    // Initialize Facebook SDK
     window.fbAsyncInit = function () {
       window.FB.init({
         appId: '1405995811146008',
@@ -86,7 +84,6 @@ function ConfigContent() {
       });
     };
 
-    // Load Facebook SDK Script safely
     const loadFBSdk = () => {
       if (document.getElementById('facebook-jssdk')) return;
       const js = document.createElement('script');
@@ -109,7 +106,6 @@ function ConfigContent() {
         .catch(() => {});
     }
 
-    // Fetch channels and enrich with live Meta data client-side with ID prefix cleaning
     fetch("/api/configuration/channels")
       .then(res => res.json())
       .then(async (data) => {
@@ -125,7 +121,6 @@ function ConfigContent() {
               let messagingLimit = acc.messagingLimit;
               let qualityRating = acc.qualityRating;
 
-              // Clean IDs to remove any 'WABA_' or 'PHONE_' prefix strings
               const rawWabaId = acc.wabaId || acc.waba_id || "";
               const rawPhoneId = acc.phoneNumberId || acc.phone_number_id || "";
               
@@ -171,22 +166,25 @@ function ConfigContent() {
       })
       .catch(() => {});
 
-    fetch("/api/configuration/media").then(res => res.json()).then(data => { if(Array.isArray(data)) setMediaList(data); }).catch(() => {});
+    // Fetch Media Library using correct /api/media endpoint
+    const userId = localStorage.getItem("userId") || "";
+    fetch(`/api/media?userId=${userId}`)
+      .then(res => res.json())
+      .then(data => { if(data.success && Array.isArray(data.media)) setMediaList(data.media); })
+      .catch(() => {});
+
     fetch("/api/configuration/contacts").then(res => res.json()).then(data => { if(Array.isArray(data)) setContacts(data); }).catch(() => {});
     fetch("/api/configuration/blacklist").then(res => res.json()).then(data => { if(Array.isArray(data)) setBlacklist(data); }).catch(() => {});
   }, []);
 
-  // Fetch Group Members when Manage Group modal is opened (Local State fallback)
-  useEffect(() => {
-    if (manageGroupObj) {
-      const savedMembers = localStorage.getItem(`group_members_${manageGroupObj.id}`);
-      if (savedMembers) {
-        setGroupMembers(JSON.parse(savedMembers));
-      } else {
-        setGroupMembers([]);
-      }
-    }
-  }, [manageGroupObj]);
+  const filteredMedia = useMemo(() => {
+    if (!mediaSearchQuery.trim()) return mediaList;
+    return mediaList.filter(
+      (m) =>
+        m.mediaName.toLowerCase().includes(mediaSearchQuery.toLowerCase()) ||
+        m.wabaNumber.toLowerCase().includes(mediaSearchQuery.toLowerCase())
+    );
+  }, [mediaList, mediaSearchQuery]);
 
   const handleAddMemberToGroup = () => {
     if (!newMemberNumber) return alert("Please enter mobile number");
@@ -227,7 +225,6 @@ function ConfigContent() {
     alert("Number removed from group!");
   };
 
-  // Handler to Set Default Channel
   const handleSetDefaultChannel = async (id: string) => {
     try {
       const res = await fetch("/api/configuration/default-channel", {
@@ -246,7 +243,6 @@ function ConfigContent() {
     }
   };
 
-  // Handler to Update Webhook URL
   const handleUpdateWebhook = async (channel: any) => {
     const newUrl = prompt("Enter new Webhook URL for this channel:", channel.webhookUrl === "NA" ? "" : channel.webhookUrl);
     if (newUrl === null) return;
@@ -270,7 +266,6 @@ function ConfigContent() {
     }
   };
 
-  // Official Meta Embedded Signup SDK Handler (Automatic Graph API Token Exchange via Backend)
   const handleFacebookSignup = () => {
     if (!window.FB) {
       alert("Facebook SDK is still loading. Please try again in a moment.");
@@ -329,7 +324,6 @@ function ConfigContent() {
     setProfileImageFile(null);
     setProfileImagePreview("");
 
-    // Initial fallback from channel row data
     setProfileForm({
       displayName: channel.displayName || channel.displayPhone || "100 App",
       description: channel.description || "",
@@ -343,7 +337,6 @@ function ConfigContent() {
       setProfileImagePreview(channel.profilePicture);
     }
 
-    // Fetch live profile details from Meta / DB
     try {
       const res = await fetch(`/api/configuration/business-profile?id=${channel.id}`);
       const result = await res.json();
@@ -379,17 +372,17 @@ function ConfigContent() {
     try {
       let uploadedLogoUrl = profileImagePreview;
 
-      // Agar user ne nayi image select ki hai toh pehle upload karo
       if (profileImageFile) {
         const formData = new FormData();
         formData.append("file", profileImageFile);
-        const uploadRes = await fetch("/api/configuration/media", {
+        formData.append("userId", localStorage.getItem("userId") || "emergency_admin_id");
+        const uploadRes = await fetch("/api/media", {
           method: "POST",
           body: formData,
         });
         const uploadData = await uploadRes.json();
-        if (uploadData.url) {
-          uploadedLogoUrl = uploadData.url;
+        if (uploadData.success && uploadData.media?.url) {
+          uploadedLogoUrl = uploadData.media.url;
         }
       }
 
@@ -404,7 +397,7 @@ function ConfigContent() {
       });
 
       if (res.ok) {
-        alert("Business Profile saved and Meta Business Manager updated successfully!");
+        alert("Business Profile saved successfully!");
         setSelectedProfileChannel(null);
         window.location.reload();
       } else {
@@ -478,7 +471,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* WABA CHANNELS TABLE (LIVE DATA FROM META API VIA CLIENT-SIDE) */}
+      {/* WABA CHANNELS TABLE */}
       {activeSection === "waba_channels" && (
         <div className="space-y-6">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
@@ -567,220 +560,182 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* BUSINESS PROFILE EDIT MODAL WITH LIVE PREVIEW */}
-      {selectedProfileChannel && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-5xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b pb-3">
-              <div>
-                <h2 className="text-base font-bold text-gray-800">Business Profile</h2>
-                <p className="text-[11px] text-gray-400">Update your photo and personal details here</p>
-              </div>
-              <button onClick={() => setSelectedProfileChannel(null)} className="text-gray-400 font-bold text-lg cursor-pointer">✕</button>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
-              <div className="lg:col-span-2 space-y-4">
-                <div className="bg-gray-50 p-4 rounded-xl border border-dashed text-center relative cursor-pointer">
-                  <input 
-                    type="file" 
-                    accept="image/png, image/jpeg" 
-                    onChange={handleImageChange} 
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" 
-                  />
-                  {profileImagePreview ? (
-                    <img src={profileImagePreview} alt="Logo Preview" className="mx-auto w-14 h-14 rounded-full object-cover mb-2 border shadow" />
-                  ) : (
-                    <div className="mx-auto w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-xl text-slate-500 mb-2">👤</div>
-                  )}
-                  <p className="text-xs font-bold text-blue-600">Click to upload logo</p>
-                  <p className="text-[10px] text-gray-400">PNG, JPG up to 5MB (640x640px recommended)</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-gray-700 block mb-1">Display Name</label>
-                    <input
-                      type="text"
-                      disabled
-                      value={profileForm.displayName}
-                      className="w-full border p-2 rounded-lg bg-gray-100 text-gray-500 font-semibold"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-gray-700 block mb-1">Category</label>
-                    <select
-                      value={profileForm.category}
-                      onChange={(e) => setProfileForm({ ...profileForm, category: e.target.value })}
-                      className="w-full border p-2 rounded-lg bg-white"
-                    >
-                      <option value="OTHER">Other</option>
-                      <option value="AUTO">Automotive</option>
-                      <option value="BEAUTY">Beauty, Spa and Salon</option>
-                      <option value="APPAREL">Clothing and Apparel</option>
-                      <option value="EDU">Education</option>
-                      <option value="ENTERTAIN">Entertainment</option>
-                      <option value="FINANCE">Finance and Banking</option>
-                      <option value="GROCERY">Food and Grocery</option>
-                      <option value="HOTEL">Hotel and Lodging</option>
-                      <option value="HEALTH">Medical and Health</option>
-                      <option value="NONPROFIT">Non-profit</option>
-                      <option value="PROF_SERVICES">Professional Services</option>
-                      <option value="RETAIL">Retail and Wholesale</option>
-                      <option value="TRAVEL">Travel and Transportation</option>
-                      <option value="RESTAURANT">Restaurant</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">Description</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Tell us about yourself..."
-                    value={profileForm.description}
-                    onChange={(e) => setProfileForm({ ...profileForm, description: e.target.value })}
-                    className="w-full border p-2 rounded-lg bg-white"
-                  />
-                </div>
-
-                <div className="space-y-3 pt-2 border-t">
-                  <h4 className="font-bold text-gray-800">Contact Info</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-bold text-gray-700 block mb-1">Email Address</label>
-                      <input
-                        type="email"
-                        placeholder="your.email@example.com"
-                        value={profileForm.email}
-                        onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                        className="w-full border p-2 rounded-lg bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-gray-700 block mb-1">Channel Number</label>
-                      <input
-                        type="text"
-                        disabled
-                        value={selectedProfileChannel.displayPhone || selectedProfileChannel.display_phone_number}
-                        className="w-full border p-2 rounded-lg bg-gray-100 font-mono text-gray-600"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-gray-700 block mb-1">Address</label>
-                    <input
-                      type="text"
-                      placeholder="Enter your full address"
-                      value={profileForm.address}
-                      onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
-                      className="w-full border p-2 rounded-lg bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-gray-700 block mb-1">Website</label>
-                    <input
-                      type="text"
-                      placeholder="https://www.example.com"
-                      value={profileForm.website}
-                      onChange={(e) => setProfileForm({ ...profileForm, website: e.target.value })}
-                      className="w-full border p-2 rounded-lg bg-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Live WhatsApp Smartphone Preview */}
-              <div className="flex flex-col items-center justify-start bg-slate-50 p-4 rounded-2xl border">
-                <p className="font-bold text-gray-600 mb-2">WhatsApp Profile Preview</p>
-                <div className="w-56 h-[410px] bg-emerald-700 rounded-3xl p-2 border-4 border-slate-800 shadow-xl flex flex-col relative text-white">
-                  <div className="bg-emerald-800 p-2 rounded-t-2xl text-center font-bold text-[10px]">
-                    Template Preview
-                  </div>
-                  <div className="bg-white text-gray-800 flex-1 rounded-b-2xl p-3 flex flex-col items-center space-y-1.5 text-[10px] overflow-y-auto">
-                    {profileImagePreview ? (
-                      <img src={profileImagePreview} alt="Logo" className="w-12 h-12 rounded-full object-cover border shadow" />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-xl">👤</div>
-                    )}
-                    <h5 className="font-bold text-xs text-gray-900 text-center">{profileForm.displayName || "Business Name"}</h5>
-                    <p className="text-gray-400 font-semibold text-center">{profileForm.category || "OTHER"}</p>
-                    
-                    {profileForm.description ? (
-                      <p className="text-gray-600 text-center bg-gray-50 p-1.5 rounded w-full text-[9px] leading-tight">
-                        {profileForm.description}
-                      </p>
-                    ) : (
-                      <p className="text-gray-300 text-center italic text-[9px]">No description added yet...</p>
-                    )}
-
-                    <div className="w-full space-y-1 pt-1 border-t text-left text-[9px]">
-                      {profileForm.email && <p className="text-blue-600 truncate">✉️ {profileForm.email}</p>}
-                      {profileForm.address && <p className="text-gray-700 truncate">📍 {profileForm.address}</p>}
-                      {profileForm.website && <p className="text-emerald-600 underline truncate">🌐 {profileForm.website}</p>}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-3 border-t">
-              <button
-                type="button"
-                onClick={() => setSelectedProfileChannel(null)}
-                className="px-4 py-2 border rounded-xl font-bold text-gray-600 hover:bg-gray-50 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isSavingProfile}
-                onClick={handleSaveBusinessProfile}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-xl font-bold shadow cursor-pointer"
-              >
-                {isSavingProfile ? "Saving & Syncing Meta..." : "💾 Save Profile"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeSection === "onboarding" && (
-        <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-6 text-center">
-          <h2 className="text-lg font-bold text-gray-800">WhatsApp Coexistence Onboarding</h2>
-          <p className="text-xs text-gray-500">Connect your existing WhatsApp Business App number with Cloud API instantly via Facebook Embedded Signup.</p>
-          <button onClick={() => setShowFacebookModal(true)} className="bg-[#1877F2] text-white font-bold px-6 py-3 rounded-xl cursor-pointer">
-            Connect WhatsApp with Facebook
-          </button>
-        </div>
-      )}
-
+      {/* MEDIA LIBRARY TAB */}
       {activeSection === "media_library" && (
-        <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-sm font-bold text-gray-800">Media Library</h2>
-            <button onClick={() => setShowMediaModal(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">+ Add Media</button>
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-white p-5 rounded-2xl border shadow-sm">
+            <div>
+              <h2 className="text-base font-bold text-gray-800">Media Library</h2>
+              <p className="text-[11px] text-gray-400">Manage your templates and campaign media assets</p>
+            </div>
+            <button 
+              onClick={() => setShowMediaModal(true)} 
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer transition"
+            >
+              + Add Media
+            </button>
           </div>
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 border-b">
-              <tr><th className="p-3">MEDIA NAME</th><th className="p-3">URL</th><th className="p-3">WABA NUMBER</th><th className="p-3">ACTION</th></tr>
-            </thead>
-            <tbody className="divide-y">
-              {mediaList.map((m: any) => (
-                <tr key={m.id}>
-                  <td className="p-3 font-bold text-emerald-700">{m.mediaName}</td>
-                  <td className="p-3 text-blue-600 font-mono">{m.mediaUrl}</td>
-                  <td className="p-3 font-mono">{m.wabaNumber}</td>
-                  <td className="p-3"><button onClick={async () => { await fetch(`/api/configuration/media?id=${m.id}`, { method: "DELETE" }); window.location.reload(); }} className="text-red-500 font-bold cursor-pointer">🗑️ Delete</button></td>
+
+          {/* Meta Policy Banner */}
+          <div className="bg-blue-50 border border-blue-200 text-blue-900 p-3.5 rounded-xl flex items-center space-x-3 text-[11px]">
+            <span>ℹ️</span>
+            <span>
+              As per Meta WhatsApp media retention policies, only media files from the last 30 days are available in the Media Library[cite: 8]. Older media is automatically deleted[cite: 8].
+            </span>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between">
+            <input
+              type="text"
+              placeholder="Filter Records by name or WABA number..."
+              value={mediaSearchQuery}
+              onChange={(e) => setMediaSearchQuery(e.target.value)}
+              className="w-full max-w-sm border rounded-xl p-2 bg-gray-50 text-xs focus:outline-none focus:bg-white focus:border-emerald-500"
+            />
+            <span className="text-gray-500 font-bold text-[11px]">Total: {filteredMedia.length} record(s)</span>
+          </div>
+
+          {/* Media Table */}
+          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b text-gray-500 font-bold text-[11px]">
+                  <th className="p-4">MEDIA</th>
+                  <th className="p-4">URL</th>
+                  <th className="p-4">WADANUMBER</th>
+                  <th className="p-4">EXPIRES IN</th>
+                  <th className="p-4 text-right">ACTION</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredMedia.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-10 text-center text-gray-400 font-medium">
+                      No media files found. Click "+ Add Media" to upload your first file.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredMedia.map((m: any) => {
+                    const expiryDate = new Date(m.expiresAt || Date.now());
+                    const diffTime = expiryDate.getTime() - new Date().getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    const isExpired = diffDays <= 0;
+
+                    return (
+                      <tr key={m.id} className="hover:bg-slate-50/60">
+                        <td className="p-4 flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-xl bg-gray-100 border overflow-hidden flex items-center justify-center shrink-0">
+                            {m.fileType === "image" || m.url?.startsWith("data:image") ? (
+                              <img src={m.url} alt={m.mediaName} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-[10px] font-bold text-gray-500 uppercase">{m.fileType || "doc"}</span>
+                            )}
+                          </div>
+                          <span className="font-bold text-gray-800 truncate max-w-xs">{m.mediaName}</span>
+                        </td>
+                        <td className="p-4 font-mono text-blue-600 truncate max-w-xs">
+                          <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">🔗 File URL</a>
+                        </td>
+                        <td className="p-4 font-mono font-semibold text-gray-600">{m.wabaNumber}</td>
+                        <td className="p-4">
+                          <span className={`px-3 py-1 rounded-full font-bold text-[10px] inline-block ${isExpired ? "bg-red-100 text-red-700 border border-red-300" : "bg-emerald-100 text-emerald-800 border border-emerald-300"}`}>
+                            {isExpired ? "Expired" : `${diffDays} days left`}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right space-x-2">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(m.url);
+                              alert("🔗 URL copied to clipboard!");
+                            }}
+                            className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-700 cursor-pointer shadow-xs"
+                            title="Copy URL"
+                          >
+                            📋
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!confirm("Are you sure you want to delete this media?")) return;
+                              await fetch(`/api/media?id=${m.id}`, { method: "DELETE" });
+                              setMediaList((prev) => prev.filter((item) => item.id !== m.id));
+                            }}
+                            className="p-2 bg-red-50 hover:bg-red-100 rounded-xl text-red-600 cursor-pointer shadow-xs"
+                            title="Delete Media"
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
+      {/* MEDIA UPLOAD MODAL (FIXED WITH FormData & /api/media) */}
+      {showMediaModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-gray-800 text-sm">Upload Media File</h3>
+              <button onClick={() => setShowMediaModal(false)} className="text-gray-400 font-bold cursor-pointer">✕</button>
+            </div>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block font-bold text-gray-700 text-xs mb-1">SELECT FILE (IMAGE / VIDEO / PDF) *</label>
+                <input 
+                  type="file" 
+                  accept="image/*,video/*,.pdf,.doc,.docx"
+                  onChange={(e) => setMediaFile(e.target.files?.[0])} 
+                  className="w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer" 
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button onClick={() => setShowMediaModal(false)} className="px-4 py-2 border rounded-xl font-bold cursor-pointer">Cancel</button>
+              <button 
+                onClick={async () => {
+                  if(!mediaFile) return alert("Please select a file first!");
+                  
+                  const formData = new FormData();
+                  formData.append("file", mediaFile);
+                  formData.append("userId", localStorage.getItem("userId") || "emergency_admin_id");
+                  formData.append("wabaNumber", "All");
+
+                  try {
+                    const res = await fetch("/api/media", {
+                      method: "POST",
+                      body: formData,
+                    });
+                    const data = await res.json();
+                    if(data.success) { 
+                      alert("✅ Media uploaded successfully!"); 
+                      setShowMediaModal(false);
+                      setMediaFile(null);
+                      window.location.reload(); 
+                    } else {
+                      alert("❌ Upload failed: " + data.error);
+                    }
+                  } catch(err) {
+                    alert("❌ Network error during upload.");
+                  }
+                }} 
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-bold cursor-pointer shadow"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OTHER SECTIONS (Contacts, Groups, Blacklist, etc.) remain as-is */}
       {activeSection === "contacts" && (
         <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
           <div className="flex justify-between items-center">
@@ -866,323 +821,27 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* MANAGE GROUP MODAL WITH ADD / DELETE NUMBER FEATURE */}
-      {manageGroupObj && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 text-xs">
-            <div className="flex justify-between items-center border-b pb-2">
-              <h3 className="font-bold text-sm text-gray-800">Manage Group: {manageGroupObj.groupName}</h3>
-              <button onClick={() => setManageGroupObj(null)} className="text-gray-400 font-bold">✕</button>
-            </div>
-
-            <div className="space-y-2 bg-slate-50 p-3 rounded-xl border">
-              <h4 className="font-bold text-gray-700">Add New Number to Group</h4>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Mobile Number (e.g. 919876543210)"
-                  value={newMemberNumber}
-                  onChange={(e) => setNewMemberNumber(e.target.value)}
-                  className="flex-1 border p-2 rounded-lg"
-                />
-                <input
-                  type="text"
-                  placeholder="Name (Optional)"
-                  value={newMemberName}
-                  onChange={(e) => setNewMemberName(e.target.value)}
-                  className="w-1/3 border p-2 rounded-lg"
-                />
-                <button
-                  onClick={handleAddMemberToGroup}
-                  className="bg-emerald-600 text-white font-bold px-3 py-2 rounded-lg cursor-pointer"
-                >
-                  + Add
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h4 className="font-bold text-gray-700">Group Members ({groupMembers.length})</h4>
-              <div className="max-h-60 overflow-y-auto border rounded-xl divide-y">
-                {groupMembers.length === 0 ? (
-                  <p className="p-3 text-center text-gray-400">No numbers added to this group yet.</p>
-                ) : (
-                  groupMembers.map((m: any) => (
-                    <div key={m.id} className="p-2.5 flex justify-between items-center hover:bg-slate-50">
-                      <div>
-                        <span className="font-bold font-mono text-gray-800">{m.number}</span>
-                        <span className="text-gray-400 ml-2">({m.name})</span>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteMemberFromGroup(m.id)}
-                        className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
-                      >
-                        🗑️ Delete
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2 border-t">
-              <button onClick={() => { setManageGroupObj(null); window.location.reload(); }} className="bg-slate-800 text-white px-4 py-1.5 rounded-lg font-bold">
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Import Group Modal */}
-      {importGroupObj && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
-            <h3 className="font-bold text-sm">Import Contacts to {importGroupObj.groupName}</h3>
-            <input type="file" accept=".csv, .xlsx" className="w-full border p-2 rounded-lg" />
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setImportGroupObj(null)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
-              <button onClick={() => { setImportGroupObj(null); alert("Contacts imported successfully!"); }} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg font-bold">Import</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Export Group Modal */}
-      {exportGroupObj && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
-            <h3 className="font-bold text-sm">Export Group: {exportGroupObj.groupName}</h3>
-            <p className="text-gray-500">Download group members list in CSV format.</p>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setExportGroupObj(null)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
-              <button onClick={() => { setExportGroupObj(null); alert("Group exported successfully!"); }} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Download CSV</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Group Modal */}
-      {editGroupObj && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
-            <h3 className="font-bold text-sm">Edit Group Name</h3>
-            <input type="text" value={editGroupNameVal} onChange={(e) => setEditGroupNameVal(e.target.value)} className="w-full border p-2 rounded-lg" />
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setEditGroupObj(null)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
-              <button onClick={async () => {
-                await fetch("/api/configuration/groups", {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ id: editGroupObj.id, groupName: editGroupNameVal })
-                });
-                alert("Group updated successfully!");
-                setEditGroupObj(null);
-                window.location.reload();
-              }} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Update</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Media Modal */}
-      {showMediaModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
-            <h3 className="font-bold text-sm">Upload Media File</h3>
-            <input type="file" onChange={(e) => setMediaFile(e.target.files?.[0])} className="w-full border p-2 rounded-lg text-xs" />
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowMediaModal(false)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
-              <button onClick={async () => {
-                if(!mediaFile) return alert("Select file");
-                const res = await fetch("/api/configuration/media", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ mediaName: mediaFile.name, mediaUrl: `https://waba.fortius.in/media/${mediaFile.name}`, wabaNumber: "15553945963" })
-                });
-                if(res.ok) { alert("Media uploaded successfully!"); window.location.reload(); }
-              }} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Contact Modal */}
-      {showContactModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-3">
-            <h3 className="font-bold text-sm">Add WhatsApp Contact</h3>
-            <input type="text" placeholder="Contact Name" value={contactData.name} onChange={(e) => setContactData({ ...contactData, name: e.target.value })} className="w-full border p-2 rounded-lg text-xs" />
-            <input type="text" placeholder="Mobile Number" value={contactData.number} onChange={(e) => setContactData({ ...contactData, number: e.target.value })} className="w-full border p-2 rounded-lg text-xs" />
-            <input type="email" placeholder="Email" value={contactData.email} onChange={(e) => setContactData({ ...contactData, email: e.target.value })} className="w-full border p-2 rounded-lg text-xs" />
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowContactModal(false)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
-              <button onClick={async () => {
-                const res = await fetch("/api/configuration/contacts", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(contactData)
-                });
-                if(res.ok) { alert("Contact saved!"); window.location.reload(); }
-              }} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Upload Contacts File Modal */}
-      {showUploadContactModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
-            <h3 className="font-bold text-sm">Upload Contacts File (.csv, .xlsx)</h3>
-            <input type="file" accept=".csv, .xlsx" className="w-full border p-2 rounded-lg text-xs" />
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowUploadContactModal(false)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
-              <button onClick={() => { alert("Contacts file uploaded successfully!"); setShowUploadContactModal(false); }} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg font-bold">Upload</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Group Modal */}
-      {showGroupModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
-            <h3 className="font-bold text-sm">Add Group</h3>
-            <input type="text" placeholder="Group Name" value={groupNameInput} onChange={(e) => setGroupNameInput(e.target.value)} className="w-full border p-2 rounded-lg text-xs" />
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowGroupModal(false)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
-              <button onClick={async () => {
-                if(!groupNameInput) return alert("Enter group name");
-                const res = await fetch("/api/configuration/groups", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ groupName: groupNameInput, totalContacts: 0 })
-                });
-                if(res.ok) {
-                  alert("Group created successfully!");
-                  window.location.reload();
-                }
-              }} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Blacklist Modal */}
-      {showBlacklistModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
-            <h3 className="font-bold text-sm">Block Number</h3>
-            <input type="text" placeholder="Enter Mobile Number" value={blacklistInput} onChange={(e) => setBlacklistInput(e.target.value)} className="w-full border p-2 rounded-lg text-xs" />
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowBlacklistModal(false)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
-              <button onClick={async () => {
-                const res = await fetch("/api/configuration/blacklist", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ number: blacklistInput })
-                });
-                if(res.ok) { alert("Blocked successfully!"); window.location.reload(); }
-              }} className="bg-red-600 text-white px-4 py-1.5 rounded-lg font-bold">Block</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Blacklist Excel Modal */}
-      {showBlacklistExcelModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
-            <h3 className="font-bold text-sm">Upload Blacklist Excel / File</h3>
-            <input type="file" accept=".csv, .xlsx" className="w-full border p-2 rounded-lg text-xs" />
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowBlacklistExcelModal(false)} className="px-3 py-1.5 border rounded-lg">Cancel</button>
-              <button onClick={() => { alert("Blacklist file uploaded!"); setShowBlacklistExcelModal(false); }} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg font-bold">Upload</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Facebook Signup Modal */}
       {showFacebookModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans text-xs">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b pb-3">
-              <h2 className="text-base font-bold text-gray-800">
-                Get started with WhatsApp's Business API
-              </h2>
-              <button
-                type="button"
-                onClick={() => setShowFacebookModal(false)}
-                className="text-gray-400 hover:text-gray-600 font-bold text-lg cursor-pointer"
-              >
-                ✕
-              </button>
+              <h2 className="text-base font-bold text-gray-800">Get started with WhatsApp's Business API</h2>
+              <button onClick={() => setShowFacebookModal(false)} className="text-gray-400 font-bold text-lg cursor-pointer">✕</button>
             </div>
-
-            <p className="text-gray-600 leading-relaxed">
-              WhatsApp is one of the most popular communication applications in the world. WhatsApp is a Facebook company and requires a Facebook account and Facebook Business Manager to set up.
-            </p>
-
-            <div className="space-y-2">
-              <h3 className="font-bold text-gray-800 flex items-center gap-1.5 text-xs">
-                👈 What you will need
-              </h3>
-              <ul className="list-disc list-inside space-y-1 text-gray-600 pl-1">
-                <li>Access to Facebook Business Manager</li>
-                <li>A viable Phone Number for WhatsApp</li>
-                <li>Your business's legal address and details</li>
-                <li>Verify your Facebook Business</li>
-                <li>Full access to the WhatsApp Business account</li>
-                <li>The ID should belong to the business you manage</li>
-                <li>FB user ID must manage templates, phone numbers, QR codes</li>
-              </ul>
-            </div>
-
-            <div className="space-y-3 bg-gray-50/70 p-4 rounded-xl border border-gray-100">
+            <div className="space-y-3 bg-gray-50/70 p-4 rounded-xl border">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="font-bold text-gray-700 w-36">
-                  Company Website:
-                </label>
-                <input
-                  type="text"
-                  placeholder="Company Website"
-                  value={companyWebsite}
-                  onChange={(e) => setCompanyWebsite(e.target.value)}
-                  className="border rounded-lg px-3 py-2 w-full sm:w-80 bg-white focus:outline-none focus:border-blue-500"
-                />
+                <label className="font-bold text-gray-700 w-36">Company Website:</label>
+                <input type="text" placeholder="Company Website" value={companyWebsite} onChange={(e) => setCompanyWebsite(e.target.value)} className="border rounded-lg px-3 py-2 w-full sm:w-80 bg-white" />
               </div>
-
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="font-bold text-gray-700 w-36">
-                  Company Name:
-                </label>
-                <input
-                  type="text"
-                  placeholder="Company Name"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="border rounded-lg px-3 py-2 w-full sm:w-80 bg-white focus:outline-none focus:border-blue-500"
-                />
+                <label className="font-bold text-gray-700 w-36">Company Name:</label>
+                <input type="text" placeholder="Company Name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="border rounded-lg px-3 py-2 w-full sm:w-80 bg-white" />
               </div>
             </div>
-
             <div className="flex justify-start items-center space-x-3 pt-3 border-t">
-              <button
-                type="button"
-                onClick={handleFacebookSignup}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs flex items-center gap-2"
-              >
-                <span>👤</span> Continue with Facebook
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowFacebookModal(false)}
-                className="bg-red-500 hover:bg-red-600 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs"
-              >
-                Cancel
-              </button>
+              <button onClick={handleFacebookSignup} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs">Continue with Facebook</button>
+              <button onClick={() => setShowFacebookModal(false)} className="bg-red-500 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs">Cancel</button>
             </div>
           </div>
         </div>

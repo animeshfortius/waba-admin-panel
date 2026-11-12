@@ -3,15 +3,22 @@ import { prisma } from "@/lib/prisma";
 import { writeFile } from "fs/promises";
 import path from "path";
 
-// GET: Fetch all saved media files for the user
+// GET: Fetch active media files for user & clean up expired media older than 30 days
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
 
+    // Automatically delete expired media older than 30 days
+    await prisma.mediaLibrary.deleteMany({
+      where: {
+        expiresAt: { lt: new Date() },
+      },
+    });
+
     const mediaList = await prisma.mediaLibrary.findMany({
       where: userId ? { userId } : {},
-      orderBy: { id: "desc" },
+      orderBy: { createdAt: "desc" },
     });
 
     return NextResponse.json({ success: true, media: mediaList });
@@ -21,13 +28,13 @@ export async function GET(request: Request) {
   }
 }
 
-// POST: Upload new media file
+// POST: Upload media with 30-day automatic expiration
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File;
-    const userId = formData.get("userId") as string;
-    const wabaNumber = formData.get("wabaNumber") as string;
+    const userId = (formData.get("userId") as string) || "emergency_admin_id";
+    const wabaNumber = (formData.get("wabaNumber") as string) || "All";
 
     if (!file) {
       return NextResponse.json({ success: false, error: "No file uploaded" }, { status: 400 });
@@ -36,27 +43,32 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Save file locally in public/uploads folder
     const filename = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
     const uploadDir = path.join(process.cwd(), "public", "uploads");
-    
-    // Ensure directory exists or write directly
     const filePath = path.join(uploadDir, filename);
     await writeFile(filePath, buffer);
 
-    // Generate public URL accessible by Meta and browser
-    // Note: Ensure your NEXT_PUBLIC_BASE_URL or production domain matches
     const host = request.headers.get("host") || "localhost:3000";
     const protocol = host.includes("localhost") ? "http" : "https";
     const fileUrl = `${protocol}://${host}/uploads/${filename}`;
 
-    // Save to Database (MediaLibrary model)
+    // Determine file type
+    let fileType = "image";
+    if (file.type.includes("video")) fileType = "video";
+    else if (file.type.includes("pdf") || file.name.match(/\.(doc|docx|pdf)$/i)) fileType = "document";
+
+    // Calculate 30 days expiration date from now
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
     const savedMedia = await prisma.mediaLibrary.create({
       data: {
-        userId: userId || "emergency_admin_id",
+        userId,
         mediaName: file.name,
         url: fileUrl,
-        wabaNumber: wabaNumber || "All",
+        wabaNumber,
+        fileType,
+        expiresAt, // 👈 Required field included here
       },
     });
 

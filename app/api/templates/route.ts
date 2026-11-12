@@ -78,11 +78,8 @@ export async function POST(req: Request) {
       body = {};
     }
 
-    const { action, userId, wabaId, name, language, category, headerType, headerText, bodyText, footerText, buttons } = body;
+    const { userId, wabaId } = body;
 
-    // =========================================================================
-    // 🔥 BULLETPROOF SYNC / RETRIEVE: Trigger sync on ANY POST request from the retrieve button
-    // =========================================================================
     const whereClause: any = {};
     if (wabaId && wabaId !== "ALL") whereClause.wabaId = wabaId;
     else if (userId) whereClause.userId = userId;
@@ -159,7 +156,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Fetch updated templates list to return back to frontend
     const updatedTemplates = await prisma.whatsAppTemplate.findMany({
       orderBy: { createdAt: "desc" },
     });
@@ -169,5 +165,9 @@ export async function POST(req: Request) {
       message: `Synced ${syncedCount} templates from Meta successfully!`,
       syncedCount,
       templates: updatedTemplates,
-      data: updatedTemplates, // Extra fallback for frontend
+      data: updatedTemplates,
     });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}

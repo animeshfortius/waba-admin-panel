@@ -70,6 +70,7 @@ function ConfigContent() {
   ];
 
   useEffect(() => {
+    // Initialize Facebook SDK for Embedded Signup popup
     window.fbAsyncInit = function () {
       window.FB.init({
         appId: '1405995811146008',
@@ -218,6 +219,7 @@ function ConfigContent() {
     }
   };
 
+  // Official Meta Embedded Signup Login Popup Flow
   const handleFacebookSignup = () => {
     if (!window.FB) {
       alert("Facebook SDK is still loading. Please try again in a moment.");
@@ -242,15 +244,15 @@ function ConfigContent() {
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            alert("WhatsApp channel connected and credit line/payment methods linked successfully!");
+            alert("✅ WhatsApp channel connected and credit line/payment methods linked successfully!");
             window.location.reload();
           } else {
-            alert("Error: " + (data.error || "Failed to register channel"));
+            alert("❌ Error: " + (data.error || "Failed to register channel"));
           }
         })
         .catch(err => {
           console.error(err);
-          alert("Error registering channel details.");
+          alert("❌ Error registering channel details.");
         });
 
       } else {
@@ -757,7 +759,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* Facebook Signup Modal */}
+      {/* Facebook Signup Modal (Triggered by Register New WhatsApp & Coexistence Onboarding) */}
       {showFacebookModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans text-xs">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
@@ -876,7 +878,7 @@ function ConfigContent() {
                 </div>
               </div>
 
-              {/* Right Side: WhatsApp Business Profile Live Preview (Matching your video layout) */}
+              {/* Right Side: WhatsApp Business Profile Live Preview */}
               <div className="bg-slate-900 rounded-3xl p-4 text-white flex flex-col items-center justify-between shadow-xl">
                 <div className="w-full text-center border-b border-slate-800 pb-2">
                   <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">📱 Live WhatsApp Preview</span>

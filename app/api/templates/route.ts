@@ -78,10 +78,68 @@ export async function POST(req: Request) {
       body = {};
     }
 
-    const { userId, wabaId } = body;
+    const { action, userId, wabaId, templateId, metaTemplateId } = body;
 
+    // =========================================================================
+    // 🔥 HANDLE SYNC SINGLE TEMPLATE
+    // =========================================================================
+    if (action === "SYNC_SINGLE") {
+      if (!metaTemplateId && !templateId) {
+        return NextResponse.json({ success: false, error: "Template ID missing for sync" }, { status: 400 });
+      }
+
+      const targetTemplate = await prisma.whatsAppTemplate.findUnique({
+        where: { id: templateId },
+      });
+
+      if (!targetTemplate) {
+        return NextResponse.json({ success: false, error: "Template not found in database" }, { status: 404 });
+      }
+
+      let wabaAccount = await prisma.wabaAccount.findFirst({
+        where: { wabaId: targetTemplate.wabaId },
+      });
+
+      if (!wabaAccount || !wabaAccount.accessToken) {
+        wabaAccount = await prisma.wabaAccount.findFirst();
+      }
+
+      if (!wabaAccount || !wabaAccount.accessToken) {
+        return NextResponse.json({ success: false, error: "WABA Account access token not found" }, { status: 404 });
+      }
+
+      const token = wabaAccount.accessToken;
+      const metaTplId = metaTemplateId || targetTemplate.metaTemplateId;
+
+      const metaRes = await fetch(`https://graph.facebook.com/v21.0/${metaTplId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const metaData = await metaRes.json();
+
+      if (metaData.error) {
+        return NextResponse.json({ success: false, error: metaData.error.message }, { status: 400 });
+      }
+
+      const updatedTemplate = await prisma.whatsAppTemplate.update({
+        where: { id: targetTemplate.id },
+        data: {
+          status: metaData.status || targetTemplate.status,
+          category: metaData.category || targetTemplate.category,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "Template synced successfully!",
+        template: updatedTemplate,
+      });
+    }
+
+    // =========================================================================
+    // 🔥 HANDLE RETRIEVE ALL (SYNC ALL)
+    // =========================================================================
     const whereClause: any = {};
-    if (wabaId && wabaId !== "ALL") whereClause.wabaId = wabaId;
+    if (wabaId && wabaId !== "ALL" && wabaId !== "DEFAULT") whereClause.wabaId = wabaId;
     else if (userId) whereClause.userId = userId;
 
     let accounts = await prisma.wabaAccount.findMany({ where: whereClause });

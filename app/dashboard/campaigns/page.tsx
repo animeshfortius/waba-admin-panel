@@ -1,14 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 
 export default function CampaignsPage() {
+  const searchParams = useSearchParams();
+  const [userId, setUserId] = useState("");
   const [step, setStep] = useState(1);
-  const [campaignName, setCampaignName] = useState("Campaign_000000");
+
+  // Campaign Details
+  const [campaignName, setCampaignName] = useState("");
+  const [wabaAccounts, setWabaAccounts] = useState<any[]>([]);
+  const [allTemplates, setAllTemplates] = useState<any[]>([]);
+  const [selectedChannel, setSelectedChannel] = useState("");
+
+  // Audience & Numbers Processing
   const [numbersInput, setNumbersInput] = useState("");
-  const [selectedChannel, setSelectedChannel] = useState("28402710282733872");
-  
+  const [removeDuplicates, setRemoveDuplicates] = useState(true);
+  const [removeBlacklist, setRemoveBlacklist] = useState(true);
+
+  // Sample Blacklist (can also be fetched from API if needed)
+  const blacklistedNumbers = ["910000000000", "0000000000"];
+
   // File Upload Modal State
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadType, setUploadType] = useState("Single Number Column");
@@ -21,56 +34,242 @@ export default function CampaignsPage() {
   // Template Selection States
   const [selectedCategory, setSelectedCategory] = useState("");
   const [templateType, setTemplateType] = useState("All");
-  const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
 
-  // Variable Mapping States
-  const [mappingType1, setMappingType1] = useState("Assign Const Value");
-  const [val1, setVal1] = useState("");
-  const [mappingType2, setMappingType2] = useState("Assign Const Value");
-  const [val2, setVal2] = useState("");
-  const [mappingType3, setMappingType3] = useState("Assign Const Value");
-  const [val3, setVal3] = useState("");
+  // Dynamic Variable Mapping States
+  const [variableMappings, setVariableMappings] = useState<{
+    [key: string]: { type: string; value: string };
+  }>({});
 
-  // Fix prerender error by generating dynamic name client-side
+  // Set Default System Date & Time Campaign Name + Fetch User WABA & Templates
   useEffect(() => {
-    setCampaignName(`Campaign_${Date.now().toString().slice(-6)}`);
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, "0");
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = months[now.getMonth()];
+    const year = now.getFullYear();
+    const hours = String(now.getHours()).padStart(2, "0");
+    const mins = String(now.getMinutes()).padStart(2, "0");
+    setCampaignName(`Camp_${day}${month}${year}_${hours}${mins}`);
+
+    const storedUserId = localStorage.getItem("userId") || "";
+    if (storedUserId) {
+      setUserId(storedUserId);
+      fetchWabaAndTemplates(storedUserId);
+    } else {
+      fetch("/api/admin/me")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.user?.id) {
+            setUserId(data.user.id);
+            fetchWabaAndTemplates(data.user.id);
+          }
+        })
+        .catch(() => fetchWabaAndTemplates(""));
+    }
   }, []);
 
+  const fetchWabaAndTemplates = async (uid: string) => {
+    try {
+      const res = await fetch(`/api/templates?userId=${uid}`);
+      const data = await res.json();
+      if (data.success) {
+        const accounts = data.wabaAccounts || [];
+        const tpls = data.templates || [];
+        setWabaAccounts(accounts);
+        setAllTemplates(tpls);
+
+        // Pre-select WABA from URL query or first onboarded WABA
+        const urlWaba = searchParams?.get("wabaNumber");
+        const urlTplId = searchParams?.get("templateId");
+
+        if (accounts.length > 0) {
+          if (urlWaba) {
+            const matchedAcc = accounts.find((a: any) => a.displayPhone === urlWaba || a.wabaId === urlWaba);
+            setSelectedChannel(matchedAcc ? matchedAcc.wabaId : accounts[0].wabaId);
+          } else {
+            setSelectedChannel(accounts[0].wabaId);
+          }
+        }
+
+        if (urlTplId && tpls.length > 0) {
+          const matchedTpl = tpls.find((t: any) => t.id === urlTplId);
+          if (matchedTpl) {
+            setSelectedCategory(matchedTpl.category || "");
+            setSelectedTemplateId(matchedTpl.id);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch WABA channels & templates:", err);
+    }
+  };
+
+  // Clean & Process Comma-Separated Numbers (ignores trailing commas, handles duplicates & blacklist)
+  const processedNumbers = useMemo(() => {
+    if (!numbersInput.trim()) return [];
+    let rawList = numbersInput
+      .split(",")
+      .map((num) => num.trim().replace(/[^0-9]/g, ""))
+      .filter((num) => num.length >= 10);
+
+    if (removeDuplicates) {
+      rawList = Array.from(new Set(rawList));
+    }
+    if (removeBlacklist) {
+      rawList = rawList.filter((num) => !blacklistedNumbers.includes(num));
+    }
+    return rawList;
+  }, [numbersInput, removeDuplicates, removeBlacklist]);
+
+  // Filter Approved Templates based on Selected WABA & Category
+  const filteredApprovedTemplates = useMemo(() => {
+    return allTemplates.filter((tpl) => {
+      const isApproved = tpl.status?.toUpperCase() === "APPROVED";
+      const matchesWaba = !selectedChannel || tpl.wabaId === selectedChannel;
+      const matchesCat =
+        !selectedCategory || tpl.category?.toUpperCase() === selectedCategory.toUpperCase();
+      return isApproved && matchesWaba && matchesCat;
+    });
+  }, [allTemplates, selectedChannel, selectedCategory]);
+
+  // Active Selected Template Object
+  const activeTemplate = useMemo(() => {
+    return allTemplates.find((t) => t.id === selectedTemplateId) || null;
+  }, [allTemplates, selectedTemplateId]);
+
+  // Extract Variables ({{1}}, {{2}}, etc.) dynamically from selected template body
+  const detectedVariables = useMemo(() => {
+    if (!activeTemplate?.bodyText) return [];
+    const matches = activeTemplate.bodyText.match(/\{\{(\d+)\}\}/g) || [];
+    const uniqueVars = Array.from(new Set(matches)).sort((a: any, b: any) => {
+      const numA = parseInt(a.replace(/\D/g, ""), 10);
+      const numB = parseInt(b.replace(/\D/g, ""), 10);
+      return numA - numB;
+    });
+    return uniqueVars as string[];
+  }, [activeTemplate]);
+
+  // Update dynamic variable mappings when template changes
+  useEffect(() => {
+    const initialMaps: { [key: string]: { type: string; value: string } } = {};
+    detectedVariables.forEach((v) => {
+      initialMaps[v] = variableMappings[v] || { type: "Assign Const Value", value: "" };
+    });
+    setVariableMappings(initialMaps);
+  }, [detectedVariables]);
+
+  // Live Preview Text with Replaced Variables
+  const livePreviewBody = useMemo(() => {
+    if (!activeTemplate) return "There is no template added yet";
+    let text = activeTemplate.bodyText || "";
+    detectedVariables.forEach((v) => {
+      const mappedVal = variableMappings[v]?.value;
+      if (mappedVal) {
+        text = text.split(v).join(mappedVal);
+      }
+    });
+    return text;
+  }, [activeTemplate, detectedVariables, variableMappings]);
+
+  const handleNextStep1 = () => {
+    if (!campaignName.trim()) {
+      alert("Please enter a Campaign Name.");
+      return;
+    }
+    if (!selectedChannel) {
+      alert("Please select an onboarded WABA Channel.");
+      return;
+    }
+    if (processedNumbers.length === 0) {
+      alert("Please enter at least one valid mobile number (comma-separated).");
+      return;
+    }
+    if (isScheduled && !scheduleDate) {
+      alert("Please select a valid Schedule Date & Time before proceeding.");
+      return;
+    }
+    setStep(2);
+  };
+
+  const handleNextStep2 = () => {
+    if (!selectedCategory) {
+      alert("Please select a Template Category.");
+      return;
+    }
+    if (!selectedTemplateId) {
+      alert("Please select an Approved Meta Template.");
+      return;
+    }
+    setStep(3);
+  };
+
+  const handleLaunchOrSchedule = () => {
+    if (isScheduled) {
+      if (!scheduleDate) {
+        alert("Please select a schedule date & time.");
+        return;
+      }
+      alert(`⏰ Campaign "${campaignName}" scheduled successfully for ${new Date(scheduleDate).toLocaleString()}!`);
+    } else {
+      alert(`🚀 Campaign "${campaignName}" launched successfully to ${processedNumbers.length} recipients!`);
+    }
+    window.location.href = "/dashboard/reports";
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6 max-w-7xl mx-auto relative">
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-2xl border shadow-xs gap-3">
+    <div className="w-full min-h-screen bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6">
+      {/* Top Header - Full Width */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-2xl border shadow-xs gap-3 w-full">
         <div>
           <div className="text-gray-400 font-medium">Dashboard › Campaigns & Broadcast</div>
           <h1 className="text-xl font-bold text-gray-800">Start Your Campaign</h1>
         </div>
-        <div className="text-gray-500 font-semibold">Configure audience, customize templates, and broadcast messages seamlessly.</div>
+        <div className="text-gray-500 font-semibold">
+          Configure audience, customize templates, and broadcast messages seamlessly.
+        </div>
       </div>
 
       {/* Step Indicator Bar */}
-      <div className="flex items-center justify-between bg-white p-4 rounded-2xl border shadow-xs max-w-2xl mx-auto">
+      <div className="flex items-center justify-between bg-white p-4 rounded-2xl border shadow-xs max-w-3xl mx-auto">
         <div className={`flex items-center space-x-2 font-bold ${step === 1 ? "text-emerald-600" : "text-gray-400"}`}>
-          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step === 1 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"}`}>1</span>
+          <span
+            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+              step === 1 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"
+            }`}
+          >
+            1
+          </span>
           <span>STEP 1: Campaign</span>
         </div>
-        <span className="text-gray-300">───</span>
+        <span className="text-gray-300">────────</span>
         <div className={`flex items-center space-x-2 font-bold ${step === 2 ? "text-emerald-600" : "text-gray-400"}`}>
-          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step === 2 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"}`}>2</span>
+          <span
+            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+              step === 2 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"
+            }`}
+          >
+            2
+          </span>
           <span>STEP 2: Template</span>
         </div>
-        <span className="text-gray-300">───</span>
+        <span className="text-gray-300">────────</span>
         <div className={`flex items-center space-x-2 font-bold ${step === 3 ? "text-emerald-600" : "text-gray-400"}`}>
-          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step === 3 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"}`}>3</span>
+          <span
+            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+              step === 3 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"
+            }`}
+          >
+            3
+          </span>
           <span>STEP 3: Verify & Send</span>
         </div>
       </div>
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left Form Content */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border shadow-xs space-y-6">
-          
+      {/* Main Grid - Full Width */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+        {/* Left Form Content (8 Columns) */}
+        <div className="lg:col-span-8 bg-white p-6 rounded-2xl border shadow-xs space-y-6">
           {step === 1 && (
             <div className="space-y-6">
               <h2 className="text-base font-bold text-gray-800 border-b pb-3">Campaign Details</h2>
@@ -82,42 +281,54 @@ export default function CampaignsPage() {
                     type="text"
                     value={campaignName}
                     onChange={(e) => setCampaignName(e.target.value)}
-                    className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono focus:bg-white focus:outline-none"
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono focus:bg-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-600 mb-1">WABA CHANNEL *</label>
+                  <label className="block font-bold text-gray-600 mb-1">WABA CHANNEL (ID - NUMBER) *</label>
                   <select
                     value={selectedChannel}
-                    onChange={(e) => setSelectedChannel(e.target.value)}
-                    className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-700 focus:outline-none"
+                    onChange={(e) => {
+                      setSelectedChannel(e.target.value);
+                      setSelectedTemplateId("");
+                    }}
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-700 focus:outline-none focus:border-emerald-500"
                   >
-                    <option value="28402710282733872">28402710282733872 (Active - 580)</option>
-                    <option value="9823410293841029">9823410293841029 (Backup)</option>
+                    {wabaAccounts.length === 0 ? (
+                      <option value="">No Onboarded WABA Found</option>
+                    ) : (
+                      wabaAccounts.map((acc) => (
+                        <option key={acc.id} value={acc.wabaId}>
+                          {acc.wabaId} - {acc.displayPhone} ({acc.displayName || "Active"})
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>
 
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <label className="block font-bold text-gray-600">NUMBERS *</label>
-                  <span className="text-gray-400 text-[11px]">Total Count: {numbersInput ? numbersInput.split(',').filter(Boolean).length : 0}</span>
+                  <label className="block font-bold text-gray-600">NUMBERS (COMMA-SEPARATED) *</label>
+                  <span className="text-emerald-700 font-bold text-[11px] bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    Total Count: {processedNumbers.length}
+                  </span>
                 </div>
                 <textarea
-                  rows={4}
-                  placeholder="Enter up to 5,000 comma-separated mobile numbers..."
+                  rows={5}
+                  placeholder="Enter comma-separated mobile numbers (e.g. 919876543210, 919123456789)..."
                   value={numbersInput}
                   onChange={(e) => setNumbersInput(e.target.value)}
-                  className="w-full border rounded-xl p-3 bg-gray-50 text-xs font-mono focus:outline-none focus:bg-white"
+                  className="w-full border rounded-xl p-3 bg-gray-50 text-xs font-mono focus:outline-none focus:bg-white focus:border-emerald-500"
                 />
               </div>
 
               {/* Action Buttons for Contacts / File Upload */}
-              <div className="flex flex-wrap gap-3 pt-2">
+              <div className="flex flex-wrap gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={() => alert("Group Contacts feature selected.")}
+                  onClick={() => alert("Group Contacts selector opened.")}
                   className="bg-emerald-50 text-emerald-700 border border-emerald-300 font-bold px-4 py-2 rounded-xl hover:bg-emerald-100 cursor-pointer"
                 >
                   👥 Group Contacts
@@ -135,20 +346,33 @@ export default function CampaignsPage() {
               <div className="flex flex-wrap items-center justify-between pt-4 border-t gap-4 text-gray-700 font-semibold">
                 <div className="flex items-center space-x-6">
                   <label className="flex items-center space-x-2 cursor-pointer">
-                    <input type="checkbox" defaultChecked className="accent-emerald-600 rounded" />
+                    <input
+                      type="checkbox"
+                      checked={removeDuplicates}
+                      onChange={(e) => setRemoveDuplicates(e.target.checked)}
+                      className="accent-emerald-600 rounded"
+                    />
                     <span>Remove Duplicates</span>
                   </label>
                   <label className="flex items-center space-x-2 cursor-pointer">
-                    <input type="checkbox" defaultChecked className="accent-emerald-600 rounded" />
+                    <input
+                      type="checkbox"
+                      checked={removeBlacklist}
+                      onChange={(e) => setRemoveBlacklist(e.target.checked)}
+                      className="accent-emerald-600 rounded"
+                    />
                     <span>Remove BlackList</span>
                   </label>
                 </div>
 
-                <label className="flex items-center space-x-2 cursor-pointer text-emerald-700">
+                <label className="flex items-center space-x-2 cursor-pointer text-emerald-700 font-bold">
                   <input
                     type="checkbox"
                     checked={isScheduled}
-                    onChange={(e) => setIsScheduled(e.target.checked)}
+                    onChange={(e) => {
+                      setIsScheduled(e.target.checked);
+                      if (!e.target.checked) setScheduleDate("");
+                    }}
                     className="accent-emerald-600 rounded"
                   />
                   <span>Schedule Now</span>
@@ -157,13 +381,13 @@ export default function CampaignsPage() {
 
               {/* Schedule Date Input if enabled */}
               {isScheduled && (
-                <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 flex items-center space-x-3">
-                  <label className="font-bold text-gray-700">Select Date & Time:</label>
+                <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200 flex flex-wrap items-center gap-3">
+                  <label className="font-bold text-emerald-900">⏰ Select Schedule Date & Time:</label>
                   <input
                     type="datetime-local"
                     value={scheduleDate}
                     onChange={(e) => setScheduleDate(e.target.value)}
-                    className="border rounded-lg p-2 bg-white text-xs font-mono"
+                    className="border border-emerald-300 rounded-lg p-2 bg-white text-xs font-mono focus:outline-none"
                   />
                 </div>
               )}
@@ -171,7 +395,7 @@ export default function CampaignsPage() {
               <div className="flex justify-end pt-4 border-t">
                 <button
                   type="button"
-                  onClick={() => setStep(2)}
+                  onClick={handleNextStep1}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-7 py-2.5 rounded-xl shadow-md cursor-pointer transition flex items-center space-x-1"
                 >
                   <span>Next ➔</span>
@@ -191,15 +415,15 @@ export default function CampaignsPage() {
                     value={selectedCategory}
                     onChange={(e) => {
                       setSelectedCategory(e.target.value);
-                      setSelectedTemplate("");
+                      setSelectedTemplateId("");
                       setTemplateType("All");
                     }}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold text-gray-700"
                   >
                     <option value="">Select Category</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Utility">Utility</option>
-                    <option value="Authentication">Authentication</option>
+                    <option value="UTILITY">Utility</option>
+                    <option value="MARKETING">Marketing</option>
+                    <option value="AUTHENTICATION">Authentication</option>
                   </select>
                 </div>
 
@@ -213,7 +437,7 @@ export default function CampaignsPage() {
                     <option value="All">All</option>
                     <option value="Default">Default</option>
                     <option value="Flows">Flows</option>
-                    {selectedCategory === "Marketing" && (
+                    {selectedCategory === "MARKETING" && (
                       <>
                         <option value="LimitedTimeOffer">Limited Time Offer</option>
                         <option value="Carousel">Carousel</option>
@@ -224,95 +448,87 @@ export default function CampaignsPage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-600 mb-1">META TEMPLATE *</label>
+                  <label className="block font-bold text-gray-600 mb-1">APPROVED META TEMPLATE *</label>
                   <select
-                    value={selectedTemplate}
-                    onChange={(e) => setSelectedTemplate(e.target.value)}
+                    value={selectedTemplateId}
+                    onChange={(e) => setSelectedTemplateId(e.target.value)}
                     disabled={!selectedCategory}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-700 focus:outline-none font-bold disabled:opacity-50"
                   >
-                    <option value="">Select Template</option>
-                    {selectedCategory === "Utility" && (
-                      <option value="feedback_collection">feedback_collection (Approved)</option>
-                    )}
-                    {selectedCategory === "Authentication" && (
-                      <option value="otp_test">otp_test (Approved)</option>
-                    )}
-                    {selectedCategory === "Marketing" && (
-                      <>
-                        <option value="promotional_offer">promotional_offer (Approved)</option>
-                        <option value="diwali_sale_discount">diwali_sale_discount (Approved)</option>
-                        <option value="new_launch_alert">new_launch_alert (Approved)</option>
-                      </>
-                    )}
+                    <option value="">
+                      {!selectedCategory
+                        ? "Select Category First"
+                        : filteredApprovedTemplates.length === 0
+                        ? "No Approved Templates Found"
+                        : "Select Approved Template"}
+                    </option>
+                    {filteredApprovedTemplates.map((tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.name} ({tpl.language || "en_US"}) - APPROVED
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
 
-              {/* Dynamic Body Variable Mapping Section */}
-              {selectedTemplate && (
+              {/* Dynamic Variable Mapping Section Based on Selected Template */}
+              {activeTemplate && (
                 <div className="bg-gray-50 border rounded-2xl p-4 space-y-4">
-                  <div className="font-bold text-gray-700 border-b pb-2">Body ⓘ</div>
-
-                  {/* Variable 1 */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-                    <div className="font-mono font-bold text-gray-600 text-xs">{"{{1}}"}</div>
-                    <select
-                      value={mappingType1}
-                      onChange={(e) => setMappingType1(e.target.value)}
-                      className="border rounded-xl p-2 bg-white text-xs font-semibold focus:outline-none"
-                    >
-                      <option value="Assign Const Value">Assign Const Value</option>
-                      <option value="Map Column Value">Map Column Value</option>
-                    </select>
-                    <input
-                      type="text"
-                      placeholder={mappingType1 === "Assign Const Value" ? "Enter value..." : "Enter column name..."}
-                      value={val1}
-                      onChange={(e) => setVal1(e.target.value)}
-                      className="border rounded-xl p-2 bg-white text-xs font-mono focus:outline-none"
-                    />
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <span className="font-bold text-gray-700">Template Variables & Body Mapping ⓘ</span>
+                    <span className="text-[11px] font-mono text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+                      {detectedVariables.length} Variable(s) Detected
+                    </span>
                   </div>
 
-                  {/* Variable 2 */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-                    <div className="font-mono font-bold text-gray-600 text-xs">{"{{2}}"}</div>
-                    <select
-                      value={mappingType2}
-                      onChange={(e) => setMappingType2(e.target.value)}
-                      className="border rounded-xl p-2 bg-white text-xs font-semibold focus:outline-none"
-                    >
-                      <option value="Assign Const Value">Assign Const Value</option>
-                      <option value="Map Column Value">Map Column Value</option>
-                    </select>
-                    <input
-                      type="text"
-                      placeholder={mappingType2 === "Assign Const Value" ? "Enter value..." : "Enter column name..."}
-                      value={val2}
-                      onChange={(e) => setVal2(e.target.value)}
-                      className="border rounded-xl p-2 bg-white text-xs font-mono focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Variable 3 */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-                    <div className="font-mono font-bold text-gray-600 text-xs">{"{{3}}"}</div>
-                    <select
-                      value={mappingType3}
-                      onChange={(e) => setMappingType3(e.target.value)}
-                      className="border rounded-xl p-2 bg-white text-xs font-semibold focus:outline-none"
-                    >
-                      <option value="Assign Const Value">Assign Const Value</option>
-                      <option value="Map Column Value">Map Column Value</option>
-                    </select>
-                    <input
-                      type="text"
-                      placeholder={mappingType3 === "Assign Const Value" ? "Enter value..." : "Enter column name..."}
-                      value={val3}
-                      onChange={(e) => setVal3(e.target.value)}
-                      className="border rounded-xl p-2 bg-white text-xs font-mono focus:outline-none"
-                    />
-                  </div>
+                  {detectedVariables.length === 0 ? (
+                    <div className="text-gray-500 text-xs py-2">
+                      This template has no dynamic variables. Ready to proceed!
+                    </div>
+                  ) : (
+                    detectedVariables.map((variableKey) => (
+                      <div key={variableKey} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+                        <div className="font-mono font-bold text-gray-700 text-xs bg-white border px-3 py-2 rounded-xl text-center">
+                          {variableKey}
+                        </div>
+                        <select
+                          value={variableMappings[variableKey]?.type || "Assign Const Value"}
+                          onChange={(e) =>
+                            setVariableMappings((prev) => ({
+                              ...prev,
+                              [variableKey]: {
+                                ...prev[variableKey],
+                                type: e.target.value,
+                              },
+                            }))
+                          }
+                          className="border rounded-xl p-2 bg-white text-xs font-semibold focus:outline-none"
+                        >
+                          <option value="Assign Const Value">Assign Const Value</option>
+                          <option value="Map Column Value">Map Column Value</option>
+                        </select>
+                        <input
+                          type="text"
+                          placeholder={
+                            (variableMappings[variableKey]?.type || "Assign Const Value") === "Assign Const Value"
+                              ? `Enter value for ${variableKey}...`
+                              : `Enter CSV column name...`
+                          }
+                          value={variableMappings[variableKey]?.value || ""}
+                          onChange={(e) =>
+                            setVariableMappings((prev) => ({
+                              ...prev,
+                              [variableKey]: {
+                                type: prev[variableKey]?.type || "Assign Const Value",
+                                value: e.target.value,
+                              },
+                            }))
+                          }
+                          className="border rounded-xl p-2 bg-white text-xs font-mono focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
 
@@ -326,7 +542,7 @@ export default function CampaignsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStep(3)}
+                  onClick={handleNextStep2}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-7 py-2.5 rounded-xl shadow-md cursor-pointer transition flex items-center space-x-1"
                 >
                   <span>Next ➔</span>
@@ -342,25 +558,29 @@ export default function CampaignsPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-2xl border text-center">
                 <div>
                   <div className="text-gray-400 font-semibold text-[10px]">CAMPAIGN NAME</div>
-                  <div className="font-bold text-gray-800 mt-0.5">{campaignName}</div>
+                  <div className="font-bold text-gray-800 mt-0.5 truncate">{campaignName}</div>
                 </div>
                 <div>
                   <div className="text-gray-400 font-semibold text-[10px]">TEMPLATE</div>
-                  <div className="font-bold text-emerald-700 mt-0.5">{selectedTemplate || "None"}</div>
+                  <div className="font-bold text-emerald-700 mt-0.5 truncate">
+                    {activeTemplate?.name || "None"}
+                  </div>
                 </div>
                 <div>
                   <div className="text-gray-400 font-semibold text-[10px]">TOTAL RECIPIENTS</div>
-                  <div className="font-bold text-gray-800 mt-0.5">{numbersInput ? numbersInput.split(',').filter(Boolean).length : 1}</div>
+                  <div className="font-bold text-gray-800 mt-0.5">{processedNumbers.length}</div>
                 </div>
                 <div>
                   <div className="text-gray-400 font-semibold text-[10px]">ESTIMATED COST</div>
-                  <div className="font-bold text-emerald-600 mt-0.5">₹0.135 Credits</div>
+                  <div className="font-bold text-emerald-600 mt-0.5">
+                    ₹{(processedNumbers.length * 0.135).toFixed(3)} Credits
+                  </div>
                 </div>
               </div>
 
               {isScheduled && scheduleDate && (
                 <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl text-blue-800 font-semibold text-center text-xs">
-                  ⏰ Campaign scheduled for: {scheduleDate}
+                  ⏰ Campaign scheduled for: {new Date(scheduleDate).toLocaleString()}
                 </div>
               )}
 
@@ -377,56 +597,50 @@ export default function CampaignsPage() {
                   ⬅ Previous
                 </button>
                 <button
-  type="button"
-  onClick={() => {
-    alert(isScheduled ? "Campaign Scheduled Successfully! ⏰" : "Campaign Launched Successfully! 🚀");
-    // Redirecting directly to the detailed reports page as shown in the interface
-    window.location.href = "/dashboard/reports";
-  }}
-  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg cursor-pointer transition"
->
-  {isScheduled ? "⏰ Schedule Campaign" : "🚀 Launch Campaign"}
-</button>
+                  type="button"
+                  onClick={handleLaunchOrSchedule}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg cursor-pointer transition"
+                >
+                  {isScheduled ? "⏰ Schedule Campaign" : "🚀 Launch Campaign"}
+                </button>
               </div>
             </div>
           )}
-
         </div>
 
-        {/* Right Live WhatsApp Preview */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-6 bg-slate-900 p-4 rounded-3xl border-4 border-slate-700 shadow-2xl w-full max-w-xs mx-auto text-white space-y-3">
+        {/* Right Live WhatsApp Preview (4 Columns) */}
+        <div className="lg:col-span-4">
+          <div className="sticky top-6 bg-slate-900 p-5 rounded-3xl border-4 border-slate-700 shadow-2xl w-full max-w-sm mx-auto text-white space-y-3">
             <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-[10px] text-slate-400 font-mono">
-              <span className="flex items-center space-x-1">
+              <span className="flex items-center space-x-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
                 <span>Active WA Business Account</span>
               </span>
-              <span>12:45 PM</span>
+              <span>Live Preview</span>
             </div>
 
-            <div className="bg-emerald-900/60 p-3 rounded-2xl space-y-2 shadow-inner border border-emerald-800/50">
-              <div className="text-slate-100 leading-relaxed text-xs whitespace-pre-wrap">
-                {selectedTemplate === "feedback_collection"
-                  ? `Hi ${val1 || "{{1}}"}, the service request we completed on ${val2 || "{{2}}"} is now closed. Please rate your experience from 1-5 and share any feedback to help us improve your recent request with us at the link below:`
-                  : selectedTemplate
-                  ? `${val1 || "{{1}}"} is your approved template preview for ${selectedTemplate}.`
-                  : "There is no template added yet"}
-              </div>
-              {selectedTemplate && (
-                <div className="pt-2">
-                  <div className="bg-white text-emerald-800 text-center py-1.5 rounded-xl font-bold text-xs shadow-xs">
-                    Copy Code
-                  </div>
+            <div className="bg-emerald-900/60 p-3.5 rounded-2xl space-y-2 shadow-inner border border-emerald-800/50">
+              {activeTemplate?.headerText && (
+                <div className="font-bold text-white text-xs border-b border-emerald-800/60 pb-1">
+                  {activeTemplate.headerText}
                 </div>
+              )}
+              <div className="text-slate-100 leading-relaxed text-xs whitespace-pre-wrap">
+                {livePreviewBody}
+              </div>
+              {activeTemplate?.footerText && (
+                <div className="text-[10px] text-slate-300 pt-1">{activeTemplate.footerText}</div>
               )}
             </div>
 
-            <div className="text-center text-[10px] text-slate-500 font-mono">
-              Template: <span className="text-emerald-400 font-bold">{selectedTemplate || "None"}</span>
+            <div className="text-center text-[10px] text-slate-400 font-mono">
+              Template:{" "}
+              <span className="text-emerald-400 font-bold">
+                {activeTemplate ? `${activeTemplate.name} (${activeTemplate.category})` : "None"}
+              </span>
             </div>
           </div>
         </div>
-
       </div>
 
       {/* File Upload Modal (Popup) */}
@@ -460,8 +674,24 @@ export default function CampaignsPage() {
                   accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
-                      setUploadedFileName(e.target.files[0].name);
-                      alert("File uploaded successfully: " + e.target.files[0].name);
+                      const file = e.target.files[0];
+                      setUploadedFileName(file.name);
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const content = event.target?.result as string;
+                        if (content) {
+                          const extracted = content
+                            .split(/[\r\n,]+/)
+                            .map((item) => item.trim().replace(/[^0-9]/g, ""))
+                            .filter((num) => num.length >= 10);
+                          if (extracted.length > 0) {
+                            setNumbersInput((prev) =>
+                              prev ? `${prev}, ${extracted.join(", ")}` : extracted.join(", ")
+                            );
+                          }
+                        }
+                      };
+                      reader.readAsText(file);
                       setShowUploadModal(false);
                     }
                   }}

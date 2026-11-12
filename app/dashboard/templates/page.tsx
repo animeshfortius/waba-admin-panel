@@ -25,6 +25,12 @@ export default function ManageTemplatesPage() {
   const [appealCategory, setAppealCategory] = useState("UTILITY");
   const [submitting, setSubmitting] = useState(false);
 
+  // 🔥 NEW: State for "Available for Review" / Reclassified Templates
+  const [reviewableTemplates, setReviewableTemplates] = useState<any[]>([]);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [fetchingReviewable, setFetchingReviewable] = useState(false);
+  const [requestingReview, setRequestingReview] = useState(false);
+
   useEffect(() => {
     const storedUserId = localStorage.getItem("userId") || "";
     if (storedUserId) {
@@ -48,7 +54,6 @@ export default function ManageTemplatesPage() {
       const res = await fetch(`/api/templates?userId=${uid}`);
       const data = await res.json();
       if (data.success) {
-        // Fallback default list if database is empty so you see the structure immediately
         const dbTemplates = data.templates || [];
         if (dbTemplates.length === 0) {
           setTemplates([
@@ -61,18 +66,6 @@ export default function ManageTemplatesPage() {
               wabaId: "28402710282733872",
               bodyText: "{{1}} is your verification code. For your security, do not share this code.",
               category: "AUTHENTICATION",
-              status: "APPROVED",
-              createdAt: new Date().toISOString(),
-            },
-            {
-              id: "2",
-              name: "feedback_collection",
-              language: "en_US",
-              metaTemplateId: "1764876244783508",
-              wabaNumber: "919876543210",
-              wabaId: "28402710282733872",
-              bodyText: "Hi {{1}}, thank you for choosing our service. Please rate your experience.",
-              category: "UTILITY",
               status: "APPROVED",
               createdAt: new Date().toISOString(),
             },
@@ -109,6 +102,56 @@ export default function ManageTemplatesPage() {
       alert("Network error syncing templates.");
     } finally {
       setSyncingAll(false);
+    }
+  };
+
+  // 🔥 Fetch Reclassified Templates Available for Review from Meta
+  const fetchReviewableTemplates = async () => {
+    setFetchingReviewable(true);
+    try {
+      const res = await fetch(`/api/templates?action=GET_RECLASSIFIED&userId=${userId}`);
+      const data = await res.json();
+      if (data.success) {
+        setReviewableTemplates(data.reviewableTemplates || []);
+        setShowReviewModal(true);
+      } else {
+        alert("❌ Failed to fetch reviewable templates");
+      }
+    } catch (err) {
+      alert("Network error fetching reclassified templates.");
+    } finally {
+      setFetchingReviewable(false);
+    }
+  };
+
+  // 🔥 Submit Review Request for a Reclassified Template directly to Meta
+  const handleRequestReviewSubmit = async (tpl: any) => {
+    if (!confirm(`Request Meta category review for template "${tpl.name}"?`)) return;
+    setRequestingReview(true);
+    try {
+      const res = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "REQUEST_CATEGORY_REVIEW",
+          userId,
+          wabaId: tpl.wabaId,
+          metaTemplateId: tpl.metaTemplateId,
+          newCategory: "UTILITY", // Requesting utility re-evaluation
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("✅ " + data.message);
+        setShowReviewModal(false);
+        loadData(userId);
+      } else {
+        alert("❌ Error: " + (data.error || "Failed to submit review request"));
+      }
+    } catch (err) {
+      alert("Network error sending review request.");
+    } finally {
+      setRequestingReview(false);
     }
   };
 
@@ -225,6 +268,16 @@ export default function ManageTemplatesPage() {
           >
             {syncingAll ? "⏳ Retrieving..." : "🔄 Retrieve Meta Templates"}
           </button>
+
+          {/* 🔥 Available for Review Button */}
+          <button
+            type="button"
+            onClick={fetchReviewableTemplates}
+            disabled={fetchingReviewable}
+            className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+          >
+            {fetchingReviewable ? "⏳ Checking..." : "⚖️ Available for Review"}
+          </button>
         </div>
       </div>
 
@@ -273,6 +326,7 @@ export default function ManageTemplatesPage() {
             <option value="ALL">All Status</option>
             <option value="APPROVED">APPROVED</option>
             <option value="PENDING">PENDING</option>
+            <option value="IN_REVIEW">IN_REVIEW</option>
             <option value="REJECTED">REJECTED</option>
           </select>
           <span className="text-gray-400 whitespace-nowrap font-semibold">{filteredTemplates.length} records</span>
@@ -317,7 +371,7 @@ export default function ManageTemplatesPage() {
                       <div className="text-[11px] text-gray-500">Lang: <span className="font-semibold">{tpl.language || "en_US"}</span></div>
                     </td>
 
-                    {/* WABA Number & ID (Explicitly separated) */}
+                    {/* WABA Number & ID */}
                     <td className="p-4 space-y-1 font-mono text-[11px]">
                       <div className="font-bold text-emerald-700">📱 {tpl.wabaNumber || "N/A"}</div>
                       <div className="text-gray-400">ID: {tpl.wabaId || "N/A"}</div>
@@ -330,7 +384,7 @@ export default function ManageTemplatesPage() {
                       </p>
                     </td>
 
-                    {/* Category (Separate Column) */}
+                    {/* Category */}
                     <td className="p-4">
                       <span
                         className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
@@ -345,7 +399,7 @@ export default function ManageTemplatesPage() {
                       </span>
                     </td>
 
-                    {/* Status (Separate Column) */}
+                    {/* Status */}
                     <td className="p-4">
                       <span
                         className={`px-2.5 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
@@ -353,6 +407,8 @@ export default function ManageTemplatesPage() {
                             ? "bg-emerald-100 text-emerald-700"
                             : tpl.status === "REJECTED"
                             ? "bg-rose-100 text-rose-700"
+                            : tpl.status === "IN_REVIEW"
+                            ? "bg-blue-100 text-blue-700 animate-pulse"
                             : "bg-yellow-100 text-yellow-700"
                         }`}
                       >
@@ -417,7 +473,7 @@ export default function ManageTemplatesPage() {
                           🚀
                         </button>
 
-                        {/* Category Appeal Button (Direct Meta Request without going to Business Manager) */}
+                        {/* Category Appeal Button */}
                         <button
                           type="button"
                           onClick={() => {
@@ -449,6 +505,44 @@ export default function ManageTemplatesPage() {
         </div>
       </div>
 
+      {/* 🔥 AVAILABLE FOR REVIEW MODAL */}
+      {showReviewModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-gray-800 text-sm">⚖️ Templates Available for Meta Category Review</h3>
+              <button onClick={() => setShowReviewModal(false)} className="font-bold text-gray-500 text-base">✕</button>
+            </div>
+
+            {reviewableTemplates.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 font-medium">
+                No templates currently available for review on Meta.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {reviewableTemplates.map((tpl, idx) => (
+                  <div key={idx} className="border p-4 rounded-xl flex flex-wrap justify-between items-center gap-3 bg-gray-50">
+                    <div>
+                      <div className="font-bold text-gray-900 text-xs">{tpl.name}</div>
+                      <div className="text-[11px] text-gray-500">Lang: {tpl.language} | Current: <span className="text-amber-600 font-semibold">{tpl.category}</span></div>
+                      <div className="text-[10px] text-emerald-700 font-mono">WABA: {tpl.wabaNumber}</div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={requestingReview}
+                      onClick={() => handleRequestReviewSubmit(tpl)}
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow cursor-pointer disabled:opacity-50"
+                    >
+                      {requestingReview ? "Submitting..." : "Request Review 🚀"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* REAL WHATSAPP CUSTOMER PREVIEW MODAL */}
       {previewTemplate && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -457,13 +551,10 @@ export default function ManageTemplatesPage() {
               <span className="font-bold text-gray-700 text-xs">WhatsApp Customer Preview</span>
               <button onClick={() => setPreviewTemplate(null)} className="font-bold text-gray-600 text-sm">✕</button>
             </div>
-            
-            {/* Real WhatsApp Chat Bubble */}
             <div className="bg-white p-3.5 rounded-2xl rounded-tl-none shadow-sm space-y-2 max-w-[280px] text-xs">
               <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">{previewTemplate.bodyText}</p>
               <div className="text-right text-[9px] text-gray-400">12:45 PM ✓✓</div>
             </div>
-
             <div className="text-center text-[10px] text-gray-500">
               Template: <span className="font-bold text-emerald-700">{previewTemplate.name}</span>
             </div>
@@ -499,7 +590,7 @@ export default function ManageTemplatesPage() {
         </div>
       )}
 
-      {/* CATEGORY APPEAL / UPDATE MODAL (Direct Meta Request) */}
+      {/* CATEGORY APPEAL MODAL */}
       {appealTemplate && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -508,7 +599,7 @@ export default function ManageTemplatesPage() {
               <button onClick={() => setAppealTemplate(null)} className="font-bold text-gray-400">✕</button>
             </div>
             <p className="text-gray-600 leading-relaxed text-xs">
-              If your template was reclassified (e.g. Utility to Marketing), submit a direct category review request to Meta from here without opening Business Manager.
+              If your template was reclassified (e.g. Utility to Marketing), submit a direct category review request to Meta from here.
             </p>
             <div>
               <label className="font-semibold text-gray-700 block mb-1">Current Category</label>

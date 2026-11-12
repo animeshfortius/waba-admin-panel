@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 function formatLimitClean(tier: string | undefined | null, wabaId?: string): string {
-  // Hardcoded safety fallback for specific WABA ID if Meta API returns empty
   if (wabaId === "4197516850547460" && (!tier || tier === "TIER_NOT_FOUND" || tier === "UNASSIGNED")) {
     return "2,000 / 24 hrs";
   }
@@ -41,9 +38,14 @@ function formatLimitClean(tier: string | undefined | null, wabaId?: string): str
   return cleanTier;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("userId");
+
+    // 👇 Sirf wahi accounts fetch honge jo is logged-in user ke hain (agar userId provided hai)
     const accounts = await prisma.wabaAccount.findMany({
+      where: userId ? { userId } : {},
       orderBy: { id: "desc" }
     });
 
@@ -56,7 +58,7 @@ export async function GET() {
       const cleanWabaId = acc.wabaId ? acc.wabaId.replace("WABA_", "").trim() : "";
       const cleanPhoneId = acc.phoneNumberId ? acc.phoneNumberId.replace("PHONE_", "").trim() : "";
 
-      // Hamesha Meta se live Messaging Limit fetch karo
+      // Meta se live Messaging Limit fetch karo
       if (acc.accessToken && cleanWabaId) {
         try {
           const limitRes = await fetch(
@@ -64,7 +66,6 @@ export async function GET() {
             { headers: { Authorization: `Bearer ${acc.accessToken}` } }
           );
           const limitData = await limitRes.json();
-          console.log(`Meta limit response for ${cleanWabaId}:`, limitData);
           
           if (limitData && limitData.messaging_limit_tier) {
             currentLimit = limitData.messaging_limit_tier;
@@ -74,10 +75,9 @@ export async function GET() {
         }
       }
 
-      // Format limit cleanly with WABA ID fallback check
       const formattedLimit = formatLimitClean(currentLimit, cleanWabaId);
 
-      // Hamesha Meta se live Quality Rating fetch karo
+      // Meta se live Quality Rating fetch karo
       if (acc.accessToken && cleanPhoneId) {
         try {
           const ratingRes = await fetch(
@@ -93,7 +93,6 @@ export async function GET() {
         }
       }
 
-      // Update database if raw limit was TIER_NOT_FOUND or empty
       const dbSaveLimit = (cleanWabaId === "4197516850547460" && (!currentLimit || currentLimit === "TIER_NOT_FOUND")) ? "2000" : currentLimit;
 
       if (dbSaveLimit !== acc.messagingLimit || currentRating !== acc.qualityRating) {

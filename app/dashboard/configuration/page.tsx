@@ -580,7 +580,7 @@ function ConfigContent() {
           <div className="bg-blue-50 border border-blue-200 text-blue-900 p-3.5 rounded-xl flex items-center space-x-3 text-[11px]">
             <span>ℹ️</span>
             <span>
-              As per Meta WhatsApp media retention policies, only media files from the last 30 days are available in the Media Library[cite: 8]. Older media is automatically deleted[cite: 8].
+              As per Meta WhatsApp media retention policies, only media files from the last 30 days are available in the Media Library. Older media is automatically deleted.
             </span>
           </div>
 

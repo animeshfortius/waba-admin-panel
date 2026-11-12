@@ -8,6 +8,7 @@ export async function POST(req: Request) {
     let buttons: any[] = [];
     let variableSamples: string[] = [];
     let metaTemplateId, templateId, newCategory;
+    let mediaFile: File | null = null;
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -24,6 +25,7 @@ export async function POST(req: Request) {
       metaTemplateId = formData.get("metaTemplateId")?.toString();
       templateId = formData.get("templateId")?.toString();
       newCategory = formData.get("newCategory")?.toString();
+      mediaFile = formData.get("mediaFile") as File | null; // 🔴 FIXED: Extract mediaFile safely
 
       const varSamplesStr = formData.get("variableSamples")?.toString();
       variableSamples = varSamplesStr ? JSON.parse(varSamplesStr) : [];
@@ -96,7 +98,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: `Category change request submitted to Meta!` });
     }
 
-    // 🔥 STRICT BACKEND CHECK: Completely omit HEADER component if NONE or empty
+    // Build Components for Meta with dynamic media file handle upload
     const components: any[] = [];
     const upperHeader = (headerType || "NONE").toUpperCase();
 
@@ -109,6 +111,47 @@ export async function POST(req: Request) {
           sampleHandle = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
         } else if (upperHeader === "DOCUMENT") {
           sampleHandle = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+        }
+
+        // 🔥 If user uploaded a media file, generate real Meta handle via Resumable Upload API
+        if (mediaFile && typeof mediaFile === "object" && "arrayBuffer" in mediaFile) {
+          try {
+            const arrayBuffer = await mediaFile.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+            const fileLength = buffer.length;
+            const fileType = mediaFile.type || "image/png";
+
+            // Step 1: Initialize Meta Upload Session
+            const initRes = await fetch(`https://graph.facebook.com/v21.0/app/uploads?file_length=${fileLength}&file_type=${encodeURIComponent(fileType)}`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            });
+            const initData = await initRes.json();
+
+            if (initData && initData.id) {
+              const uploadSessionId = initData.id;
+
+              // Step 2: Upload Binary File to Session
+              const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${uploadSessionId}`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  file_offset: "0",
+                  "Content-Type": fileType,
+                },
+                body: buffer,
+              });
+              const uploadData = await uploadRes.json();
+
+              if (uploadData && uploadData.h) {
+                sampleHandle = uploadData.h; // Real Meta handle (hnd_...)
+              }
+            }
+          } catch (uploadErr) {
+            console.error("Meta media upload warning, using fallback sample handle:", uploadErr);
+          }
         }
 
         components.push({

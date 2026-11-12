@@ -33,6 +33,7 @@ function ConfigContent() {
   // Modals & States
   const [showMediaModal, setShowMediaModal] = useState(false);
   const [mediaFile, setMediaFile] = useState<any>(null);
+  const [mediaWabaNumber, setMediaWabaNumber] = useState("All");
   const [mediaSearchQuery, setMediaSearchQuery] = useState("");
 
   const [showContactModal, setShowContactModal] = useState(false);
@@ -106,7 +107,9 @@ function ConfigContent() {
         .catch(() => {});
     }
 
-    fetch("/api/configuration/channels")
+    // 👇 Fetch WABA Channels filtered by logged-in user's ID
+    const userId = localStorage.getItem("userId"] || "";
+    fetch(`/api/configuration/channels?userId=${userId}`)
       .then(res => res.json())
       .then(async (data) => {
         if (Array.isArray(data)) {
@@ -167,7 +170,6 @@ function ConfigContent() {
       .catch(() => {});
 
     // Fetch Media Library using correct /api/media endpoint
-    const userId = localStorage.getItem("userId") || "";
     fetch(`/api/media?userId=${userId}`)
       .then(res => res.json())
       .then(data => { if(data.success && Array.isArray(data.media)) setMediaList(data.media); })
@@ -278,13 +280,15 @@ function ConfigContent() {
       if (response.authResponse) {
         const code = response.authResponse.code || response.authResponse.accessToken;
         
+        // 👇 Pass logged-in userId during WhatsApp channel registration
         fetch("/api/configuration/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
             code, 
             website: companyWebsite, 
-            name: companyName 
+            name: companyName,
+            userId: localStorage.getItem("userId") || "default_user" 
           })
         })
         .then(res => res.json())
@@ -376,6 +380,7 @@ function ConfigContent() {
         const formData = new FormData();
         formData.append("file", profileImageFile);
         formData.append("userId", localStorage.getItem("userId") || "emergency_admin_id");
+        formData.append("wabaNumber", selectedProfileChannel.displayPhone || "All");
         const uploadRes = await fetch("/api/media", {
           method: "POST",
           body: formData,
@@ -626,10 +631,12 @@ function ConfigContent() {
                       <tr key={m.id} className="hover:bg-slate-50/60">
                         <td className="p-4 flex items-center space-x-3">
                           <div className="w-10 h-10 rounded-xl bg-gray-100 border overflow-hidden flex items-center justify-center shrink-0">
-                            {m.fileType === "image" || m.url?.startsWith("data:image") ? (
+                            {m.fileType === "image" || m.url?.startsWith("data:image") || m.mediaName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
                               <img src={m.url} alt={m.mediaName} className="w-full h-full object-cover" />
+                            ) : m.fileType === "video" || m.mediaName?.match(/\.(mp4|mov|3gp)$/i) ? (
+                              <span className="text-[10px] font-bold text-blue-600 uppercase">🎥 VIDEO</span>
                             ) : (
-                              <span className="text-[10px] font-bold text-gray-500 uppercase">{m.fileType || "doc"}</span>
+                              <span className="text-[10px] font-bold text-gray-600 uppercase">📄 {m.fileType || "DOC"}</span>
                             )}
                           </div>
                           <span className="font-bold text-gray-800 truncate max-w-xs">{m.mediaName}</span>
@@ -676,7 +683,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* MEDIA UPLOAD MODAL (FIXED WITH FormData & /api/media) */}
+      {/* MEDIA UPLOAD MODAL WITH WABA NUMBER INPUT */}
       {showMediaModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -686,6 +693,17 @@ function ConfigContent() {
             </div>
             
             <div className="space-y-3">
+              <div>
+                <label className="block font-bold text-gray-700 text-xs mb-1">ASSOCIATED WABA NUMBER *</label>
+                <input 
+                  type="text" 
+                  value={mediaWabaNumber}
+                  onChange={(e) => setMediaWabaNumber(e.target.value)}
+                  placeholder="Enter WABA number or All"
+                  className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs font-mono focus:outline-none focus:bg-white focus:border-emerald-500" 
+                />
+              </div>
+
               <div>
                 <label className="block font-bold text-gray-700 text-xs mb-1">SELECT FILE (IMAGE / VIDEO / PDF) *</label>
                 <input 
@@ -706,7 +724,7 @@ function ConfigContent() {
                   const formData = new FormData();
                   formData.append("file", mediaFile);
                   formData.append("userId", localStorage.getItem("userId") || "emergency_admin_id");
-                  formData.append("wabaNumber", "All");
+                  formData.append("wabaNumber", mediaWabaNumber || "All");
 
                   try {
                     const res = await fetch("/api/media", {
@@ -718,6 +736,7 @@ function ConfigContent() {
                       alert("✅ Media uploaded successfully!"); 
                       setShowMediaModal(false);
                       setMediaFile(null);
+                      setMediaWabaNumber("All");
                       window.location.reload(); 
                     } else {
                       alert("❌ Upload failed: " + data.error);
@@ -735,7 +754,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* OTHER SECTIONS (Contacts, Groups, Blacklist, etc.) remain as-is */}
+      {/* OTHER SECTIONS (Contacts, Groups, Blacklist, etc.) */}
       {activeSection === "contacts" && (
         <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
           <div className="flex justify-between items-center">

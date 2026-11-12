@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { writeFile, mkdir, unlink } from "fs/promises";
+import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
 // GET: Fetch media & auto-delete expired ones
@@ -9,10 +9,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
 
-    // Clean up expired media
+    // Clean up expired media older than 30 days
     await prisma.mediaLibrary.deleteMany({
       where: { expiresAt: { lt: new Date() } },
-    });
+    }).catch(() => {});
 
     const mediaList = await prisma.mediaLibrary.findMany({
       where: userId ? { userId } : {},
@@ -21,11 +21,12 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, media: mediaList });
   } catch (error: any) {
+    console.error("GET Media Error:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-// POST: Upload media with 30-day expiry
+// POST: Upload media with 30-day automatic expiration & cloud filesystem fallback
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -40,16 +41,24 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const uploadDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadDir, { recursive: true });
-
+    let fileUrl = "";
     const filename = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
-    const filePath = path.join(uploadDir, filename);
-    await writeFile(filePath, buffer);
 
-    const host = request.headers.get("host") || "localhost:3000";
-    const protocol = host.includes("localhost") ? "http" : "https";
-    const fileUrl = `${protocol}://${host}/uploads/${filename}`;
+    try {
+      const uploadDir = path.join(process.cwd(), "public", "uploads");
+      await mkdir(uploadDir, { recursive: true });
+      const filePath = path.join(uploadDir, filename);
+      await writeFile(filePath, buffer);
+
+      const host = request.headers.get("host") || "localhost:3000";
+      const protocol = host.includes("localhost") ? "http" : "https";
+      fileUrl = `${protocol}://${host}/uploads/${filename}`;
+    } catch (fsErr) {
+      console.warn("Filesystem write restricted, using base64 data URI fallback:", fsErr);
+      const base64 = buffer.toString("base64");
+      const mime = file.type || "application/octet-stream";
+      fileUrl = `data:${mime};base64,${base64}`;
+    }
 
     let fileType = "image";
     if (file.type.includes("video")) fileType = "video";
@@ -71,7 +80,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, media: savedMedia });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error("Upload Media API Error:", error);
+    return NextResponse.json({ success: false, error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -86,7 +96,7 @@ export async function DELETE(request: Request) {
     }
 
     await prisma.mediaLibrary.delete({ where: { id } });
-    return NextResponse.json({ success: true, message: "Media deleted successfully" });
+    return NextResponse.json({ success: true, message: "Deleted successfully" });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

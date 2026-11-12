@@ -5,11 +5,87 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
+    const action = searchParams.get("action");
+
+    // 🔥 MASTER FIX: If sync/retrieve is requested via GET or query param, sync immediately
+    if (action === "SYNC" || action === "RETRIEVE" || action === "SYNC_TEMPLATES" || searchParams.has("sync")) {
+      const whereClause: any = {};
+      if (userId && userId !== "undefined" && userId !== "null" && userId !== "emergency_admin_id") {
+        whereClause.userId = userId;
+      }
+
+      let accounts = await prisma.wabaAccount.findMany({ where: whereClause });
+      if (!accounts || accounts.length === 0) {
+        accounts = await prisma.wabaAccount.findMany();
+      }
+
+      let syncedCount = 0;
+      for (const acc of accounts) {
+        if (!acc.accessToken) continue;
+        const cleanWabaId = acc.wabaId.replace("WABA_", "").trim();
+
+        try {
+          const metaRes = await fetch(
+            `https://graph.facebook.com/v21.0/${cleanWabaId}/message_templates?limit=250`,
+            {
+              headers: { Authorization: `Bearer ${acc.accessToken}` },
+            }
+          );
+          const metaData = await metaRes.json();
+
+          if (metaData.data && Array.isArray(metaData.data)) {
+            for (const tpl of metaData.data) {
+              const headerComp = tpl.components?.find((c: any) => c.type === "HEADER");
+              const bodyComp = tpl.components?.find((c: any) => c.type === "BODY");
+              const footerComp = tpl.components?.find((c: any) => c.type === "FOOTER");
+              const buttonsComp = tpl.components?.find((c: any) => c.type === "BUTTONS");
+
+              const existing = await prisma.whatsAppTemplate.findFirst({
+                where: {
+                  wabaId: acc.wabaId,
+                  OR: [{ metaTemplateId: tpl.id }, { name: tpl.name, language: tpl.language }],
+                },
+              });
+
+              const templatePayload = {
+                userId: acc.userId || userId || "default_user",
+                wabaId: acc.wabaId,
+                wabaNumber: acc.displayPhone,
+                metaTemplateId: tpl.id,
+                name: tpl.name,
+                language: tpl.language,
+                category: tpl.category,
+                status: tpl.status,
+                headerType: headerComp?.format || "NONE",
+                headerText: headerComp?.text || null,
+                bodyText: bodyComp?.text || "",
+                footerText: footerComp?.text || null,
+                buttons: buttonsComp?.buttons || [],
+                components: tpl.components || [],
+              };
+
+              if (existing) {
+                await prisma.whatsAppTemplate.update({
+                  where: { id: existing.id },
+                  data: templatePayload,
+                });
+              } else {
+                await prisma.whatsAppTemplate.create({
+                  data: templatePayload,
+                });
+              }
+              syncedCount++;
+            }
+          }
+        } catch (syncErr) {
+          console.error(`Sync error for WABA ${acc.wabaId}:`, syncErr);
+        }
+      }
+    }
 
     let accounts: any[] = [];
     let templates: any[] = [];
 
-    // Fetch WabaAccounts globally or by user
     try {
       if (userId && userId !== "undefined" && userId !== "null" && userId !== "emergency_admin_id") {
         accounts = await prisma.wabaAccount.findMany({
@@ -29,7 +105,6 @@ export async function GET(req: Request) {
       console.error("User specific fetch error:", e);
     }
 
-    // If empty, fetch all active WabaAccounts so dropdown never fails
     if (accounts.length === 0) {
       try {
         accounts = await prisma.wabaAccount.findMany({
@@ -74,18 +149,15 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { action, userId, wabaId, templateId, metaTemplateId, newCategory, name, language, category, subType, allowCategoryChange, headerType, headerText, bodyText, footerText, buttons, authConfig, carouselCards } = body;
+    const { action, userId, wabaId, name, language, category, headerType, headerText, bodyText, footerText, buttons } = body;
 
-    // =========================================================================
-    // 🔥 ADDED: SYNC / RETRIEVE TEMPLATES FROM META GRAPH API (Fixes the button error)
-    // =========================================================================
-    if (action === "SYNC" || action === "RETRIEVE" || action === "SYNC_TEMPLATES") {
+    // 🔥 Support uppercase, lowercase, and alternative sync action keys
+    if (action === "SYNC" || action === "RETRIEVE" || action === "SYNC_TEMPLATES" || action === "sync" || action === "retrieve") {
       const whereClause: any = {};
       if (wabaId && wabaId !== "ALL") whereClause.wabaId = wabaId;
       else if (userId) whereClause.userId = userId;
 
       let accounts = await prisma.wabaAccount.findMany({ where: whereClause });
-
       if (!accounts || accounts.length === 0) {
         accounts = await prisma.wabaAccount.findMany();
       }
@@ -95,7 +167,6 @@ export async function POST(req: Request) {
       }
 
       let syncedCount = 0;
-
       for (const acc of accounts) {
         if (!acc.accessToken) continue;
         const cleanWabaId = acc.wabaId.replace("WABA_", "").trim();
@@ -208,10 +279,6 @@ export async function POST(req: Request) {
         category: category || "MARKETING",
         components,
       };
-
-      if (allowCategoryChange) {
-        metaPayload.allow_category_change = true;
-      }
 
       const metaRes = await fetch(
         `https://graph.facebook.com/v21.0/${cleanWabaId}/message_templates`,

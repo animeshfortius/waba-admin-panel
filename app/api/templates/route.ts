@@ -138,8 +138,8 @@ export async function POST(req: Request) {
 
     const { action, userId, wabaId, templateId, metaTemplateId, newCategory } = body;
 
-    // =========================================================================
-    // 🔥 REQUEST CATEGORY REVIEW DIRECTLY TO META
+   // =========================================================================
+    // 🔥 REQUEST CATEGORY REVIEW DIRECTLY TO META (Fixed Payload)
     // =========================================================================
     if (action === "REQUEST_CATEGORY_REVIEW") {
       let targetTemplate = null;
@@ -165,6 +165,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: "Meta Template ID is required for review request" }, { status: 400 });
       }
 
+      // Meta Graph API payload for category change / review request
       const metaRes = await fetch(`https://graph.facebook.com/v21.0/${metaTplId}`, {
         method: "POST",
         headers: {
@@ -173,6 +174,7 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           category: newCategory || "UTILITY",
+          allow_category_change: true,
         }),
       });
       const metaData = await metaRes.json();
@@ -199,12 +201,11 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         success: true,
-        message: "Successfully submitted template for Meta category review! Status changed to IN_REVIEW.",
+        message: "Successfully submitted template for Meta category review!",
         templates: updatedTemplates,
         data: updatedTemplates,
       });
     }
-
     // =========================================================================
     // 🔥 HANDLE SYNC SINGLE TEMPLATE STATUS
     // =========================================================================

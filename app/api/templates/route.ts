@@ -169,8 +169,5 @@ export async function POST(req: Request) {
       message: `Synced ${syncedCount} templates from Meta successfully!`,
       syncedCount,
       templates: updatedTemplates,
+      data: updatedTemplates, // Extra fallback for frontend
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  }
-}

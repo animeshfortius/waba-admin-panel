@@ -7,6 +7,7 @@ function CampaignsContent() {
   const searchParams = useSearchParams();
   const [userId, setUserId] = useState("");
   const [step, setStep] = useState(1);
+  const [sending, setSending] = useState(false);
 
   // Campaign Details
   const [campaignName, setCampaignName] = useState("");
@@ -196,17 +197,47 @@ function CampaignsContent() {
     setStep(3);
   };
 
-  const handleLaunchOrSchedule = () => {
-    if (isScheduled) {
-      if (!scheduleDate) {
-        alert("Please select a schedule date & time.");
-        return;
-      }
-      alert(`⏰ Campaign "${campaignName}" scheduled successfully for ${new Date(scheduleDate).toLocaleString()}!`);
-    } else {
-      alert(`🚀 Campaign "${campaignName}" launched successfully to ${processedNumbers.length} recipients!`);
+  const handleLaunchOrSchedule = async () => {
+    if (isScheduled && !scheduleDate) {
+      alert("Please select a schedule date & time.");
+      return;
     }
-    window.location.href = "/dashboard/reports";
+
+    setSending(true);
+    try {
+      const orderedVars = detectedVariables.map(
+        (v) => variableMappings[v]?.value || ""
+      );
+
+      const res = await fetch("/api/campaigns/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          campaignName,
+          wabaId: selectedChannel,
+          numbers: processedNumbers,
+          templateName: activeTemplate?.name,
+          language: activeTemplate?.language || "en_US",
+          variables: orderedVars,
+          isScheduled,
+          scheduleDate,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        alert(`✅ ${data.message}`);
+        window.location.href = "/dashboard/reports";
+      } else {
+        alert(`❌ Failed: ${data.error}`);
+      }
+    } catch (err: any) {
+      alert("❌ Network error while launching campaign.");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -582,16 +613,22 @@ function CampaignsContent() {
                 <button
                   type="button"
                   onClick={() => setStep(2)}
-                  className="px-5 py-2.5 border rounded-xl font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+                  disabled={sending}
+                  className="px-5 py-2.5 border rounded-xl font-bold text-gray-600 hover:bg-gray-100 cursor-pointer disabled:opacity-50"
                 >
                   ⬅ Previous
                 </button>
                 <button
                   type="button"
+                  disabled={sending}
                   onClick={handleLaunchOrSchedule}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg cursor-pointer transition"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg cursor-pointer transition disabled:opacity-50"
                 >
-                  {isScheduled ? "⏰ Schedule Campaign" : "🚀 Launch Campaign"}
+                  {sending
+                    ? "⏳ Sending Messages..."
+                    : isScheduled
+                    ? "⏰ Schedule Campaign"
+                    : "🚀 Launch Campaign"}
                 </button>
               </div>
             </div>

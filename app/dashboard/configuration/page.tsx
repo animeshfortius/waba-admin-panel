@@ -107,8 +107,8 @@ function ConfigContent() {
         .catch(() => {});
     }
 
-    // 👇 Fetch WABA Channels filtered by logged-in user's ID
-    const userId = localStorage.getItem("userId"] || "";
+    // Fetch WABA Channels filtered by logged-in user's ID
+    const userId = localStorage.getItem("userId") || "";
     fetch(`/api/configuration/channels?userId=${userId}`)
       .then(res => res.json())
       .then(async (data) => {
@@ -280,7 +280,6 @@ function ConfigContent() {
       if (response.authResponse) {
         const code = response.authResponse.code || response.authResponse.accessToken;
         
-        // 👇 Pass logged-in userId during WhatsApp channel registration
         fetch("/api/configuration/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

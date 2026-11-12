@@ -1,17 +1,7 @@
-export const dynamic = "force-dynamic"; // 👈 Ye add kar do
+export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    // ... baaki ka aapka waisa hi rahega
-    
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
 
 export async function GET(request: Request) {
   try {
@@ -81,8 +71,8 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ success: true, channels: updatedChannels });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Admin waba-accounts API Error:", error);
-    return NextResponse.json({ success: false, error: "Failed to fetch admin WABA accounts" }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message || "Failed to fetch admin WABA accounts" }, { status: 500 });
   }
 }

@@ -1,3 +1,13 @@
+export const dynamic = "force-dynamic"; // 👈 Ye add kar do
+
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    // ... baaki ka aapka waisa hi rahega
+    
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 

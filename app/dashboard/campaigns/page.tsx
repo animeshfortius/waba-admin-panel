@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-export default function CampaignsPage() {
+function CampaignsContent() {
   const searchParams = useSearchParams();
   const [userId, setUserId] = useState("");
   const [step, setStep] = useState(1);
@@ -19,7 +19,6 @@ export default function CampaignsPage() {
   const [removeDuplicates, setRemoveDuplicates] = useState(true);
   const [removeBlacklist, setRemoveBlacklist] = useState(true);
 
-  // Sample Blacklist (can also be fetched from API if needed)
   const blacklistedNumbers = ["910000000000", "0000000000"];
 
   // File Upload Modal State
@@ -79,7 +78,6 @@ export default function CampaignsPage() {
         setWabaAccounts(accounts);
         setAllTemplates(tpls);
 
-        // Pre-select WABA from URL query or first onboarded WABA
         const urlWaba = searchParams?.get("wabaNumber");
         const urlTplId = searchParams?.get("templateId");
 
@@ -105,7 +103,6 @@ export default function CampaignsPage() {
     }
   };
 
-  // Clean & Process Comma-Separated Numbers (ignores trailing commas, handles duplicates & blacklist)
   const processedNumbers = useMemo(() => {
     if (!numbersInput.trim()) return [];
     let rawList = numbersInput
@@ -122,7 +119,6 @@ export default function CampaignsPage() {
     return rawList;
   }, [numbersInput, removeDuplicates, removeBlacklist]);
 
-  // Filter Approved Templates based on Selected WABA & Category
   const filteredApprovedTemplates = useMemo(() => {
     return allTemplates.filter((tpl) => {
       const isApproved = tpl.status?.toUpperCase() === "APPROVED";
@@ -133,12 +129,10 @@ export default function CampaignsPage() {
     });
   }, [allTemplates, selectedChannel, selectedCategory]);
 
-  // Active Selected Template Object
   const activeTemplate = useMemo(() => {
     return allTemplates.find((t) => t.id === selectedTemplateId) || null;
   }, [allTemplates, selectedTemplateId]);
 
-  // Extract Variables ({{1}}, {{2}}, etc.) dynamically from selected template body
   const detectedVariables = useMemo(() => {
     if (!activeTemplate?.bodyText) return [];
     const matches = activeTemplate.bodyText.match(/\{\{(\d+)\}\}/g) || [];
@@ -150,7 +144,6 @@ export default function CampaignsPage() {
     return uniqueVars as string[];
   }, [activeTemplate]);
 
-  // Update dynamic variable mappings when template changes
   useEffect(() => {
     const initialMaps: { [key: string]: { type: string; value: string } } = {};
     detectedVariables.forEach((v) => {
@@ -159,7 +152,6 @@ export default function CampaignsPage() {
     setVariableMappings(initialMaps);
   }, [detectedVariables]);
 
-  // Live Preview Text with Replaced Variables
   const livePreviewBody = useMemo(() => {
     if (!activeTemplate) return "There is no template added yet";
     let text = activeTemplate.bodyText || "";
@@ -379,7 +371,6 @@ export default function CampaignsPage() {
                 </label>
               </div>
 
-              {/* Schedule Date Input if enabled */}
               {isScheduled && (
                 <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200 flex flex-wrap items-center gap-3">
                   <label className="font-bold text-emerald-900">⏰ Select Schedule Date & Time:</label>
@@ -471,7 +462,6 @@ export default function CampaignsPage() {
                 </div>
               </div>
 
-              {/* Dynamic Variable Mapping Section Based on Selected Template */}
               {activeTemplate && (
                 <div className="bg-gray-50 border rounded-2xl p-4 space-y-4">
                   <div className="flex justify-between items-center border-b pb-2">
@@ -643,7 +633,7 @@ export default function CampaignsPage() {
         </div>
       </div>
 
-      {/* File Upload Modal (Popup) */}
+      {/* File Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-lg w-full space-y-4 animate-in fade-in duration-200">
@@ -714,5 +704,13 @@ export default function CampaignsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CampaignsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-500 font-semibold">Loading Campaigns...</div>}>
+      <CampaignsContent />
+    </Suspense>
   );
 }

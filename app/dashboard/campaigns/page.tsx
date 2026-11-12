@@ -36,8 +36,9 @@ function CampaignsContent() {
   const [templateType, setTemplateType] = useState("All");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
 
-  // Header Media State for Image/Video/Document templates
+  // Header Media State (Auto-fetched or Overridden File)
   const [headerMediaUrl, setHeaderMediaUrl] = useState("");
+  const [overrideFileName, setOverrideFileName] = useState("");
 
   // Dynamic Variable Mapping States
   const [variableMappings, setVariableMappings] = useState<{
@@ -137,6 +138,18 @@ function CampaignsContent() {
     return allTemplates.find((t) => t.id === selectedTemplateId) || null;
   }, [allTemplates, selectedTemplateId]);
 
+  // Auto-fetch default template media when template is selected
+  useEffect(() => {
+    if (activeTemplate) {
+      if (activeTemplate.headerMediaUrl) {
+        setHeaderMediaUrl(activeTemplate.headerMediaUrl);
+      } else {
+        setHeaderMediaUrl("");
+      }
+      setOverrideFileName("");
+    }
+  }, [activeTemplate]);
+
   const detectedVariables = useMemo(() => {
     if (!activeTemplate?.bodyText) return [];
     const matches = activeTemplate.bodyText.match(/\{\{(\d+)\}\}/g) || [];
@@ -204,7 +217,7 @@ function CampaignsContent() {
       activeTemplate.headerType !== "NONE" &&
       !headerMediaUrl.trim()
     ) {
-      alert(`Please provide a public URL for the ${activeTemplate.headerType} header.`);
+      alert(`Please ensure a ${activeTemplate.headerType} file is attached for the header.`);
       return;
     }
     setStep(3);
@@ -487,10 +500,7 @@ function CampaignsContent() {
                   <label className="block font-bold text-gray-600 mb-1">APPROVED META TEMPLATE *</label>
                   <select
                     value={selectedTemplateId}
-                    onChange={(e) => {
-                      setSelectedTemplateId(e.target.value);
-                      setHeaderMediaUrl("");
-                    }}
+                    onChange={(e) => setSelectedTemplateId(e.target.value)}
                     disabled={!selectedCategory}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-700 focus:outline-none font-bold disabled:opacity-50"
                   >
@@ -510,22 +520,52 @@ function CampaignsContent() {
                 </div>
               </div>
 
-              {/* Header Media URL Input if template has Image/Video/Document header */}
+              {/* Header Media Section (Auto-fetched default file with optional override file picker) */}
               {activeTemplate &&
                 activeTemplate.headerType &&
                 activeTemplate.headerType !== "TEXT" &&
                 activeTemplate.headerType !== "NONE" && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-2">
-                    <label className="block font-bold text-blue-900">
-                      HEADER {activeTemplate.headerType} URL * (Public Link for {activeTemplate.headerType})
-                    </label>
-                    <input
-                      type="text"
-                      placeholder={`Enter public ${activeTemplate.headerType.toLowerCase()} URL (e.g. https://...)...`}
-                      value={headerMediaUrl}
-                      onChange={(e) => setHeaderMediaUrl(e.target.value)}
-                      className="w-full border rounded-xl p-2.5 bg-white text-xs font-mono focus:outline-none focus:border-blue-500"
-                    />
+                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <label className="font-bold text-blue-900 text-xs">
+                        HEADER {activeTemplate.headerType} (Auto-Attached from Template)
+                      </label>
+                      <span className="text-[10px] bg-blue-200 text-blue-800 px-2 py-0.5 rounded font-mono">
+                        Default Saved
+                      </span>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-xl border flex items-center justify-between text-xs font-mono">
+                      <span className="truncate text-gray-700">
+                        {overrideFileName ? `Override: ${overrideFileName}` : headerMediaUrl || "No media attached"}
+                      </span>
+                    </div>
+
+                    {/* Optional Browse File Override */}
+                    <div className="pt-1">
+                      <label className="block font-semibold text-gray-600 text-[11px] mb-1">
+                        Want to share a different {activeTemplate.headerType.toLowerCase()}? (Optional Browse Override)
+                      </label>
+                      <input
+                        type="file"
+                        accept={
+                          activeTemplate.headerType === "IMAGE"
+                            ? "image/*"
+                            : activeTemplate.headerType === "VIDEO"
+                            ? "video/*"
+                            : ".pdf,.doc,.docx"
+                        }
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            const file = e.target.files[0];
+                            setOverrideFileName(file.name);
+                            const objectUrl = URL.createObjectURL(file);
+                            setHeaderMediaUrl(objectUrl);
+                          }
+                        }}
+                        className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -691,7 +731,9 @@ function CampaignsContent() {
                   ) : (
                     <div className="bg-slate-800 p-2 rounded-xl text-center text-[10px] font-mono text-emerald-400 truncate">
                       📎 [{activeTemplate.headerType} Header Media]
-                      {headerMediaUrl && <div className="text-white truncate mt-0.5">{headerMediaUrl}</div>}
+                      <div className="text-white truncate mt-0.5">
+                        {overrideFileName || headerMediaUrl || "Default Template Media"}
+                      </div>
                     </div>
                   )}
                 </div>

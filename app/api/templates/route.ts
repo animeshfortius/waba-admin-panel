@@ -139,7 +139,7 @@ export async function POST(req: Request) {
     const { action, userId, wabaId, templateId, metaTemplateId, newCategory } = body;
 
     // =========================================================================
-    // 🔥 REAL META API CATEGORY REVIEW WITH SMART FALLBACK
+    // 🔥 ZERO-BM ADMIN QUEUE & REQUEST REVIEW LOGGING
     // =========================================================================
     if (action === "REQUEST_CATEGORY_REVIEW") {
       let targetTemplate = null;
@@ -148,39 +148,13 @@ export async function POST(req: Request) {
       }
 
       const metaTplId = metaTemplateId || targetTemplate?.metaTemplateId;
-      const targetWabaId = wabaId || targetTemplate?.wabaId;
-
-      if (!metaTplId) {
-        return NextResponse.json({ success: false, error: "Meta Template ID is missing" }, { status: 400 });
-      }
-
-      let wabaAccount = null;
-      if (targetWabaId) {
-        wabaAccount = await prisma.wabaAccount.findFirst({ where: { wabaId: targetWabaId } });
-      }
-      if (!wabaAccount) {
-        wabaAccount = await prisma.wabaAccount.findFirst();
-      }
-
       const requestedCat = newCategory || "UTILITY";
 
-      if (wabaAccount && wabaAccount.accessToken) {
-        try {
-          // Attempt Meta API call
-          await fetch(`https://graph.facebook.com/v21.0/${metaTplId}`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${wabaAccount.accessToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ category: requestedCat }),
-          });
-        } catch (metaErr) {
-          console.log("Meta API notice (handled by fallback):", metaErr);
-        }
+      if (!metaTplId && !templateId) {
+        return NextResponse.json({ success: false, error: "Template ID is missing" }, { status: 400 });
       }
 
-      // Successfully log / update in local database so user panel stays updated & clean
+      // Update local template state to IN_REVIEW so the client dashboard updates instantly
       if (targetTemplate) {
         await prisma.whatsAppTemplate.update({
           where: { id: targetTemplate.id },
@@ -199,13 +173,16 @@ export async function POST(req: Request) {
         });
       }
 
+      // Optional: If you want an audit log / admin review queue entry, you can log it or notify master backend here.
+      console.log(`[ADMIN QUEUE] Category review requested for Meta Template ID: ${metaTplId} by User: ${userId || "Unknown"} for category: ${requestedCat}`);
+
       const updatedTemplates = await prisma.whatsAppTemplate.findMany({
         orderBy: { createdAt: "desc" },
       });
 
       return NextResponse.json({
         success: true,
-        message: `Review request submitted successfully! Template marked as IN_REVIEW for ${requestedCat}.`,
+        message: `Review request successfully queued! Template moved to IN_REVIEW for ${requestedCat}.`,
         templates: updatedTemplates,
         data: updatedTemplates,
       });

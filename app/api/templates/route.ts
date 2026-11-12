@@ -139,7 +139,7 @@ export async function POST(req: Request) {
     const { action, userId, wabaId, templateId, metaTemplateId, newCategory } = body;
 
    // =========================================================================
-    // 🔥 REQUEST CATEGORY REVIEW (Panel-side Direct Update)
+    // 🔥 REAL META API CATEGORY REVIEW / APPEAL SUBMISSION
     // =========================================================================
     if (action === "REQUEST_CATEGORY_REVIEW") {
       let targetTemplate = null;
@@ -148,23 +148,90 @@ export async function POST(req: Request) {
       }
 
       const metaTplId = metaTemplateId || targetTemplate?.metaTemplateId;
+      const targetWabaId = wabaId || targetTemplate?.wabaId;
 
-      if (!metaTplId && !templateId) {
-        return NextResponse.json({ success: false, error: "Template ID is required" }, { status: 400 });
+      if (!metaTplId) {
+        return NextResponse.json({ success: false, error: "Meta Template ID is missing" }, { status: 400 });
       }
 
-      // Update template status in local database directly so UI reflects it immediately
-      if (targetTemplate) {
-        await prisma.whatsAppTemplate.update({
-          where: { id: targetTemplate.id },
-          data: { status: "IN_REVIEW", category: newCategory || "UTILITY" },
-        });
-      } else {
-        await prisma.whatsAppTemplate.updateMany({
-          where: { metaTemplateId: metaTplId },
-          data: { status: "IN_REVIEW", category: newCategory || "UTILITY" },
-        });
+      // 1. Fetch exact WABA Account & Token for this template
+      let wabaAccount = null;
+      if (targetWabaId) {
+        wabaAccount = await prisma.wabaAccount.findFirst({ where: { wabaId: targetWabaId } });
       }
+      if (!wabaAccount) {
+        wabaAccount = await prisma.wabaAccount.findFirst();
+      }
+
+      if (!wabaAccount || !wabaAccount.accessToken) {
+        return NextResponse.json({ success: false, error: "WABA Access Token not found in database" }, { status: 404 });
+      }
+
+      const token = wabaAccount.accessToken;
+      const requestedCat = newCategory || "UTILITY";
+
+      // 2. First fetch the full template details from Meta so we have exact components
+      const fetchTplRes = await fetch(`https://graph.facebook.com/v21.0/${metaTplId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const currentMetaTpl = await fetchTplRes.json();
+
+      // 3. Send POST request to Meta Graph API to update/appeal category
+      const metaRes = await fetch(`https://graph.facebook.com/v21.0/${metaTplId}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          category: requestedCat,
+        }),
+      });
+      const metaData = await metaRes.json();
+
+      // 4. If Meta rejects direct category-only edit, try sending with components to trigger Meta review
+      if (metaData.error && currentMetaTpl?.components) {
+        const retryRes = await fetch(`https://graph.facebook.com/v21.0/${metaTplId}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            category: requestedCat,
+            components: currentMetaTpl.components,
+          }),
+        });
+        const retryData = await retryRes.json();
+
+        if (retryData.error) {
+          // Show exact Meta user-friendly reason (e.g. 24-hour edit limit or Meta restriction)
+          const detailedError =
+            retryData.error.error_user_msg ||
+            metaData.error.error_user_msg ||
+            retryData.error.message;
+
+          return NextResponse.json({
+            success: false,
+            error: `Meta Response: ${detailedError}`,
+          }, { status: 400 });
+        }
+      } else if (metaData.error) {
+        const detailedError = metaData.error.error_user_msg || metaData.error.message;
+        return NextResponse.json({
+          success: false,
+          error: `Meta Response: ${detailedError}`,
+        }, { status: 400 });
+      }
+
+      // 5. If Meta accepted the request, update local DB to PENDING / IN_REVIEW
+      await prisma.whatsAppTemplate.updateMany({
+        where: { metaTemplateId: metaTplId },
+        data: {
+          status: "PENDING",
+          category: requestedCat,
+        },
+      });
 
       const updatedTemplates = await prisma.whatsAppTemplate.findMany({
         orderBy: { createdAt: "desc" },
@@ -172,7 +239,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         success: true,
-        message: "Category review requested successfully! Status updated to IN_REVIEW.",
+        message: `Submitted to Meta! Template "${currentMetaTpl?.name || ""}" is now in review for ${requestedCat}.`,
         templates: updatedTemplates,
         data: updatedTemplates,
       });

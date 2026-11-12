@@ -21,15 +21,6 @@ export default function ManageTemplatesPage() {
   // Modals
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
   const [payloadTemplate, setPayloadTemplate] = useState<any>(null);
-  const [appealTemplate, setAppealTemplate] = useState<any>(null);
-  const [appealCategory, setAppealCategory] = useState("UTILITY");
-  const [submitting, setSubmitting] = useState(false);
-
-  // 🔥 NEW: State for "Available for Review" / Reclassified Templates
-  const [reviewableTemplates, setReviewableTemplates] = useState<any[]>([]);
-  const [showReviewModal, setShowReviewModal] = useState(false);
-  const [fetchingReviewable, setFetchingReviewable] = useState(false);
-  const [requestingReview, setRequestingReview] = useState(false);
 
   useEffect(() => {
     const storedUserId = localStorage.getItem("userId") || "";
@@ -105,55 +96,7 @@ export default function ManageTemplatesPage() {
     }
   };
 
-  // 🔥 Fetch Reclassified Templates Available for Review from Meta
-  const fetchReviewableTemplates = async () => {
-    setFetchingReviewable(true);
-    try {
-      const res = await fetch(`/api/templates?action=GET_RECLASSIFIED&userId=${userId}`);
-      const data = await res.json();
-      if (data.success) {
-        setReviewableTemplates(data.reviewableTemplates || []);
-        setShowReviewModal(true);
-      } else {
-        alert("❌ Failed to fetch reviewable templates");
-      }
-    } catch (err) {
-      alert("Network error fetching reclassified templates.");
-    } finally {
-      setFetchingReviewable(false);
-    }
-  };
-// 🔥 Submit Category Review directly to Meta via Panel API
-  const handleRequestReviewSubmit = async (tpl: any) => {
-    if (!confirm(`Submit "${tpl.name}" to Meta for Utility category review?`)) return;
-    setRequestingReview(true);
-    try {
-      const res = await fetch("/api/templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "REQUEST_CATEGORY_REVIEW",
-          userId,
-          wabaId: tpl.wabaId,
-          metaTemplateId: tpl.metaTemplateId,
-          newCategory: "UTILITY",
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert("✅ " + data.message);
-        setShowReviewModal(false);
-        loadData(userId);
-      } else {
-        alert("❌ " + (data.error || "Meta rejected the review request"));
-      }
-    } catch (err) {
-      alert("Network error sending review request to Meta.");
-    } finally {
-      setRequestingReview(false);
-    }
-  };
-// Sync Single Template Status
+  // Sync Single Template Status
   const handleSyncSingle = async (tpl: any) => {
     try {
       const res = await fetch("/api/templates", {
@@ -176,38 +119,6 @@ export default function ManageTemplatesPage() {
       }
     } catch (err) {
       alert("Network error syncing template.");
-    }
-  };
-
-  // Category Appeal / Update Request to Meta
-  const handleAppealSubmit = async () => {
-    if (!appealTemplate) return;
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/templates/manage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "APPEAL_CATEGORY",
-          userId,
-          wabaId: appealTemplate.wabaId,
-          templateId: appealTemplate.id,
-          metaTemplateId: appealTemplate.metaTemplateId,
-          newCategory: appealCategory,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert("✅ " + data.message);
-        setAppealTemplate(null);
-        loadData(userId);
-      } else {
-        alert("❌ Meta Appeal Error: " + data.error);
-      }
-    } catch (err) {
-      alert("Failed to submit category appeal to Meta.");
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -265,16 +176,6 @@ export default function ManageTemplatesPage() {
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
           >
             {syncingAll ? "⏳ Retrieving..." : "🔄 Retrieve Meta Templates"}
-          </button>
-
-          {/* 🔥 Available for Review Button */}
-          <button
-            type="button"
-            onClick={fetchReviewableTemplates}
-            disabled={fetchingReviewable}
-            className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-          >
-            {fetchingReviewable ? "⏳ Checking..." : "⚖️ Available for Review"}
           </button>
         </div>
       </div>
@@ -471,19 +372,6 @@ export default function ManageTemplatesPage() {
                           🚀
                         </button>
 
-                        {/* Category Appeal Button */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAppealTemplate(tpl);
-                            setAppealCategory(tpl.category === "MARKETING" ? "UTILITY" : "MARKETING");
-                          }}
-                          title="Request Category Update (Direct to Meta)"
-                          className="p-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-lg border cursor-pointer font-bold"
-                        >
-                          ⚖️
-                        </button>
-
                         {/* Delete */}
                         <button
                           type="button"
@@ -502,44 +390,6 @@ export default function ManageTemplatesPage() {
           </table>
         </div>
       </div>
-
-      {/* 🔥 AVAILABLE FOR REVIEW MODAL */}
-      {showReviewModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-gray-800 text-sm">⚖️ Templates Available for Meta Category Review</h3>
-              <button onClick={() => setShowReviewModal(false)} className="font-bold text-gray-500 text-base">✕</button>
-            </div>
-
-            {reviewableTemplates.length === 0 ? (
-              <div className="p-8 text-center text-gray-400 font-medium">
-                No templates currently available for review on Meta.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {reviewableTemplates.map((tpl, idx) => (
-                  <div key={idx} className="border p-4 rounded-xl flex flex-wrap justify-between items-center gap-3 bg-gray-50">
-                    <div>
-                      <div className="font-bold text-gray-900 text-xs">{tpl.name}</div>
-                      <div className="text-[11px] text-gray-500">Lang: {tpl.language} | Current: <span className="text-amber-600 font-semibold">{tpl.category}</span></div>
-                      <div className="text-[10px] text-emerald-700 font-mono">WABA: {tpl.wabaNumber}</div>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={requestingReview}
-                      onClick={() => handleRequestReviewSubmit(tpl)}
-                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow cursor-pointer disabled:opacity-50"
-                    >
-                      {requestingReview ? "Submitting to Meta..." : "Request Review 🚀"}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* REAL WHATSAPP CUSTOMER PREVIEW MODAL */}
       {previewTemplate && (
@@ -584,57 +434,6 @@ export default function ManageTemplatesPage() {
                 2
               )}
             </pre>
-          </div>
-        </div>
-      )}
-
-      {/* CATEGORY APPEAL MODAL */}
-      {appealTemplate && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-gray-800 text-sm">⚖️ Request Category Update from Panel</h3>
-              <button onClick={() => setAppealTemplate(null)} className="font-bold text-gray-400">✕</button>
-            </div>
-            <p className="text-gray-600 leading-relaxed text-xs">
-              If your template was reclassified (e.g. Utility to Marketing), submit a direct category review request to Meta from here.
-            </p>
-            <div>
-              <label className="font-semibold text-gray-700 block mb-1">Current Category</label>
-              <input
-                type="text"
-                readOnly
-                value={appealTemplate.category}
-                className="w-full border rounded-xl p-2.5 bg-gray-100 font-bold text-gray-500"
-              />
-            </div>
-            <div>
-              <label className="font-semibold text-gray-700 block mb-1">Request New Category</label>
-              <select
-                value={appealCategory}
-                onChange={(e) => setAppealCategory(e.target.value)}
-                className="w-full border rounded-xl p-2.5 bg-gray-50 font-bold text-emerald-700"
-              >
-                <option value="UTILITY">UTILITY</option>
-                <option value="MARKETING">MARKETING</option>
-                <option value="AUTHENTICATION">AUTHENTICATION</option>
-              </select>
-            </div>
-            <div className="flex justify-end gap-2 pt-3 border-t">
-              <button
-                onClick={() => setAppealTemplate(null)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl font-bold"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAppealSubmit}
-                disabled={submitting}
-                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow"
-              >
-                {submitting ? "Sending Request..." : "Send Request to Meta 🚀"}
-              </button>
-            </div>
           </div>
         </div>
       )}

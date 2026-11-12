@@ -7,9 +7,6 @@ export async function GET(req: Request) {
     const userId = searchParams.get("userId");
     const action = searchParams.get("action");
 
-    // =========================================================================
-    // 🔥 HANDLE GET_RECLASSIFIED ACTION SAFELY
-    // =========================================================================
     if (action === "GET_RECLASSIFIED") {
       let accounts = await prisma.wabaAccount.findMany();
       if (userId && userId !== "undefined" && userId !== "null" && userId !== "emergency_admin_id") {
@@ -34,7 +31,6 @@ export async function GET(req: Request) {
 
           if (metaData.data && Array.isArray(metaData.data)) {
             for (const tpl of metaData.data) {
-              // Check if template is reclassified or rejected or reviewable
               if (tpl.status === "REJECTED" || tpl.category_update || tpl.previous_category || tpl.status === "FLAGGED") {
                 reviewableTemplates.push({
                   wabaId: acc.wabaId,
@@ -60,9 +56,6 @@ export async function GET(req: Request) {
       });
     }
 
-    // =========================================================================
-    // STANDARD GET TEMPLATES & ACCOUNTS
-    // =========================================================================
     let accounts: any[] = [];
     try {
       if (userId && userId !== "undefined" && userId !== "null" && userId !== "emergency_admin_id") {
@@ -136,61 +129,8 @@ export async function POST(req: Request) {
       body = {};
     }
 
-    const { action, userId, wabaId, templateId, metaTemplateId, newCategory } = body;
+    const { action, templateId } = body;
 
-    // =========================================================================
-    // 🔥 ZERO-BM ADMIN QUEUE & REQUEST REVIEW LOGGING
-    // =========================================================================
-    if (action === "REQUEST_CATEGORY_REVIEW") {
-      let targetTemplate = null;
-      if (templateId) {
-        targetTemplate = await prisma.whatsAppTemplate.findUnique({ where: { id: templateId } });
-      }
-
-      const metaTplId = metaTemplateId || targetTemplate?.metaTemplateId;
-      const requestedCat = newCategory || "UTILITY";
-
-      if (!metaTplId && !templateId) {
-        return NextResponse.json({ success: false, error: "Template ID is missing" }, { status: 400 });
-      }
-
-      // Update local template state to IN_REVIEW so the client dashboard updates instantly
-      if (targetTemplate) {
-        await prisma.whatsAppTemplate.update({
-          where: { id: targetTemplate.id },
-          data: {
-            status: "IN_REVIEW",
-            category: requestedCat,
-          },
-        });
-      } else {
-        await prisma.whatsAppTemplate.updateMany({
-          where: { metaTemplateId: metaTplId },
-          data: {
-            status: "IN_REVIEW",
-            category: requestedCat,
-          },
-        });
-      }
-
-      // Optional: If you want an audit log / admin review queue entry, you can log it or notify master backend here.
-      console.log(`[ADMIN QUEUE] Category review requested for Meta Template ID: ${metaTplId} by User: ${userId || "Unknown"} for category: ${requestedCat}`);
-
-      const updatedTemplates = await prisma.whatsAppTemplate.findMany({
-        orderBy: { createdAt: "desc" },
-      });
-
-      return NextResponse.json({
-        success: true,
-        message: `Review request successfully queued! Template moved to IN_REVIEW for ${requestedCat}.`,
-        templates: updatedTemplates,
-        data: updatedTemplates,
-      });
-    }
-
-    // =========================================================================
-    // 🔥 HANDLE SYNC SINGLE TEMPLATE STATUS
-    // =========================================================================
     if (action === "SYNC_SINGLE") {
       if (!templateId) {
         return NextResponse.json({ success: false, error: "Template ID missing" }, { status: 400 });
@@ -230,9 +170,6 @@ export async function POST(req: Request) {
       });
     }
 
-    // =========================================================================
-    // 🔥 HANDLE RETRIEVE ALL (SYNC ALL)
-    // =========================================================================
     let accountsToSync = await prisma.wabaAccount.findMany();
     let syncedCount = 0;
 

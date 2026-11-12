@@ -44,20 +44,8 @@ export async function POST(req: Request) {
     const cleanPhoneId = wabaAccount.phoneNumberId.replace("PHONE_", "").trim();
     const accessToken = wabaAccount.accessToken.trim();
 
-    const bodyParameters = Array.isArray(variables)
-      ? variables.map((val: string) => ({
-          type: "text",
-          text: String(val || " "),
-        }))
-      : [];
-
-    const components: any[] = [];
-    if (bodyParameters.length > 0) {
-      components.push({
-        type: "body",
-        parameters: bodyParameters,
-      });
-    }
+    // Clean and filter variables to ensure valid format
+    const cleanVariables = Array.isArray(variables) ? variables.filter((v) => v !== undefined && v !== null) : [];
 
     let sentCount = 0;
     let failedCount = 0;
@@ -69,22 +57,33 @@ export async function POST(req: Request) {
         formattedNumber = `91${formattedNumber}`;
       }
 
-      const payload: any = {
+      const templateObj: any = {
+        name: templateName,
+        language: {
+          code: language || "en_US",
+        },
+      };
+
+      // Only attach components if variables exist
+      if (cleanVariables.length > 0) {
+        templateObj.components = [
+          {
+            type: "body",
+            parameters: cleanVariables.map((val) => ({
+              type: "text",
+              text: String(val).trim() || " - ",
+            })),
+          },
+        ];
+      }
+
+      const payload = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
         to: formattedNumber,
         type: "template",
-        template: {
-          name: templateName,
-          language: {
-            code: language || "en_US",
-          },
-        },
+        template: templateObj,
       };
-
-      if (components.length > 0) {
-        payload.template.components = components;
-      }
 
       try {
         const metaRes = await fetch(
@@ -123,7 +122,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: `All messages failed. Meta Error: ${errors[0]?.error}`,
+          error: `Meta Error: ${errors[0]?.error}`,
           details: errors,
         },
         { status: 400 }

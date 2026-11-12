@@ -11,7 +11,7 @@ export async function POST(req: Request) {
       templateName,
       language,
       variables, // body variables
-      headerMediaUrl, // Header media URL if template has image/doc header
+      headerMediaUrl, // Header media URL if template has image/video/doc header
       isScheduled,
       scheduleDate,
     } = body;
@@ -47,6 +47,14 @@ export async function POST(req: Request) {
 
     const cleanVariables = Array.isArray(variables) ? variables.filter((v) => v !== undefined && v !== null) : [];
 
+    // Normalize headerMediaUrl to a valid absolute URI if it's a relative path
+    let absoluteMediaUrl = headerMediaUrl;
+    if (headerMediaUrl && headerMediaUrl.startsWith("/")) {
+      const host = req.headers.get("host") || "localhost:3000";
+      const protocol = host.includes("localhost") ? "http" : "https";
+      absoluteMediaUrl = `${protocol}://${host}${headerMediaUrl}`;
+    }
+
     let sentCount = 0;
     let failedCount = 0;
     const errors: any[] = [];
@@ -60,16 +68,18 @@ export async function POST(req: Request) {
       const templateComponents: any[] = [];
 
       // If header media is provided (Image/Video/Document template)
-      if (headerMediaUrl) {
-        // Detect media type or default to image/document
-        const isDoc = headerMediaUrl.match(/\.(pdf|doc|docx)$/i);
+      if (absoluteMediaUrl && absoluteMediaUrl.startsWith("http")) {
+        const isVideo = absoluteMediaUrl.match(/\.(mp4|3gp|mov)$/i);
+        const isDoc = absoluteMediaUrl.match(/\.(pdf|doc|docx|xls|xlsx|txt)$/i);
+        const mediaType = isVideo ? "video" : isDoc ? "document" : "image";
+
         templateComponents.push({
           type: "header",
           parameters: [
             {
-              type: isDoc ? "document" : "image",
-              [isDoc ? "document" : "image"]: {
-                link: headerMediaUrl,
+              type: mediaType,
+              [mediaType]: {
+                link: absoluteMediaUrl,
               },
             },
           ],

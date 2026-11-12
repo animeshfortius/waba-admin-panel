@@ -73,12 +73,14 @@ model WabaAccount {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model MediaAsset {
+model MediaLibrary {
   id         String   @id @default(uuid())
   userId     String
   mediaName  String
-  mediaUrl   String
-  wabaNumber String
+  url        String
+  wabaNumber String   @default("All")
+  fileType   String?  @default("image") // image, video, document
+  expiresAt  DateTime // Used for 30-day automatic cleanup
   createdAt  DateTime @default(now())
 }
 
@@ -112,6 +114,7 @@ enum Role {
   RESELLER
   USER
 }
+
 model WhatsAppTemplate {
   id             String   @id @default(uuid())
   userId         String

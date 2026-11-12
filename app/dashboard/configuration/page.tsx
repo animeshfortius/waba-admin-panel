@@ -682,7 +682,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* MEDIA UPLOAD MODAL WITH WABA NUMBER INPUT */}
+      {/* MEDIA UPLOAD MODAL WITH DYNAMIC WABA NUMBER DROPDOWN */}
       {showMediaModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -694,13 +694,18 @@ function ConfigContent() {
             <div className="space-y-3">
               <div>
                 <label className="block font-bold text-gray-700 text-xs mb-1">ASSOCIATED WABA NUMBER *</label>
-                <input 
-                  type="text" 
+                <select 
                   value={mediaWabaNumber}
                   onChange={(e) => setMediaWabaNumber(e.target.value)}
-                  placeholder="Enter WABA number or All"
-                  className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs font-mono focus:outline-none focus:bg-white focus:border-emerald-500" 
-                />
+                  className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs font-mono focus:outline-none focus:bg-white focus:border-emerald-500 cursor-pointer"
+                >
+                  <option value="All">All Numbers (Global)</option>
+                  {channels.map((ch) => (
+                    <option key={ch.id} value={ch.displayPhone || ch.display_phone_number}>
+                      {ch.displayPhone || ch.display_phone_number} ({ch.displayName || "WABA Account"})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -723,7 +728,7 @@ function ConfigContent() {
                   const formData = new FormData();
                   formData.append("file", mediaFile);
                   formData.append("userId", localStorage.getItem("userId") || "emergency_admin_id");
-                  formData.append("wabaNumber", mediaWabaNumber || "All");
+                  formData.append("wabaNumber", mediaWabaNumber);
 
                   try {
                     const res = await fetch("/api/media", {

@@ -107,9 +107,8 @@ function ConfigContent() {
         .catch(() => {});
     }
 
-    // Fetch WABA Channels filtered by logged-in user's ID
-    const userId = localStorage.getItem("userId") || "";
-    fetch(`/api/configuration/channels?userId=${userId}`)
+    // Fetch WABA Channels safely without breaking existing records
+    fetch("/api/configuration/channels")
       .then(res => res.json())
       .then(async (data) => {
         if (Array.isArray(data)) {
@@ -170,9 +169,16 @@ function ConfigContent() {
       .catch(() => {});
 
     // Fetch Media Library using correct /api/media endpoint
+    const userId = localStorage.getItem("userId") || "";
     fetch(`/api/media?userId=${userId}`)
       .then(res => res.json())
-      .then(data => { if(data.success && Array.isArray(data.media)) setMediaList(data.media); })
+      .then(data => { 
+        if(data.success && Array.isArray(data.media)) {
+          setMediaList(data.media);
+        } else if(Array.isArray(data)) {
+          setMediaList(data);
+        }
+      })
       .catch(() => {});
 
     fetch("/api/configuration/contacts").then(res => res.json()).then(data => { if(Array.isArray(data)) setContacts(data); }).catch(() => {});
@@ -183,49 +189,10 @@ function ConfigContent() {
     if (!mediaSearchQuery.trim()) return mediaList;
     return mediaList.filter(
       (m) =>
-        m.mediaName.toLowerCase().includes(mediaSearchQuery.toLowerCase()) ||
-        m.wabaNumber.toLowerCase().includes(mediaSearchQuery.toLowerCase())
+        (m.mediaName && m.mediaName.toLowerCase().includes(mediaSearchQuery.toLowerCase())) ||
+        (m.wabaNumber && m.wabaNumber.toLowerCase().includes(mediaSearchQuery.toLowerCase()))
     );
   }, [mediaList, mediaSearchQuery]);
-
-  const handleAddMemberToGroup = () => {
-    if (!newMemberNumber) return alert("Please enter mobile number");
-    
-    const newMember = {
-      id: Date.now().toString(),
-      number: newMemberNumber,
-      name: newMemberName || "Member"
-    };
-
-    const updatedList = [newMember, ...groupMembers];
-    setGroupMembers(updatedList);
-    
-    if (manageGroupObj) {
-      localStorage.setItem(`group_members_${manageGroupObj.id}`, JSON.stringify(updatedList));
-      
-      const updatedGroups = groups.map(g => g.id === manageGroupObj.id ? { ...g, totalContacts: updatedList.length } : g);
-      setGroups(updatedGroups);
-      localStorage.setItem("configuration_groups_list", JSON.stringify(updatedGroups));
-    }
-
-    setNewMemberNumber("");
-    setNewMemberName("");
-    alert("Number added to group successfully!");
-  };
-
-  const handleDeleteMemberFromGroup = (memberId: string) => {
-    const updatedList = groupMembers.filter((m) => m.id !== memberId);
-    setGroupMembers(updatedList);
-    
-    if (manageGroupObj) {
-      localStorage.setItem(`group_members_${manageGroupObj.id}`, JSON.stringify(updatedList));
-      
-      const updatedGroups = groups.map(g => g.id === manageGroupObj.id ? { ...g, totalContacts: updatedList.length } : g);
-      setGroups(updatedGroups);
-      localStorage.setItem("configuration_groups_list", JSON.stringify(updatedGroups));
-    }
-    alert("Number removed from group!");
-  };
 
   const handleSetDefaultChannel = async (id: string) => {
     try {
@@ -286,8 +253,7 @@ function ConfigContent() {
           body: JSON.stringify({ 
             code, 
             website: companyWebsite, 
-            name: companyName,
-            userId: localStorage.getItem("userId") || "default_user" 
+            name: companyName 
           })
         })
         .then(res => res.json())
@@ -358,59 +324,6 @@ function ConfigContent() {
       }
     } catch (err) {
       console.error("Failed to fetch live profile details", err);
-    }
-  };
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setProfileImageFile(file);
-      setProfileImagePreview(URL.createObjectURL(file));
-    }
-  };
-
-  const handleSaveBusinessProfile = async () => {
-    if (!selectedProfileChannel) return;
-    setIsSavingProfile(true);
-    try {
-      let uploadedLogoUrl = profileImagePreview;
-
-      if (profileImageFile) {
-        const formData = new FormData();
-        formData.append("file", profileImageFile);
-        formData.append("userId", localStorage.getItem("userId") || "emergency_admin_id");
-        formData.append("wabaNumber", selectedProfileChannel.displayPhone || "All");
-        const uploadRes = await fetch("/api/media", {
-          method: "POST",
-          body: formData,
-        });
-        const uploadData = await uploadRes.json();
-        if (uploadData.success && uploadData.media?.url) {
-          uploadedLogoUrl = uploadData.media.url;
-        }
-      }
-
-      const res = await fetch("/api/configuration/business-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          id: selectedProfileChannel.id, 
-          ...profileForm,
-          profilePicture: uploadedLogoUrl 
-        }),
-      });
-
-      if (res.ok) {
-        alert("Business Profile saved successfully!");
-        setSelectedProfileChannel(null);
-        window.location.reload();
-      } else {
-        alert("Failed to update profile on Meta");
-      }
-    } catch (err) {
-      alert("Error saving business profile.");
-    } finally {
-      setIsSavingProfile(false);
     }
   };
 
@@ -580,7 +493,6 @@ function ConfigContent() {
             </button>
           </div>
 
-          {/* Meta Policy Banner */}
           <div className="bg-blue-50 border border-blue-200 text-blue-900 p-3.5 rounded-xl flex items-center space-x-3 text-[11px]">
             <span>ℹ️</span>
             <span>
@@ -588,7 +500,6 @@ function ConfigContent() {
             </span>
           </div>
 
-          {/* Filter Bar */}
           <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between">
             <input
               type="text"
@@ -600,7 +511,6 @@ function ConfigContent() {
             <span className="text-gray-500 font-bold text-[11px]">Total: {filteredMedia.length} record(s)</span>
           </div>
 
-          {/* Media Table */}
           <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -631,9 +541,7 @@ function ConfigContent() {
                         <td className="p-4 flex items-center space-x-3">
                           <div className="w-10 h-10 rounded-xl bg-gray-100 border overflow-hidden flex items-center justify-center shrink-0">
                             {m.fileType === "image" || m.url?.startsWith("data:image") || m.mediaName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                              <img src={m.url} alt={m.mediaName} className="w-full h-full object-cover" />
-                            ) : m.fileType === "video" || m.mediaName?.match(/\.(mp4|mov|3gp)$/i) ? (
-                              <span className="text-[10px] font-bold text-blue-600 uppercase">🎥 VIDEO</span>
+                              <img src={m.url || m.mediaUrl} alt={m.mediaName} className="w-full h-full object-cover" />
                             ) : (
                               <span className="text-[10px] font-bold text-gray-600 uppercase">📄 {m.fileType || "DOC"}</span>
                             )}
@@ -641,7 +549,7 @@ function ConfigContent() {
                           <span className="font-bold text-gray-800 truncate max-w-xs">{m.mediaName}</span>
                         </td>
                         <td className="p-4 font-mono text-blue-600 truncate max-w-xs">
-                          <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">🔗 File URL</a>
+                          <a href={m.url || m.mediaUrl} target="_blank" rel="noreferrer" className="hover:underline">🔗 File URL</a>
                         </td>
                         <td className="p-4 font-mono font-semibold text-gray-600">{m.wabaNumber}</td>
                         <td className="p-4">
@@ -652,7 +560,7 @@ function ConfigContent() {
                         <td className="p-4 text-right space-x-2">
                           <button
                             onClick={() => {
-                              navigator.clipboard.writeText(m.url);
+                              navigator.clipboard.writeText(m.url || m.mediaUrl);
                               alert("🔗 URL copied to clipboard!");
                             }}
                             className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-700 cursor-pointer shadow-xs"
@@ -755,92 +663,6 @@ function ConfigContent() {
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* OTHER SECTIONS (Contacts, Groups, Blacklist, etc.) */}
-      {activeSection === "contacts" && (
-        <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-sm font-bold text-gray-800">WhatsApp Contacts</h2>
-            <div className="flex gap-2">
-              <button onClick={() => setShowContactModal(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">+ Add Contact</button>
-              <button onClick={() => setShowUploadContactModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">📤 Upload Contacts (File)</button>
-            </div>
-          </div>
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 border-b">
-              <tr><th className="p-3">MOBILE NUMBER</th><th className="p-3">PROFILE NAME</th><th className="p-3">EMAIL</th><th className="p-3">ACTION</th></tr>
-            </thead>
-            <tbody className="divide-y">
-              {contacts.map((c: any) => (
-                <tr key={c.id}>
-                  <td className="p-3 font-bold font-mono">{c.number}</td>
-                  <td className="p-3">{c.profileName}</td>
-                  <td className="p-3 text-gray-500">{c.email}</td>
-                  <td className="p-3"><button onClick={async () => { await fetch(`/api/configuration/contacts?id=${c.id}`, { method: "DELETE" }); window.location.reload(); }} className="text-red-500 font-bold cursor-pointer">🗑️ Delete</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {activeSection === "groups" && (
-        <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-sm font-bold text-gray-800">Group List</h2>
-            <button onClick={() => setShowGroupModal(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">+ Add Group</button>
-          </div>
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 border-b">
-              <tr><th className="p-3">GROUP NAME</th><th className="p-3">TOTAL CONTACTS</th><th className="p-3">ACTIONS</th></tr>
-            </thead>
-            <tbody className="divide-y">
-              {groups.map((g: any) => (
-                <tr key={g.id}>
-                  <td className="p-3 font-bold text-emerald-700">{g.groupName}</td>
-                  <td className="p-3 font-semibold">{g.totalContacts}</td>
-                  <td className="p-3 flex gap-2">
-                    <button onClick={() => setManageGroupObj(g)} className="bg-slate-100 border px-2 py-1 rounded cursor-pointer font-bold">⚙️ Manage</button>
-                    <button onClick={() => setImportGroupObj(g)} className="bg-blue-50 text-blue-600 border px-2 py-1 rounded cursor-pointer font-bold">📥 Import</button>
-                    <button onClick={() => setExportGroupObj(g)} className="bg-emerald-50 text-emerald-600 border px-2 py-1 rounded cursor-pointer font-bold">📤 Export</button>
-                    <button onClick={() => { setEditGroupObj(g); setEditGroupNameVal(g.groupName); }} className="bg-amber-50 text-amber-600 border px-2 py-1 rounded cursor-pointer font-bold">✏️ Edit</button>
-                    <button onClick={async () => {
-                      await fetch(`/api/configuration/groups?id=${g.id}`, { method: "DELETE" });
-                      window.location.reload();
-                    }} className="bg-red-50 text-red-600 border px-2 py-1 rounded cursor-pointer font-bold">🗑️ Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {activeSection === "blacklist" && (
-        <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-sm font-bold text-gray-800">Blacklisted Numbers</h2>
-            <div className="flex gap-2">
-              <button onClick={() => setShowBlacklistModal(true)} className="bg-red-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">+ Block Number</button>
-              <button onClick={() => setShowBlacklistExcelModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">📤 Upload Excel / File</button>
-            </div>
-          </div>
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 border-b">
-              <tr><th className="p-3">NUMBER</th><th className="p-3">CREATED DATE</th><th className="p-3">ACTION</th></tr>
-            </thead>
-            <tbody className="divide-y">
-              {blacklist.map((b: any) => (
-                <tr key={b.id}>
-                  <td className="p-3 font-bold text-red-600 font-mono">{b.number}</td>
-                  <td className="p-3 text-gray-500">{new Date(b.createdAt).toLocaleDateString()}</td>
-                  <td className="p-3"><button onClick={async () => { await fetch(`/api/configuration/blacklist?id=${b.id}`, { method: "DELETE" }); window.location.reload(); }} className="text-red-500 font-bold cursor-pointer">🗑️ Delete</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       )}
 

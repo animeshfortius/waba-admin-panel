@@ -7,11 +7,14 @@ export async function GET(req: Request) {
     const userId = searchParams.get("userId");
     const action = searchParams.get("action");
 
-    // 🔥 NEW: Fetch only reclassified / reviewable templates from Meta
+    // =========================================================================
+    // 🔥 HANDLE GET_RECLASSIFIED ACTION SAFELY
+    // =========================================================================
     if (action === "GET_RECLASSIFIED") {
       let accounts = await prisma.wabaAccount.findMany();
-      if (userId && userId !== "undefined") {
-        accounts = await prisma.wabaAccount.findMany({ where: { userId } });
+      if (userId && userId !== "undefined" && userId !== "null" && userId !== "emergency_admin_id") {
+        const filtered = accounts.filter((acc) => acc.userId === userId);
+        if (filtered.length > 0) accounts = filtered;
       }
 
       let reviewableTemplates: any[] = [];
@@ -31,24 +34,23 @@ export async function GET(req: Request) {
 
           if (metaData.data && Array.isArray(metaData.data)) {
             for (const tpl of metaData.data) {
-              // Meta returns status like 'REJECTED', 'PENDING', or category updates
-              if (tpl.status === "REJECTED" || tpl.category_update || tpl.previous_category) {
+              // Check if template is reclassified or rejected or reviewable
+              if (tpl.status === "REJECTED" || tpl.category_update || tpl.previous_category || tpl.status === "FLAGGED") {
                 reviewableTemplates.push({
                   wabaId: acc.wabaId,
-                  wabaNumber: acc.displayPhone,
+                  wabaNumber: acc.displayPhone || "N/A",
                   metaTemplateId: tpl.id,
                   name: tpl.name,
-                  language: tpl.language,
+                  language: tpl.language || "en_US",
                   category: tpl.category,
                   previousCategory: tpl.previous_category || "UTILITY",
                   status: tpl.status,
-                  canReview: true,
                 });
               }
             }
           }
-        } catch (err) {
-          console.error("Error fetching reclassified templates:", err);
+        } catch (metaErr) {
+          console.error(`Meta fetch error for WABA ${acc.wabaId}:`, metaErr);
         }
       }
 
@@ -58,20 +60,55 @@ export async function GET(req: Request) {
       });
     }
 
-    // Standard GET accounts & templates
+    // =========================================================================
+    // STANDARD GET TEMPLATES & ACCOUNTS
+    // =========================================================================
     let accounts: any[] = [];
-    let templates: any[] = [];
-
-    if (userId && userId !== "undefined" && userId !== "null") {
-      accounts = await prisma.wabaAccount.findMany({ where: { userId } });
+    try {
+      if (userId && userId !== "undefined" && userId !== "null" && userId !== "emergency_admin_id") {
+        accounts = await prisma.wabaAccount.findMany({
+          where: { userId },
+          select: {
+            id: true,
+            userId: true,
+            wabaId: true,
+            phoneNumberId: true,
+            displayPhone: true,
+            displayName: true,
+            accessToken: true,
+          },
+        });
+      }
+    } catch (e) {
+      console.error("User specific fetch error:", e);
     }
+
     if (accounts.length === 0) {
-      accounts = await prisma.wabaAccount.findMany();
+      try {
+        accounts = await prisma.wabaAccount.findMany({
+          select: {
+            id: true,
+            userId: true,
+            wabaId: true,
+            phoneNumberId: true,
+            displayPhone: true,
+            displayName: true,
+            accessToken: true,
+          },
+        });
+      } catch (e) {
+        console.error("Global WabaAccount fetch error:", e);
+      }
     }
 
-    templates = await prisma.whatsAppTemplate.findMany({
-      orderBy: { createdAt: "desc" },
-    });
+    let templates: any[] = [];
+    try {
+      templates = await prisma.whatsAppTemplate.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (e) {
+      console.error("Template fetch error:", e);
+    }
 
     return NextResponse.json({
       success: true,
@@ -79,13 +116,26 @@ export async function GET(req: Request) {
       wabaAccounts: accounts,
     });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error("GET Templates Route Error:", error);
+    return NextResponse.json({
+      success: false,
+      error: error.message,
+      wabaAccounts: [],
+      templates: [],
+      reviewableTemplates: [],
+    }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch (err) {
+      body = {};
+    }
+
     const { action, userId, wabaId, templateId, metaTemplateId, newCategory } = body;
 
     // =========================================================================
@@ -100,7 +150,7 @@ export async function POST(req: Request) {
       let accounts = await prisma.wabaAccount.findMany();
       if (targetTemplate) {
         accounts = await prisma.wabaAccount.findMany({ where: { wabaId: targetTemplate.wabaId } });
-      } else if (wabaId && wabaId !== "ALL") {
+      } else if (wabaId && wabaId !== "ALL" && wabaId !== "DEFAULT") {
         accounts = await prisma.wabaAccount.findMany({ where: { wabaId } });
       }
 
@@ -108,7 +158,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: "No WABA account found" }, { status: 404 });
       }
 
-      let requestedCount = 0;
       const metaTplId = metaTemplateId || targetTemplate?.metaTemplateId;
       const token = accounts[0].accessToken;
 
@@ -116,7 +165,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: "Meta Template ID is required for review request" }, { status: 400 });
       }
 
-      // Send review/category appeal POST request to Meta graph API
       const metaRes = await fetch(`https://graph.facebook.com/v21.0/${metaTplId}`, {
         method: "POST",
         headers: {
@@ -133,7 +181,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: metaData.error.message }, { status: 400 });
       }
 
-      // Update database status to IN_REVIEW
       if (targetTemplate) {
         await prisma.whatsAppTemplate.update({
           where: { id: targetTemplate.id },
@@ -210,50 +257,54 @@ export async function POST(req: Request) {
       if (!acc.accessToken) continue;
       const cleanWabaId = acc.wabaId.replace("WABA_", "").trim();
 
-      const metaRes = await fetch(
-        `https://graph.facebook.com/v21.0/${cleanWabaId}/message_templates?limit=250`,
-        { headers: { Authorization: `Bearer ${acc.accessToken}` } }
-      );
-      const metaData = await metaRes.json();
+      try {
+        const metaRes = await fetch(
+          `https://graph.facebook.com/v21.0/${cleanWabaId}/message_templates?limit=250`,
+          { headers: { Authorization: `Bearer ${acc.accessToken}` } }
+        );
+        const metaData = await metaRes.json();
 
-      if (metaData.data && Array.isArray(metaData.data)) {
-        for (const tpl of metaData.data) {
-          const headerComp = tpl.components?.find((c: any) => c.type === "HEADER");
-          const bodyComp = tpl.components?.find((c: any) => c.type === "BODY");
-          const footerComp = tpl.components?.find((c: any) => c.type === "FOOTER");
-          const buttonsComp = tpl.components?.find((c: any) => c.type === "BUTTONS");
+        if (metaData.data && Array.isArray(metaData.data)) {
+          for (const tpl of metaData.data) {
+            const headerComp = tpl.components?.find((c: any) => c.type === "HEADER");
+            const bodyComp = tpl.components?.find((c: any) => c.type === "BODY");
+            const footerComp = tpl.components?.find((c: any) => c.type === "FOOTER");
+            const buttonsComp = tpl.components?.find((c: any) => c.type === "BUTTONS");
 
-          const existing = await prisma.whatsAppTemplate.findFirst({
-            where: {
+            const existing = await prisma.whatsAppTemplate.findFirst({
+              where: {
+                wabaId: acc.wabaId,
+                OR: [{ metaTemplateId: tpl.id }, { name: tpl.name, language: tpl.language }],
+              },
+            });
+
+            const payload = {
+              userId: acc.userId || "default_user",
               wabaId: acc.wabaId,
-              OR: [{ metaTemplateId: tpl.id }, { name: tpl.name, language: tpl.language }],
-            },
-          });
+              wabaNumber: acc.displayPhone,
+              metaTemplateId: tpl.id,
+              name: tpl.name,
+              language: tpl.language,
+              category: tpl.category,
+              status: tpl.status,
+              headerType: headerComp?.format || "NONE",
+              headerText: headerComp?.text || null,
+              bodyText: bodyComp?.text || "",
+              footerText: footerComp?.text || null,
+              buttons: buttonsComp?.buttons || [],
+              components: tpl.components || [],
+            };
 
-          const payload = {
-            userId: acc.userId || "default_user",
-            wabaId: acc.wabaId,
-            wabaNumber: acc.displayPhone,
-            metaTemplateId: tpl.id,
-            name: tpl.name,
-            language: tpl.language,
-            category: tpl.category,
-            status: tpl.status,
-            headerType: headerComp?.format || "NONE",
-            headerText: headerComp?.text || null,
-            bodyText: bodyComp?.text || "",
-            footerText: footerComp?.text || null,
-            buttons: buttonsComp?.buttons || [],
-            components: tpl.components || [],
-          };
-
-          if (existing) {
-            await prisma.whatsAppTemplate.update({ where: { id: existing.id }, data: payload });
-          } else {
-            await prisma.whatsAppTemplate.create({ data: payload });
+            if (existing) {
+              await prisma.whatsAppTemplate.update({ where: { id: existing.id }, data: payload });
+            } else {
+              await prisma.whatsAppTemplate.create({ data: payload });
+            }
+            syncedCount++;
           }
-          syncedCount++;
         }
+      } catch (syncErr) {
+        console.error(`Sync error for WABA ${acc.wabaId}:`, syncErr);
       }
     }
 
@@ -267,6 +318,7 @@ export async function POST(req: Request) {
       data: updatedTemplates,
     });
   } catch (error: any) {
+    console.error("POST Templates Route Error:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

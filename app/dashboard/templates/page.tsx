@@ -123,39 +123,17 @@ export default function ManageTemplatesPage() {
       setFetchingReviewable(false);
     }
   };
+// 🔥 Direct Redirect to Meta Business Support Home (Template Category Updates)
+  const handleRequestReviewSubmit = (tpl: any) => {
+    const cleanWabaId = tpl.wabaId ? tpl.wabaId.replace("WABA_", "").trim() : "";
+    // Agar WABA ID available hai toh direct us WABA ka category_updates page khulega, warna general business-support-home
+    const metaSupportUrl = cleanWabaId
+      ? `https://business.facebook.com/business-support-home/${cleanWabaId}/?templates_tab=category_updates`
+      : `https://business.facebook.com/business-support-home/?templates_tab=category_updates`;
 
-  // 🔥 Submit Review Request for a Reclassified Template directly to Meta
-  const handleRequestReviewSubmit = async (tpl: any) => {
-    if (!confirm(`Request Meta category review for template "${tpl.name}"?`)) return;
-    setRequestingReview(true);
-    try {
-      const res = await fetch("/api/templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "REQUEST_CATEGORY_REVIEW",
-          userId,
-          wabaId: tpl.wabaId,
-          metaTemplateId: tpl.metaTemplateId,
-          newCategory: "UTILITY", // Requesting utility re-evaluation
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert("✅ " + data.message);
-        setShowReviewModal(false);
-        loadData(userId);
-      } else {
-        alert("❌ Error: " + (data.error || "Failed to submit review request"));
-      }
-    } catch (err) {
-      alert("Network error sending review request.");
-    } finally {
-      setRequestingReview(false);
-    }
+    window.open(metaSupportUrl, "_blank", "noopener,noreferrer");
   };
-
-  // Sync Single Template Status
+// Sync Single Template Status
   const handleSyncSingle = async (tpl: any) => {
     try {
       const res = await fetch("/api/templates", {
@@ -529,11 +507,10 @@ export default function ManageTemplatesPage() {
                     </div>
                     <button
                       type="button"
-                      disabled={requestingReview}
                       onClick={() => handleRequestReviewSubmit(tpl)}
-                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow cursor-pointer disabled:opacity-50"
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow cursor-pointer flex items-center gap-1"
                     >
-                      {requestingReview ? "Submitting..." : "Request Review 🚀"}
+                      Review on Meta ↗
                     </button>
                   </div>
                 ))}

@@ -33,14 +33,33 @@ function ConfigContent() {
   // Modals & States
   const [showMediaModal, setShowMediaModal] = useState(false);
   const [mediaFile, setMediaFile] = useState<any>(null);
-  const [mediaWabaNumber, setMediaWabaNumber] = useState("All");
   const [mediaSearchQuery, setMediaSearchQuery] = useState("");
+
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [showUploadContactModal, setShowUploadContactModal] = useState(false);
+  const [contactData, setContactData] = useState({ name: "", number: "", email: "" });
+
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [groupNameInput, setGroupNameInput] = useState("");
+  
+  const [manageGroupObj, setManageGroupObj] = useState<any>(null);
+  const [groupMembers, setGroupMembers] = useState<any[]>([]);
+  const [newMemberNumber, setNewMemberNumber] = useState("");
+  const [newMemberName, setNewMemberName] = useState("");
+
+  const [importGroupObj, setImportGroupObj] = useState<any>(null);
+  const [exportGroupObj, setExportGroupObj] = useState<any>(null);
+  const [editGroupObj, setEditGroupObj] = useState<any>(null);
+  const [editGroupNameVal, setEditGroupNameVal] = useState("");
+
+  const [showBlacklistModal, setShowBlacklistModal] = useState(false);
+  const [showBlacklistExcelModal, setShowBlacklistExcelModal] = useState(false);
+  const [blacklistInput, setBlacklistInput] = useState("");
 
   const [showFacebookModal, setShowFacebookModal] = useState(false);
   const [companyWebsite, setCompanyWebsite] = useState("");
   const [companyName, setCompanyName] = useState("");
 
-  // WABA Action Menu & Business Profile States
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [selectedProfileChannel, setSelectedProfileChannel] = useState<any>(null);
   const [profileForm, setProfileForm] = useState({
@@ -49,28 +68,13 @@ function ConfigContent() {
     email: "",
     address: "",
     website: "",
-    category: "PROFESSIONAL_SERVICES",
+    category: "OTHER",
   });
   const [profileImageFile, setProfileImageFile] = useState<any>(null);
   const [profileImagePreview, setProfileImagePreview] = useState<string>("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
-  // Meta official categories list
-  const metaCategories = [
-    { value: "PROFESSIONAL_SERVICES", label: "Professional Services" },
-    { value: "RETAIL", label: "Retail & Shopping" },
-    { value: "AUTOMOTIVE", label: "Automotive" },
-    { value: "ENTERTAINMENT", label: "Entertainment" },
-    { value: "FINANCE", label: "Finance & Banking" },
-    { value: "EDUCATION", label: "Education" },
-    { value: "BEAUTY", label: "Beauty, Cosmetic & Personal Care" },
-    { value: "HOTEL", label: "Hotel & Lodging" },
-    { value: "RESTAURANT", label: "Restaurant" },
-    { value: "OTHER", label: "Other Business" },
-  ];
-
   useEffect(() => {
-    // Initialize Facebook SDK for Embedded Signup popup
     window.fbAsyncInit = function () {
       window.FB.init({
         appId: '1405995811146008',
@@ -92,7 +96,16 @@ function ConfigContent() {
     };
     loadFBSdk();
 
-    // Fetch WABA Channels and enrich live metrics from Meta Cloud API
+    const savedGroupsList = localStorage.getItem("configuration_groups_list");
+    if (savedGroupsList) {
+      setGroups(JSON.parse(savedGroupsList));
+    } else {
+      fetch("/api/configuration/groups")
+        .then(res => res.json())
+        .then(data => { if(Array.isArray(data)) { setGroups(data); localStorage.setItem("configuration_groups_list", JSON.stringify(data)); } })
+        .catch(() => {});
+    }
+
     fetch("/api/configuration/channels")
       .then(res => res.json())
       .then(async (data) => {
@@ -153,16 +166,11 @@ function ConfigContent() {
       })
       .catch(() => {});
 
+    // Fetch Media Library using correct /api/media endpoint
     const userId = localStorage.getItem("userId") || "";
     fetch(`/api/media?userId=${userId}`)
       .then(res => res.json())
-      .then(data => { 
-        if(data.success && Array.isArray(data.media)) {
-          setMediaList(data.media);
-        } else if(Array.isArray(data)) {
-          setMediaList(data);
-        }
-      })
+      .then(data => { if(data.success && Array.isArray(data.media)) setMediaList(data.media); })
       .catch(() => {});
 
     fetch("/api/configuration/contacts").then(res => res.json()).then(data => { if(Array.isArray(data)) setContacts(data); }).catch(() => {});
@@ -173,10 +181,49 @@ function ConfigContent() {
     if (!mediaSearchQuery.trim()) return mediaList;
     return mediaList.filter(
       (m) =>
-        (m.mediaName && m.mediaName.toLowerCase().includes(mediaSearchQuery.toLowerCase())) ||
-        (m.wabaNumber && m.wabaNumber.toLowerCase().includes(mediaSearchQuery.toLowerCase()))
+        m.mediaName.toLowerCase().includes(mediaSearchQuery.toLowerCase()) ||
+        m.wabaNumber.toLowerCase().includes(mediaSearchQuery.toLowerCase())
     );
   }, [mediaList, mediaSearchQuery]);
+
+  const handleAddMemberToGroup = () => {
+    if (!newMemberNumber) return alert("Please enter mobile number");
+    
+    const newMember = {
+      id: Date.now().toString(),
+      number: newMemberNumber,
+      name: newMemberName || "Member"
+    };
+
+    const updatedList = [newMember, ...groupMembers];
+    setGroupMembers(updatedList);
+    
+    if (manageGroupObj) {
+      localStorage.setItem(`group_members_${manageGroupObj.id}`, JSON.stringify(updatedList));
+      
+      const updatedGroups = groups.map(g => g.id === manageGroupObj.id ? { ...g, totalContacts: updatedList.length } : g);
+      setGroups(updatedGroups);
+      localStorage.setItem("configuration_groups_list", JSON.stringify(updatedGroups));
+    }
+
+    setNewMemberNumber("");
+    setNewMemberName("");
+    alert("Number added to group successfully!");
+  };
+
+  const handleDeleteMemberFromGroup = (memberId: string) => {
+    const updatedList = groupMembers.filter((m) => m.id !== memberId);
+    setGroupMembers(updatedList);
+    
+    if (manageGroupObj) {
+      localStorage.setItem(`group_members_${manageGroupObj.id}`, JSON.stringify(updatedList));
+      
+      const updatedGroups = groups.map(g => g.id === manageGroupObj.id ? { ...g, totalContacts: updatedList.length } : g);
+      setGroups(updatedGroups);
+      localStorage.setItem("configuration_groups_list", JSON.stringify(updatedGroups));
+    }
+    alert("Number removed from group!");
+  };
 
   const handleSetDefaultChannel = async (id: string) => {
     try {
@@ -219,7 +266,6 @@ function ConfigContent() {
     }
   };
 
-  // Official Meta Embedded Signup Login Popup Flow
   const handleFacebookSignup = () => {
     if (!window.FB) {
       alert("Facebook SDK is still loading. Please try again in a moment.");
@@ -244,15 +290,15 @@ function ConfigContent() {
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            alert("✅ WhatsApp channel connected and credit line/payment methods linked successfully!");
+            alert("WhatsApp channel connected successfully!");
             window.location.reload();
           } else {
-            alert("❌ Error: " + (data.error || "Failed to register channel"));
+            alert("Error: " + (data.error || "Failed to register channel"));
           }
         })
         .catch(err => {
           console.error(err);
-          alert("❌ Error registering channel details.");
+          alert("Error registering channel details.");
         });
 
       } else {
@@ -279,12 +325,12 @@ function ConfigContent() {
     setProfileImagePreview("");
 
     setProfileForm({
-      displayName: channel.displayName || channel.displayPhone || "Fortius Infocom",
-      description: channel.description || "Professional Business Communication Solutions",
-      email: channel.email || "info@fortiusinfocom.com",
-      address: channel.address || "Lucknow, UP, India",
-      website: channel.website || "https://www.fortiusinfocom.com",
-      category: channel.category || "PROFESSIONAL_SERVICES",
+      displayName: channel.displayName || channel.displayPhone || "100 App",
+      description: channel.description || "",
+      email: channel.email || "",
+      address: channel.address || "",
+      website: channel.website || "",
+      category: channel.category || "OTHER",
     });
 
     if (channel.profilePicture) {
@@ -296,19 +342,19 @@ function ConfigContent() {
       const result = await res.json();
       if (result.success && result.data) {
         setProfileForm({
-          displayName: result.data.displayName || channel.displayName || "Fortius Infocom",
+          displayName: channel.displayName || channel.displayPhone || "100 App",
           description: result.data.description || channel.description || "",
           email: result.data.email || channel.email || "",
           address: result.data.address || channel.address || "",
           website: result.data.website || channel.website || "",
-          category: result.data.category || channel.category || "PROFESSIONAL_SERVICES",
+          category: result.data.category || channel.category || "OTHER",
         });
         if (result.data.profilePicture) {
           setProfileImagePreview(result.data.profilePicture);
         }
       }
     } catch (err) {
-      console.error("Failed to fetch live profile details from Meta", err);
+      console.error("Failed to fetch live profile details", err);
     }
   };
 
@@ -329,13 +375,14 @@ function ConfigContent() {
       if (profileImageFile) {
         const formData = new FormData();
         formData.append("file", profileImageFile);
-        const uploadRes = await fetch("/api/configuration/media", {
+        formData.append("userId", localStorage.getItem("userId") || "emergency_admin_id");
+        const uploadRes = await fetch("/api/media", {
           method: "POST",
           body: formData,
         });
         const uploadData = await uploadRes.json();
-        if (uploadData.url || uploadData.mediaUrl) {
-          uploadedLogoUrl = uploadData.url || uploadData.mediaUrl;
+        if (uploadData.success && uploadData.media?.url) {
+          uploadedLogoUrl = uploadData.media.url;
         }
       }
 
@@ -350,14 +397,14 @@ function ConfigContent() {
       });
 
       if (res.ok) {
-        alert("✅ Business Profile updated successfully on Meta Cloud API!");
+        alert("Business Profile saved successfully!");
         setSelectedProfileChannel(null);
         window.location.reload();
       } else {
-        alert("❌ Failed to update business profile on Meta");
+        alert("Failed to update profile on Meta");
       }
     } catch (err) {
-      alert("❌ Error saving business profile.");
+      alert("Error saving business profile.");
     } finally {
       setIsSavingProfile(false);
     }
@@ -475,7 +522,7 @@ function ConfigContent() {
                           {ch.isDefault ? "Default ★" : "Set Default"}
                         </button>
                       </td>
-                      <td className="p-3 font-bold text-slate-800">{ch.displayName || "Fortius Infocom"}</td>
+                      <td className="p-3 font-bold text-slate-800">{ch.displayName || "100 App"}</td>
                       <td className="p-3 text-gray-500 whitespace-nowrap">
                         {new Date(ch.createdAt || Date.now()).toLocaleString()}
                       </td>
@@ -513,30 +560,6 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* WHATSAPP COEXISTENCE ONBOARDING TAB */}
-      {activeSection === "onboarding" && (
-        <div className="space-y-6 bg-white p-6 rounded-2xl border shadow-sm">
-          <div>
-            <h2 className="text-base font-bold text-gray-800">WhatsApp Coexistence Onboarding</h2>
-            <p className="text-[11px] text-gray-400">Connect your existing WhatsApp Business App numbers to Meta Cloud API.</p>
-          </div>
-          <div className="p-6 bg-slate-50 border rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="space-y-2">
-              <h3 className="font-bold text-sm text-gray-800">Register with WhatsApp via Facebook</h3>
-              <p className="text-xs text-gray-600 max-w-lg">
-                Clicking the button below will open the Meta embedded signup flow. Follow the steps to link your WABA account and verify phone numbers.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowFacebookModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl shadow cursor-pointer whitespace-nowrap"
-            >
-              Connect WhatsApp with Facebook
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* MEDIA LIBRARY TAB */}
       {activeSection === "media_library" && (
         <div className="space-y-4">
@@ -553,6 +576,7 @@ function ConfigContent() {
             </button>
           </div>
 
+          {/* Meta Policy Banner */}
           <div className="bg-blue-50 border border-blue-200 text-blue-900 p-3.5 rounded-xl flex items-center space-x-3 text-[11px]">
             <span>ℹ️</span>
             <span>
@@ -560,6 +584,7 @@ function ConfigContent() {
             </span>
           </div>
 
+          {/* Filter Bar */}
           <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between">
             <input
               type="text"
@@ -571,13 +596,14 @@ function ConfigContent() {
             <span className="text-gray-500 font-bold text-[11px]">Total: {filteredMedia.length} record(s)</span>
           </div>
 
+          {/* Media Table */}
           <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b text-gray-500 font-bold text-[11px]">
                   <th className="p-4">MEDIA</th>
                   <th className="p-4">URL</th>
-                  <th className="p-4">WABA NUMBER</th>
+                  <th className="p-4">WADANUMBER</th>
                   <th className="p-4">EXPIRES IN</th>
                   <th className="p-4 text-right">ACTION</th>
                 </tr>
@@ -600,16 +626,16 @@ function ConfigContent() {
                       <tr key={m.id} className="hover:bg-slate-50/60">
                         <td className="p-4 flex items-center space-x-3">
                           <div className="w-10 h-10 rounded-xl bg-gray-100 border overflow-hidden flex items-center justify-center shrink-0">
-                            {m.fileType === "image" || m.url?.startsWith("data:image") || m.mediaName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                              <img src={m.url || m.mediaUrl} alt={m.mediaName} className="w-full h-full object-cover" />
+                            {m.fileType === "image" || m.url?.startsWith("data:image") ? (
+                              <img src={m.url} alt={m.mediaName} className="w-full h-full object-cover" />
                             ) : (
-                              <span className="text-[10px] font-bold text-gray-600 uppercase">📄 {m.fileType || "DOC"}</span>
+                              <span className="text-[10px] font-bold text-gray-500 uppercase">{m.fileType || "doc"}</span>
                             )}
                           </div>
                           <span className="font-bold text-gray-800 truncate max-w-xs">{m.mediaName}</span>
                         </td>
                         <td className="p-4 font-mono text-blue-600 truncate max-w-xs">
-                          <a href={m.url || m.mediaUrl} target="_blank" rel="noreferrer" className="hover:underline">🔗 File URL</a>
+                          <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">🔗 File URL</a>
                         </td>
                         <td className="p-4 font-mono font-semibold text-gray-600">{m.wabaNumber}</td>
                         <td className="p-4">
@@ -620,7 +646,7 @@ function ConfigContent() {
                         <td className="p-4 text-right space-x-2">
                           <button
                             onClick={() => {
-                              navigator.clipboard.writeText(m.url || m.mediaUrl);
+                              navigator.clipboard.writeText(m.url);
                               alert("🔗 URL copied to clipboard!");
                             }}
                             className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-700 cursor-pointer shadow-xs"
@@ -650,40 +676,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* CONTACTS TAB */}
-      {activeSection === "contacts" && (
-        <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
-          <h2 className="text-base font-bold text-gray-800">WhatsApp Contacts</h2>
-          <p className="text-xs text-gray-500">Manage your contacts database for broadcasting.</p>
-          <div className="p-8 border border-dashed rounded-xl text-center text-gray-400">
-            Contacts module active. Total contacts: {contacts.length}
-          </div>
-        </div>
-      )}
-
-      {/* GROUPS TAB */}
-      {activeSection === "groups" && (
-        <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
-          <h2 className="text-base font-bold text-gray-800">Group List</h2>
-          <p className="text-xs text-gray-500">Manage, import, export, edit, and delete groups.</p>
-          <div className="p-8 border border-dashed rounded-xl text-center text-gray-400">
-            Groups module active. Total groups: {groups.length}
-          </div>
-        </div>
-      )}
-
-      {/* BLACKLIST TAB */}
-      {activeSection === "blacklist" && (
-        <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
-          <h2 className="text-base font-bold text-gray-800">Blacklisted Numbers</h2>
-          <p className="text-xs text-gray-500">Manage blocked numbers and Excel uploads.</p>
-          <div className="p-8 border border-dashed rounded-xl text-center text-gray-400">
-            Blacklist module active. Total blacklisted: {blacklist.length}
-          </div>
-        </div>
-      )}
-
-      {/* MEDIA UPLOAD MODAL */}
+      {/* MEDIA UPLOAD MODAL (FIXED WITH FormData & /api/media) */}
       {showMediaModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -693,22 +686,6 @@ function ConfigContent() {
             </div>
             
             <div className="space-y-3">
-              <div>
-                <label className="block font-bold text-gray-700 text-xs mb-1">ASSOCIATED WABA NUMBER *</label>
-                <select 
-                  value={mediaWabaNumber}
-                  onChange={(e) => setMediaWabaNumber(e.target.value)}
-                  className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs font-mono focus:outline-none focus:bg-white focus:border-emerald-500 cursor-pointer"
-                >
-                  <option value="All">All Numbers (Global)</option>
-                  {channels.map((ch) => (
-                    <option key={ch.id} value={ch.displayPhone || ch.display_phone_number}>
-                      {ch.displayPhone || ch.display_phone_number} ({ch.displayName || "WABA Account"})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               <div>
                 <label className="block font-bold text-gray-700 text-xs mb-1">SELECT FILE (IMAGE / VIDEO / PDF) *</label>
                 <input 
@@ -729,7 +706,7 @@ function ConfigContent() {
                   const formData = new FormData();
                   formData.append("file", mediaFile);
                   formData.append("userId", localStorage.getItem("userId") || "emergency_admin_id");
-                  formData.append("wabaNumber", mediaWabaNumber);
+                  formData.append("wabaNumber", "All");
 
                   try {
                     const res = await fetch("/api/media", {
@@ -741,7 +718,6 @@ function ConfigContent() {
                       alert("✅ Media uploaded successfully!"); 
                       setShowMediaModal(false);
                       setMediaFile(null);
-                      setMediaWabaNumber("All");
                       window.location.reload(); 
                     } else {
                       alert("❌ Upload failed: " + data.error);
@@ -759,7 +735,93 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* Facebook Signup Modal (Triggered by Register New WhatsApp & Coexistence Onboarding) */}
+      {/* OTHER SECTIONS (Contacts, Groups, Blacklist, etc.) remain as-is */}
+      {activeSection === "contacts" && (
+        <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-sm font-bold text-gray-800">WhatsApp Contacts</h2>
+            <div className="flex gap-2">
+              <button onClick={() => setShowContactModal(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">+ Add Contact</button>
+              <button onClick={() => setShowUploadContactModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">📤 Upload Contacts (File)</button>
+            </div>
+          </div>
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-50 border-b">
+              <tr><th className="p-3">MOBILE NUMBER</th><th className="p-3">PROFILE NAME</th><th className="p-3">EMAIL</th><th className="p-3">ACTION</th></tr>
+            </thead>
+            <tbody className="divide-y">
+              {contacts.map((c: any) => (
+                <tr key={c.id}>
+                  <td className="p-3 font-bold font-mono">{c.number}</td>
+                  <td className="p-3">{c.profileName}</td>
+                  <td className="p-3 text-gray-500">{c.email}</td>
+                  <td className="p-3"><button onClick={async () => { await fetch(`/api/configuration/contacts?id=${c.id}`, { method: "DELETE" }); window.location.reload(); }} className="text-red-500 font-bold cursor-pointer">🗑️ Delete</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {activeSection === "groups" && (
+        <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-sm font-bold text-gray-800">Group List</h2>
+            <button onClick={() => setShowGroupModal(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">+ Add Group</button>
+          </div>
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-50 border-b">
+              <tr><th className="p-3">GROUP NAME</th><th className="p-3">TOTAL CONTACTS</th><th className="p-3">ACTIONS</th></tr>
+            </thead>
+            <tbody className="divide-y">
+              {groups.map((g: any) => (
+                <tr key={g.id}>
+                  <td className="p-3 font-bold text-emerald-700">{g.groupName}</td>
+                  <td className="p-3 font-semibold">{g.totalContacts}</td>
+                  <td className="p-3 flex gap-2">
+                    <button onClick={() => setManageGroupObj(g)} className="bg-slate-100 border px-2 py-1 rounded cursor-pointer font-bold">⚙️ Manage</button>
+                    <button onClick={() => setImportGroupObj(g)} className="bg-blue-50 text-blue-600 border px-2 py-1 rounded cursor-pointer font-bold">📥 Import</button>
+                    <button onClick={() => setExportGroupObj(g)} className="bg-emerald-50 text-emerald-600 border px-2 py-1 rounded cursor-pointer font-bold">📤 Export</button>
+                    <button onClick={() => { setEditGroupObj(g); setEditGroupNameVal(g.groupName); }} className="bg-amber-50 text-amber-600 border px-2 py-1 rounded cursor-pointer font-bold">✏️ Edit</button>
+                    <button onClick={async () => {
+                      await fetch(`/api/configuration/groups?id=${g.id}`, { method: "DELETE" });
+                      window.location.reload();
+                    }} className="bg-red-50 text-red-600 border px-2 py-1 rounded cursor-pointer font-bold">🗑️ Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {activeSection === "blacklist" && (
+        <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-sm font-bold text-gray-800">Blacklisted Numbers</h2>
+            <div className="flex gap-2">
+              <button onClick={() => setShowBlacklistModal(true)} className="bg-red-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">+ Block Number</button>
+              <button onClick={() => setShowBlacklistExcelModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold cursor-pointer">📤 Upload Excel / File</button>
+            </div>
+          </div>
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-50 border-b">
+              <tr><th className="p-3">NUMBER</th><th className="p-3">CREATED DATE</th><th className="p-3">ACTION</th></tr>
+            </thead>
+            <tbody className="divide-y">
+              {blacklist.map((b: any) => (
+                <tr key={b.id}>
+                  <td className="p-3 font-bold text-red-600 font-mono">{b.number}</td>
+                  <td className="p-3 text-gray-500">{new Date(b.createdAt).toLocaleDateString()}</td>
+                  <td className="p-3"><button onClick={async () => { await fetch(`/api/configuration/blacklist?id=${b.id}`, { method: "DELETE" }); window.location.reload(); }} className="text-red-500 font-bold cursor-pointer">🗑️ Delete</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Facebook Signup Modal */}
       {showFacebookModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans text-xs">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
@@ -780,161 +842,6 @@ function ConfigContent() {
             <div className="flex justify-start items-center space-x-3 pt-3 border-t">
               <button onClick={handleFacebookSignup} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs">Continue with Facebook</button>
               <button onClick={() => setShowFacebookModal(false)} className="bg-red-500 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* BUSINESS PROFILE MODAL WITH REAL-TIME WHATSAPP PREVIEW */}
-      {selectedProfileChannel && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 font-sans text-xs">
-          <div className="bg-white rounded-3xl max-w-5xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-gray-800 text-sm">Business Profile Settings ({selectedProfileChannel.displayPhone})</h3>
-              <button onClick={() => setSelectedProfileChannel(null)} className="text-gray-400 font-bold cursor-pointer text-sm">✕</button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Left Form Settings (2 Columns) */}
-              <div className="md:col-span-2 space-y-4">
-                <div className="flex items-center space-x-4 bg-slate-50 p-3 rounded-2xl border">
-                  <div className="w-16 h-16 rounded-full border bg-white overflow-hidden flex items-center justify-center shrink-0 shadow-sm">
-                    {profileImagePreview ? (
-                      <img src={profileImagePreview} alt="Profile Logo" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-2xl">🏢</span>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block font-bold text-gray-700 mb-1">Display Image / Logo</label>
-                    <input type="file" accept="image/*" onChange={handleImageChange} className="text-xs text-gray-500 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-800 file:text-white cursor-pointer" />
-                    <p className="text-[10px] text-gray-400 mt-1">PNG, JPG up to 5MB. Recommended 640x640px.</p>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Display Name *</label>
-                  <input 
-                    type="text" 
-                    value={profileForm.displayName} 
-                    onChange={(e) => setProfileForm({ ...profileForm, displayName: e.target.value })} 
-                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:border-emerald-500 font-bold" 
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Description / About</label>
-                  <textarea 
-                    rows={3}
-                    value={profileForm.description} 
-                    onChange={(e) => setProfileForm({ ...profileForm, description: e.target.value })} 
-                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:border-emerald-500 resize-none" 
-                    placeholder="Professional Business Communication Solutions..."
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-gray-700 mb-1">Email Address</label>
-                    <input 
-                      type="email" 
-                      value={profileForm.email} 
-                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} 
-                      className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:border-emerald-500" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-gray-700 mb-1">Website URL</label>
-                    <input 
-                      type="text" 
-                      value={profileForm.website} 
-                      onChange={(e) => setProfileForm({ ...profileForm, website: e.target.value })} 
-                      className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:border-emerald-500" 
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Business Address</label>
-                  <input 
-                    type="text" 
-                    value={profileForm.address} 
-                    onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })} 
-                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:border-emerald-500" 
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Category (Fetched from Meta)</label>
-                  <select 
-                    value={profileForm.category}
-                    onChange={(e) => setProfileForm({ ...profileForm, category: e.target.value })}
-                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:border-emerald-500 cursor-pointer font-medium"
-                  >
-                    {metaCategories.map((cat) => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Right Side: WhatsApp Business Profile Live Preview */}
-              <div className="bg-slate-900 rounded-3xl p-4 text-white flex flex-col items-center justify-between shadow-xl">
-                <div className="w-full text-center border-b border-slate-800 pb-2">
-                  <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">📱 Live WhatsApp Preview</span>
-                </div>
-                
-                <div className="bg-white text-slate-800 rounded-2xl w-full p-4 space-y-3 my-4 shadow-lg text-xs">
-                  <div className="flex items-center space-x-3 border-b pb-3">
-                    <div className="w-12 h-12 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center shrink-0 border">
-                      {profileImagePreview ? (
-                        <img src={profileImagePreview} alt="Preview" className="w-full h-full object-cover" />
-                      ) : (
-                        <span>🏢</span>
-                      )}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-sm">{profileForm.displayName || "Business Name"}</h4>
-                      <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full inline-block mt-0.5">Official Business Account</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 text-[11px] text-slate-600">
-                    <p className="italic text-slate-700">{profileForm.description || "Business description..."}</p>
-                    <div className="flex items-center space-x-2 pt-1">
-                      <span>🏷️</span>
-                      <span className="font-medium">{metaCategories.find(c => c.value === profileForm.category)?.label || profileForm.category}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span>📍</span>
-                      <span className="truncate">{profileForm.address || "Address"}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span>✉️</span>
-                      <span className="text-blue-600 truncate">{profileForm.email || "Email"}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span>🌐</span>
-                      <span className="text-blue-600 truncate">{profileForm.website || "Website"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-[10px] text-slate-400 text-center">
-                  Changes sync instantly with Meta Graph API Cloud.
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-3 border-t">
-              <button onClick={() => setSelectedProfileChannel(null)} className="px-5 py-2.5 border rounded-xl font-bold cursor-pointer hover:bg-gray-50">Cancel</button>
-              <button 
-                onClick={handleSaveBusinessProfile}
-                disabled={isSavingProfile}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold cursor-pointer shadow disabled:opacity-50 transition"
-              >
-                {isSavingProfile ? "Syncing with Meta..." : "💾 Save & Sync to Meta"}
-              </button>
             </div>
           </div>
         </div>

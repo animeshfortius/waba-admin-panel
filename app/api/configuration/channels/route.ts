@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-function formatLimitClean(tier: string | undefined | null, wabaId?: string): string {
-  if (wabaId === "4197516850547460" && (!tier || tier === "TIER_NOT_FOUND" || tier === "UNASSIGNED")) {
-    return "2,000 / 24 hrs";
-  }
-
-  if (!tier) return "UNASSIGNED";
+function formatLimitClean(tier: string | undefined | null): string {
+  if (!tier || tier === "TIER_NOT_FOUND" || tier === "UNASSIGNED") return "250 / 24 hrs";
 
   const cleanTier = String(tier).toUpperCase().trim();
 
@@ -35,7 +31,21 @@ function formatLimitClean(tier: string | undefined | null, wabaId?: string): str
   if (cleanTier.includes("1K") || cleanTier.includes("1000")) return "1,000 / 24 hrs";
   if (cleanTier.includes("250")) return "250 / 24 hrs";
 
-  return cleanTier;
+  return cleanTier + " / 24 hrs";
+}
+
+function formatQualityClean(rating: string | undefined | null): string {
+  if (!rating) return "High";
+  const cleanRating = String(rating).toUpperCase().trim();
+
+  const ratingMap: Record<string, string> = {
+    "GREEN": "High",
+    "YELLOW": "Medium",
+    "RED": "Low",
+    "UNKNOWN": "High"
+  };
+
+  return ratingMap[cleanRating] || rating;
 }
 
 export async function GET(request: Request) {
@@ -43,7 +53,6 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
 
-    // 👇 Sirf wahi accounts fetch honge jo is logged-in user ke hain (agar userId provided hai)
     const accounts = await prisma.wabaAccount.findMany({
       where: userId ? { userId } : {},
       orderBy: { id: "desc" }
@@ -58,57 +67,62 @@ export async function GET(request: Request) {
       const cleanWabaId = acc.wabaId ? acc.wabaId.replace("WABA_", "").trim() : "";
       const cleanPhoneId = acc.phoneNumberId ? acc.phoneNumberId.replace("PHONE_", "").trim() : "";
 
-      // Meta se live Messaging Limit fetch karo
-      if (acc.accessToken && cleanWabaId) {
+      // 🔍 Meta se live data fetch karne ki core logic (Phone Number ID & WABA ID priority wise)
+      if (acc.accessToken) {
         try {
-          const limitRes = await fetch(
-            `https://graph.facebook.com/v26.0/${cleanWabaId}?fields=messaging_limit_tier`,
-            { headers: { Authorization: `Bearer ${acc.accessToken}` } }
-          );
-          const limitData = await limitRes.json();
-          
-          if (limitData && limitData.messaging_limit_tier) {
-            currentLimit = limitData.messaging_limit_tier;
+          // 1. Pehle Phone Number ID se limit aur quality rating dono fetch karo
+          if (cleanPhoneId) {
+            const phoneRes = await fetch(
+              `https://graph.facebook.com/v26.0/${cleanPhoneId}?fields=messaging_limit_tier,quality_rating`,
+              { headers: { Authorization: `Bearer ${acc.accessToken}` } }
+            );
+            const phoneData = await phoneRes.json();
+            
+            if (phoneData) {
+              if (phoneData.messaging_limit_tier && phoneData.messaging_limit_tier !== "TIER_NOT_FOUND") {
+                currentLimit = phoneData.messaging_limit_tier;
+              }
+              if (phoneData.quality_rating) {
+                currentRating = phoneData.quality_rating;
+              }
+            }
+          }
+
+          // 2. Agar limit abhi bhi na mile ya TIER_NOT_FOUND ho, toh WABA ID se try karo
+          if ((!currentLimit || currentLimit === "TIER_NOT_FOUND" || currentLimit === "UNASSIGNED") && cleanWabaId) {
+            const wabaRes = await fetch(
+              `https://graph.facebook.com/v26.0/${cleanWabaId}?fields=messaging_limit_tier`,
+              { headers: { Authorization: `Bearer ${acc.accessToken}` } }
+            );
+            const wabaData = await wabaRes.json();
+            
+            if (wabaData && wabaData.messaging_limit_tier && wabaData.messaging_limit_tier !== "TIER_NOT_FOUND") {
+              currentLimit = wabaData.messaging_limit_tier;
+            }
           }
         } catch (err) {
-          console.error("Auto fetch limit error in GET:", err);
+          console.error("Meta live fetch error:", err);
         }
       }
 
-      const formattedLimit = formatLimitClean(currentLimit, cleanWabaId);
+      const formattedLimit = formatLimitClean(currentLimit);
+      const formattedRating = formatQualityClean(currentRating);
 
-      // Meta se live Quality Rating fetch karo
-      if (acc.accessToken && cleanPhoneId) {
-        try {
-          const ratingRes = await fetch(
-            `https://graph.facebook.com/v26.0/${cleanPhoneId}?fields=quality_rating`,
-            { headers: { Authorization: `Bearer ${acc.accessToken}` } }
-          );
-          const ratingData = await ratingRes.json();
-          if (ratingData && ratingData.quality_rating) {
-            currentRating = ratingData.quality_rating;
-          }
-        } catch (err) {
-          console.error("Auto fetch rating error in GET:", err);
-        }
-      }
-
-      const dbSaveLimit = (cleanWabaId === "4197516850547460" && (!currentLimit || currentLimit === "TIER_NOT_FOUND")) ? "2000" : currentLimit;
-
-      if (dbSaveLimit !== acc.messagingLimit || currentRating !== acc.qualityRating) {
+      // Database mein clean values update kar do
+      if (currentLimit !== acc.messagingLimit || currentRating !== acc.qualityRating) {
         await prisma.wabaAccount.update({
           where: { id: acc.id },
           data: {
-            messagingLimit: dbSaveLimit,
-            qualityRating: currentRating,
+            messagingLimit: currentLimit || "UNASSIGNED",
+            qualityRating: currentRating || "UNKNOWN",
           },
-        });
+        }).catch(() => {});
       }
 
       updatedAccounts.push({
         ...acc,
         messagingLimit: formattedLimit,
-        qualityRating: currentRating,
+        qualityRating: formattedRating,
         wabaId: cleanWabaId,
         phoneNumberId: cleanPhoneId,
       });

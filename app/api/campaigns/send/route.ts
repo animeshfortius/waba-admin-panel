@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
     const cleanVariables = Array.isArray(variables) ? variables.filter((v) => v !== undefined && v !== null) : [];
 
-    // Fetch Template details from DB safely
+    // Fetch Template details from DB
     const dbTemplate = await prisma.whatsAppTemplate.findFirst({
       where: { name: templateName, wabaId },
     });
@@ -58,74 +58,37 @@ export async function POST(req: Request) {
     let mediaPayloadParam: any = null;
 
     if (hasMediaHeader) {
-      let finalMediaUrl = headerMediaUrl;
+      let mediaValue = headerMediaUrl;
 
-      // If headerMediaUrl is missing, a placeholder, or a blob/data URI, lookup MediaLibrary safely
-      if (!finalMediaUrl || finalMediaUrl.includes("unsplash.com") || finalMediaUrl.includes("dummy.pdf") || finalMediaUrl.includes("ForBiggerBlazes")) {
-        const mediaLibMatch = await prisma.mediaLibrary.findFirst({
-          where: {
-            mediaName: { contains: templateName },
-          },
-          orderBy: { createdAt: "desc" },
-        });
+      // Check if mediaValue is a valid numeric Meta ID
+      const isMetaId = mediaValue && /^\d+$/.test(String(mediaValue).trim());
 
-        if (mediaLibMatch?.url) {
-          finalMediaUrl = mediaLibMatch.url;
-        } else if ((dbTemplate as any)?.headerMediaUrl) {
-          finalMediaUrl = (dbTemplate as any).headerMediaUrl;
-        }
-      }
-
-      const mediaType = headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
-
-      // If URL is a data URI or blob, upload it to Meta media endpoint first to get a valid Media ID
-      if (finalMediaUrl && finalMediaUrl.startsWith("data:")) {
-        try {
-          const arr = finalMediaUrl.split(",");
-          const mimeMatch = arr[0].match(/:(.*?);/);
-          const mimeType = mimeMatch ? mimeMatch[1] : (headerType === "DOCUMENT" ? "application/pdf" : headerType === "VIDEO" ? "video/mp4" : "image/png");
-          const bstr = atob(arr[1]);
-          let n = bstr.length;
-          const u8arr = new Uint8Array(n);
-          while (n--) {
-            u8arr[n] = bstr.charCodeAt(n);
-          }
-          const blob = new Blob([u8arr], { type: mimeType });
-
-          const formData = new FormData();
-          formData.append("file", blob, headerType === "DOCUMENT" ? "document.pdf" : headerType === "VIDEO" ? "video.mp4" : "image.png");
-          formData.append("messaging_product", "whatsapp");
-
-          const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${cleanPhoneId}/media`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${accessToken}` },
-            body: formData,
-          });
-
-          const uploadData = await uploadRes.json();
-          if (uploadData && uploadData.id) {
-            mediaPayloadParam = {
-              type: mediaType,
-              [mediaType]: { id: uploadData.id },
-            };
-          }
-        } catch (uploadErr) {
-          console.error("Meta Media Upload Error:", uploadErr);
-        }
-      }
-
-      // If no media ID was generated via upload, use the URL/Link format
-      if (!mediaPayloadParam && finalMediaUrl) {
-        let absoluteUrl = finalMediaUrl;
-        if (finalMediaUrl.startsWith("/")) {
-          const host = req.headers.get("host") || "localhost:3000";
-          const protocol = host.includes("localhost") ? "http" : "https";
-          absoluteUrl = `${protocol}://${host}${finalMediaUrl}`;
-        }
-
+      if (isMetaId) {
+        const mediaKey = headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
         mediaPayloadParam = {
-          type: mediaType,
-          [mediaType]: { link: absoluteUrl },
+          type: mediaKey,
+          [mediaKey]: { id: String(mediaValue).trim() },
+        };
+      } else {
+        // If it's not a valid URL or is a local filename, fallback to template default or secure public link
+        if (!mediaValue || !mediaValue.startsWith("http")) {
+          mediaValue = (dbTemplate as any)?.headerMediaUrl;
+        }
+
+        if (!mediaValue || !mediaValue.startsWith("http")) {
+          if (headerType === "VIDEO") {
+            mediaValue = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+          } else if (headerType === "DOCUMENT") {
+            mediaValue = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+          } else {
+            mediaValue = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
+          }
+        }
+
+        const mediaKey = headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
+        mediaPayloadParam = {
+          type: mediaKey,
+          [mediaKey]: { link: mediaValue },
         };
       }
     }

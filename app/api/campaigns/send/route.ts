@@ -47,53 +47,53 @@ export async function POST(req: Request) {
 
     const cleanVariables = Array.isArray(variables) ? variables.filter((v) => v !== undefined && v !== null) : [];
 
-    // 🟢 Fetch Template details from DB to get the reliable default header media if override is missing or base64 is too large
+    // 🟢 Fetch Template details from DB to check its actual headerType
     const dbTemplate = await prisma.whatsAppTemplate.findFirst({
       where: { name: templateName, wabaId },
     });
 
-    let finalMediaUrl = headerMediaUrl;
-    // If headerMediaUrl is a massive base64 string or empty, fallback to template's stored media or safe public link
-    if (!finalMediaUrl || finalMediaUrl.startsWith("data:") || finalMediaUrl.length > 500) {
-      // Check if template has media in MediaLibrary or components
-      const mediaLibMatch = await prisma.mediaLibrary.findFirst({
-        where: { mediaName: { contains: templateName } },
-        orderBy: { createdAt: "desc" },
-      });
-      
-      if (mediaLibMatch?.url && !mediaLibMatch.url.startsWith("data:")) {
-        finalMediaUrl = mediaLibMatch.url;
-      } else {
-        // Safe default public fallbacks based on template header type
-        const hType = dbTemplate?.headerType?.toUpperCase();
-        if (hType === "VIDEO") {
-          finalMediaUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
-        } else if (hType === "DOCUMENT") {
-          finalMediaUrl = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
-        } else {
-          finalMediaUrl = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
-        }
-      }
-    }
+    const headerType = dbTemplate?.headerType?.toUpperCase() || "NONE";
+    const hasMediaHeader = headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT";
 
     let mediaPayloadParam: any = null;
 
-    if (finalMediaUrl) {
-      const isVideo = finalMediaUrl.includes("video") || finalMediaUrl.match(/\.(mp4|3gp|mov)$/i);
-      const isDoc = finalMediaUrl.includes("application/pdf") || finalMediaUrl.includes("document") || finalMediaUrl.match(/\.(pdf|doc|docx|xls|xlsx|txt)$/i);
-      const mediaType = isVideo ? "video" : isDoc ? "document" : "image";
+    // 🟢 Only construct media header if template actually requires media header
+    if (hasMediaHeader) {
+      let finalMediaUrl = headerMediaUrl;
+      if (!finalMediaUrl || finalMediaUrl.startsWith("data:") || finalMediaUrl.length > 500) {
+        const mediaLibMatch = await prisma.mediaLibrary.findFirst({
+          where: { mediaName: { contains: templateName } },
+          orderBy: { createdAt: "desc" },
+        });
+
+        if (mediaLibMatch?.url && !mediaLibMatch.url.startsWith("data:")) {
+          finalMediaUrl = mediaLibMatch.url;
+        } else {
+          if (headerType === "VIDEO") {
+            finalMediaUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+          } else if (headerType === "DOCUMENT") {
+            finalMediaUrl = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+          } else {
+            finalMediaUrl = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
+          }
+        }
+      }
+
+      const mediaType = headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
 
       let absoluteUrl = finalMediaUrl;
-      if (finalMediaUrl.startsWith("/")) {
+      if (finalMediaUrl && finalMediaUrl.startsWith("/")) {
         const host = req.headers.get("host") || "localhost:3000";
         const protocol = host.includes("localhost") ? "http" : "https";
         absoluteUrl = `${protocol}://${host}${finalMediaUrl}`;
       }
 
-      mediaPayloadParam = {
-        type: mediaType,
-        [mediaType]: { link: absoluteUrl },
-      };
+      if (absoluteUrl) {
+        mediaPayloadParam = {
+          type: mediaType,
+          [mediaType]: { link: absoluteUrl },
+        };
+      }
     }
 
     let sentCount = 0;
@@ -108,7 +108,8 @@ export async function POST(req: Request) {
 
       const templateComponents: any[] = [];
 
-      if (mediaPayloadParam) {
+      // 🟢 Only push header parameter if template is media type and payload exists
+      if (hasMediaHeader && mediaPayloadParam) {
         templateComponents.push({
           type: "header",
           parameters: [mediaPayloadParam],

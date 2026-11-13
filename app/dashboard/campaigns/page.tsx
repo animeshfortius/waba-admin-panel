@@ -15,6 +15,14 @@ function CampaignsContent() {
   const [allTemplates, setAllTemplates] = useState<any[]>([]);
   const [selectedChannel, setSelectedChannel] = useState("");
 
+  // User Pricing Rates State (Dynamic per user from DB)
+  const [userRates, setUserRates] = useState({
+    marketing: 0.135,
+    utility: 0.100,
+    authentication: 0.080,
+    service: 0.090,
+  });
+
   // Audience & Numbers Processing
   const [numbersInput, setNumbersInput] = useState("");
   const [removeDuplicates, setRemoveDuplicates] = useState(true);
@@ -141,6 +149,11 @@ function CampaignsContent() {
         setWabaAccounts(accounts);
         setAllTemplates(tpls);
 
+        // 🟢 Set dynamic user-specific rates from backend
+        if (data.userRates) {
+          setUserRates(data.userRates);
+        }
+
         const urlWaba = searchParams?.get("wabaNumber");
         const urlTplId = searchParams?.get("templateId");
 
@@ -181,6 +194,25 @@ function CampaignsContent() {
     }
     return rawList;
   }, [numbersInput, removeDuplicates, removeBlacklist]);
+
+  // 🟢 Dynamic Cost Calculation based on template category & user-specific rates
+  const { ratePerMessage, totalEstimatedCost } = useMemo(() => {
+    const cat = activeTemplate?.category?.toUpperCase() || "UTILITY";
+    let rate = userRates.utility;
+
+    if (cat === "MARKETING") {
+      rate = userRates.marketing;
+    } else if (cat === "AUTHENTICATION") {
+      rate = userRates.authentication;
+    } else if (cat === "SERVICE") {
+      rate = userRates.service;
+    }
+
+    return {
+      ratePerMessage: rate,
+      totalEstimatedCost: (processedNumbers.length * rate).toFixed(3),
+    };
+  }, [activeTemplate, processedNumbers.length, userRates]);
 
   const handleNextStep1 = () => {
     if (!campaignName.trim()) {
@@ -701,9 +733,11 @@ function CampaignsContent() {
                   <div className="font-bold text-gray-800 mt-0.5">{processedNumbers.length}</div>
                 </div>
                 <div>
-                  <div className="text-gray-400 font-semibold text-[10px]">ESTIMATED COST</div>
+                  <div className="text-gray-400 font-semibold text-[10px]">
+                    ESTIMATED COST (₹{ratePerMessage}/msg)
+                  </div>
                   <div className="font-bold text-emerald-600 mt-0.5">
-                    ₹{(processedNumbers.length * 0.135).toFixed(3)} Credits
+                    ₹{totalEstimatedCost} Credits
                   </div>
                 </div>
               </div>

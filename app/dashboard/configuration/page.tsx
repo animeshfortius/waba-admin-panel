@@ -272,11 +272,17 @@ function ConfigContent() {
     }
   };
 
+  // 🟢 Fixed Image Change Handler (Base64 conversion to prevent 404 upload errors)
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setProfileImageFile(file);
-      setProfileImagePreview(URL.createObjectURL(file));
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setProfileImagePreview(base64String);
+        setProfileImageFile(base64String);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -284,21 +290,7 @@ function ConfigContent() {
     if (!selectedProfileChannel) return;
     setIsSavingProfile(true);
     try {
-      let uploadedLogoUrl = profileImagePreview;
-
-      if (profileImageFile) {
-        const formData = new FormData();
-        formData.append("file", profileImageFile);
-        formData.append("userId", localStorage.getItem("userId") || "emergency_admin_id");
-        const uploadRes = await fetch("/api/media", {
-          method: "POST",
-          body: formData,
-        });
-        const uploadData = await uploadRes.json();
-        if (uploadData.success && uploadData.media?.url) {
-          uploadedLogoUrl = uploadData.media.url;
-        }
-      }
+      const finalLogoUrl = profileImageFile || profileImagePreview;
 
       const res = await fetch("/api/configuration/business-profile", {
         method: "POST",
@@ -306,7 +298,7 @@ function ConfigContent() {
         body: JSON.stringify({ 
           id: selectedProfileChannel.id, 
           ...profileForm,
-          profilePicture: uploadedLogoUrl 
+          profilePicture: finalLogoUrl 
         }),
       });
 

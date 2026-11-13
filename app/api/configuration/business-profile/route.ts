@@ -81,15 +81,16 @@ export async function POST(request: Request) {
     }
 
     let metaSyncSuccess = false;
-    let metaErrorDetails = null;
+    let metaErrorResponse = null;
 
     if (channel.accessToken && !channel.accessToken.startsWith("mock_token") && channel.phoneNumberId) {
       try {
         const cleanPhoneId = channel.phoneNumberId.replace("PHONE_", "").trim();
         
+        // Meta v26.0 exact payload structure
         const payload: any = {
           messaging_product: "whatsapp",
-          about: description || "",
+          about: description || "Professional Business Communication",
           address: address || "",
           description: description || "",
           email: email || "",
@@ -114,18 +115,19 @@ export async function POST(request: Request) {
         );
 
         const metaResult = await metaRes.json();
-        if (metaRes.ok && metaResult.success) {
+        if (metaRes.ok) {
           metaSyncSuccess = true;
+          console.log("Meta Profile Sync Success:", metaResult);
         } else {
-          metaErrorDetails = metaResult;
-          console.error("Meta Profile Sync Failed Response:", metaResult);
+          metaErrorResponse = metaResult;
+          console.error("Meta Profile Sync Error:", metaResult);
         }
       } catch (metaErr) {
         console.error("Meta Profile Sync Exception:", metaErr);
       }
     }
 
-    // Database mein hamesha update kar do taaki panel par turant dikhe
+    // Database update
     const updatedChannel = await prisma.wabaAccount.update({
       where: { id },
       data: { 
@@ -141,8 +143,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ 
       success: true, 
-      metaSynced: metaSyncSuccess,
-      metaError: metaErrorDetails,
+      metaSynced: metaSyncSuccess, 
+      metaError: metaErrorResponse,
       data: updatedChannel 
     });
   } catch (error: any) {

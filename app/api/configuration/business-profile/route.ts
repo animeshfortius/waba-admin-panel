@@ -40,14 +40,16 @@ export async function GET(request: Request) {
           }
         );
         const metaData = await metaRes.json();
-        if (metaData.data && metaData.data.length > 0) {
-          const p = metaData.data[0];
+        
+        // Meta returns profile data in data array or directly
+        const p = metaData?.data?.[0] || metaData;
+        if (p) {
           metaProfile = {
             displayName: channel.displayName || "",
             description: p.about || p.description || channel.description || "",
             email: p.email || channel.email || "",
             address: p.address || channel.address || "",
-            website: (p.websites && p.websites[0]) || channel.website || "",
+            website: (Array.isArray(p.websites) ? p.websites[0] : p.websites) || channel.website || "",
             category: p.vertical || channel.category || "PROFESSIONAL_SERVICES",
             profilePicture: p.profile_picture_url || channel.profilePicture || "",
           };
@@ -87,7 +89,7 @@ export async function POST(request: Request) {
       try {
         const cleanPhoneId = channel.phoneNumberId.replace("PHONE_", "").trim();
         
-        // Meta v26.0 exact payload structure
+        // Payload for Meta v26.0
         const payload: any = {
           messaging_product: "whatsapp",
           about: description || "Professional Business Communication",
@@ -117,7 +119,6 @@ export async function POST(request: Request) {
         const metaResult = await metaRes.json();
         if (metaRes.ok) {
           metaSyncSuccess = true;
-          console.log("Meta Profile Sync Success:", metaResult);
         } else {
           metaErrorResponse = metaResult;
           console.error("Meta Profile Sync Error:", metaResult);
@@ -127,7 +128,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Database update
+    // Update in database including category & profile picture
     const updatedChannel = await prisma.wabaAccount.update({
       where: { id },
       data: { 
@@ -136,7 +137,7 @@ export async function POST(request: Request) {
         email, 
         address, 
         website, 
-        category,
+        category: category || channel.category,
         profilePicture: profilePicture || channel.profilePicture 
       },
     });

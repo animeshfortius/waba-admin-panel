@@ -642,6 +642,26 @@ function ConfigContent() {
             
             <div className="space-y-3">
               <div>
+                <label className="block font-bold text-gray-700 text-xs mb-1">SELECT ONBOARDED WABA CHANNEL *</label>
+                <select 
+                  id="mediaUploadWabaSelect"
+                  className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs focus:bg-white focus:border-emerald-500 font-medium cursor-pointer"
+                >
+                  {channels.filter((ch) => (ch.wabaId || ch.waba_id) && (ch.phoneNumberId || ch.phone_number_id)).length === 0 ? (
+                    <option value="">No onboarded WABA channels available</option>
+                  ) : (
+                    channels
+                      .filter((ch) => (ch.wabaId || ch.waba_id) && (ch.phoneNumberId || ch.phone_number_id))
+                      .map((ch) => (
+                        <option key={ch.id} value={ch.displayPhone || ch.display_phone_number || ch.phoneNumberId}>
+                          {ch.displayName || "WABA"} ({ch.displayPhone || ch.display_phone_number || ch.phoneNumberId})
+                        </option>
+                      ))
+                  )}
+                </select>
+              </div>
+
+              <div>
                 <label className="block font-bold text-gray-700 text-xs mb-1">SELECT FILE (IMAGE / VIDEO / PDF) *</label>
                 <input 
                   type="file" 
@@ -658,10 +678,17 @@ function ConfigContent() {
                 onClick={async () => {
                   if(!mediaFile) return alert("Please select a file first!");
                   
+                  const selectEl = document.getElementById("mediaUploadWabaSelect") as HTMLSelectElement;
+                  const selectedWabaNumber = selectEl ? selectEl.value : "";
+
+                  if (!selectedWabaNumber) {
+                    return alert("Please select an onboarded WABA channel first!");
+                  }
+
                   const formData = new FormData();
                   formData.append("file", mediaFile);
                   formData.append("userId", localStorage.getItem("userId") || "emergency_admin_id");
-                  formData.append("wabaNumber", "All");
+                  formData.append("wabaNumber", selectedWabaNumber);
 
                   try {
                     const res = await fetch("/api/media", {
@@ -670,7 +697,7 @@ function ConfigContent() {
                     });
                     const data = await res.json();
                     if(data.success) { 
-                      alert("✅ Media uploaded successfully!"); 
+                      alert("✅ Media uploaded successfully for channel: " + selectedWabaNumber); 
                       setShowMediaModal(false);
                       setMediaFile(null);
                       window.location.reload(); 

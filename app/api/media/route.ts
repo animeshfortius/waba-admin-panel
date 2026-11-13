@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET: Fetch media & auto-directive expired ones
+// GET: Fetch media & auto-delete expired ones
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
 
-    // Clean up expired media older than 30 days
     await prisma.mediaLibrary.deleteMany({
       where: { expiresAt: { lt: new Date() } },
     }).catch(() => {});
@@ -24,7 +23,7 @@ export async function GET(request: Request) {
   }
 }
 
-// POST: Upload media with 30-day automatic expiration using Base64 storage (Render-compatible)
+// POST: Upload media with proper MIME detection for Base64 storage
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -39,14 +38,20 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Convert directly to Base64 to ensure 100% reliability on Render ephemeral storage
+    let mime = file.type;
+    if (!mime || mime === "application/octet-stream") {
+      if (file.name.endsWith(".pdf")) mime = "application/pdf";
+      else if (file.name.match(/\.(png|jpg|jpeg)$/i)) mime = "image/png";
+      else if (file.name.match(/\.(mp4|mov)$/i)) mime = "video/mp4";
+      else mime = "application/octet-stream";
+    }
+
     const base64 = buffer.toString("base64");
-    const mime = file.type || "application/octet-stream";
     const fileUrl = `data:${mime};base64,${base64}`;
 
     let fileType = "image";
-    if (file.type.includes("video")) fileType = "video";
-    else if (file.type.includes("pdf") || file.name.match(/\.(doc|docx|pdf)$/i)) fileType = "document";
+    if (mime.includes("video") || file.name.match(/\.(mp4|mov)$/i)) fileType = "video";
+    else if (mime.includes("pdf") || file.name.match(/\.(pdf|doc|docx)$/i)) fileType = "document";
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);

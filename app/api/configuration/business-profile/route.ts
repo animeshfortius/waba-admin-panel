@@ -3,7 +3,6 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// Meta se live Business Profile fetch karne ke liye GET route
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -31,7 +30,6 @@ export async function GET(request: Request) {
       profilePicture: channel.profilePicture || "",
     };
 
-    // Meta Graph API v26.0 se live profile fetch karo
     if (channel.accessToken && !channel.accessToken.startsWith("mock_token") && channel.phoneNumberId) {
       try {
         const cleanPhoneId = channel.phoneNumberId.replace("PHONE_", "").trim();
@@ -82,10 +80,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Channel not found" }, { status: 404 });
     }
 
-    // Meta Graph API v26.0 par profile sync karo
+    let metaSyncSuccess = false;
+    let metaErrorDetails = null;
+
     if (channel.accessToken && !channel.accessToken.startsWith("mock_token") && channel.phoneNumberId) {
       try {
         const cleanPhoneId = channel.phoneNumberId.replace("PHONE_", "").trim();
+        
+        const payload: any = {
+          messaging_product: "whatsapp",
+          about: description || "",
+          address: address || "",
+          description: description || "",
+          email: email || "",
+          websites: website ? [website] : [],
+          vertical: category || "PROFESSIONAL_SERVICES",
+        };
+
+        if (profilePicture) {
+          payload.profile_picture_url = profilePicture;
+        }
+
         const metaRes = await fetch(
           `https://graph.facebook.com/v26.0/${cleanPhoneId}/whatsapp_business_profile`,
           {
@@ -94,29 +109,23 @@ export async function POST(request: Request) {
               "Authorization": `Bearer ${channel.accessToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              about: description || "",
-              address: address || "",
-              description: description || "",
-              email: email || "",
-              websites: website ? [website] : [],
-              vertical: category || "PROFESSIONAL_SERVICES",
-              ...(profilePicture ? { profile_picture_url: profilePicture } : {}),
-            }),
+            body: JSON.stringify(payload),
           }
         );
 
         const metaResult = await metaRes.json();
-        if (!metaRes.ok) {
-          console.error("Meta API Sync Error Response:", metaResult);
+        if (metaRes.ok && metaResult.success) {
+          metaSyncSuccess = true;
+        } else {
+          metaErrorDetails = metaResult;
+          console.error("Meta Profile Sync Failed Response:", metaResult);
         }
       } catch (metaErr) {
-        console.error("Failed to sync profile with Meta BM:", metaErr);
+        console.error("Meta Profile Sync Exception:", metaErr);
       }
     }
 
-    // Database mein update karo
+    // Database mein hamesha update kar do taaki panel par turant dikhe
     const updatedChannel = await prisma.wabaAccount.update({
       where: { id },
       data: { 
@@ -130,7 +139,12 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ success: true, data: updatedChannel });
+    return NextResponse.json({ 
+      success: true, 
+      metaSynced: metaSyncSuccess,
+      metaError: metaErrorDetails,
+      data: updatedChannel 
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

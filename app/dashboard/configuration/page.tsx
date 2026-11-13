@@ -572,13 +572,17 @@ function ConfigContent() {
                     const diffTime = expiryDate.getTime() - new Date().getTime();
                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                     const isExpired = diffDays <= 0;
+                    
+                    const resolvedUrl = m.url?.startsWith("http") || m.url?.startsWith("data:") || m.url?.startsWith("/") 
+                      ? m.url 
+                      : `/uploads/${m.url}`;
 
                     return (
                       <tr key={m.id} className="hover:bg-slate-50/60">
                         <td className="p-4 flex items-center space-x-3">
                           <div className="w-10 h-10 rounded-xl bg-gray-100 border overflow-hidden flex items-center justify-center shrink-0">
-                            {m.fileType === "image" || m.url?.startsWith("data:image") ? (
-                              <img src={m.url} alt={m.mediaName} className="w-full h-full object-cover" />
+                            {m.fileType === "image" || resolvedUrl.startsWith("data:image") || resolvedUrl.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
+                              <img src={resolvedUrl} alt={m.mediaName} className="w-full h-full object-cover" />
                             ) : (
                               <span className="text-[10px] font-bold text-gray-500 uppercase">{m.fileType || "doc"}</span>
                             )}
@@ -586,7 +590,7 @@ function ConfigContent() {
                           <span className="font-bold text-gray-800 truncate max-w-xs">{m.mediaName}</span>
                         </td>
                         <td className="p-4 font-mono text-blue-600 truncate max-w-xs">
-                          <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">🔗 File URL</a>
+                          <a href={resolvedUrl} target="_blank" rel="noreferrer" className="hover:underline">🔗 File URL</a>
                         </td>
                         <td className="p-4 font-mono font-semibold text-gray-600">{m.wabaNumber}</td>
                         <td className="p-4">
@@ -597,7 +601,7 @@ function ConfigContent() {
                         <td className="p-4 text-right space-x-2">
                           <button
                             onClick={() => {
-                              navigator.clipboard.writeText(m.url);
+                              navigator.clipboard.writeText(resolvedUrl);
                               alert("🔗 URL copied to clipboard!");
                             }}
                             className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-700 cursor-pointer shadow-xs"

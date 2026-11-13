@@ -103,10 +103,50 @@ export async function GET(req: Request) {
       console.error("Template fetch error:", e);
     }
 
+    // 🟢 Fetch exact user-specific pricing rates matching Prisma Schema fields
+    let userRates = {
+      marketing: 0.8046,
+      utility: 0.1550,
+      authentication: 0.1550,
+      service: 0.1550,
+    };
+
+    if (userId && userId !== "undefined" && userId !== "null" && userId !== "emergency_admin_id") {
+      try {
+        // Try finding by UUID (id) first, if not found, try username (e.g. "admin")
+        let dbUser = await prisma.user.findUnique({
+          where: { id: userId },
+        }).catch(() => null);
+
+        if (!dbUser) {
+          dbUser = await prisma.user.findFirst({
+            where: {
+              OR: [
+                { username: userId },
+                { email: userId }
+              ]
+            },
+          });
+        }
+
+        if (dbUser) {
+          userRates = {
+            marketing: Number(dbUser.perMsgRate ?? 0.8046),
+            utility: Number(dbUser.utilityRate ?? 0.1550),
+            authentication: Number(dbUser.authRate ?? 0.1550),
+            service: Number(dbUser.serviceRate ?? 0.1550),
+          };
+        }
+      } catch (rateErr) {
+        console.error("Error fetching user pricing rates:", rateErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       templates,
       wabaAccounts: accounts,
+      userRates, // 🟢 Return correct database rates
     });
   } catch (error: any) {
     console.error("GET Templates Route Error:", error);
@@ -116,6 +156,7 @@ export async function GET(req: Request) {
       wabaAccounts: [],
       templates: [],
       reviewableTemplates: [],
+      userRates: { marketing: 0.8046, utility: 0.1550, authentication: 0.1550, service: 0.1550 },
     }, { status: 500 });
   }
 }

@@ -60,6 +60,7 @@ function ConfigContent() {
   const [companyWebsite, setCompanyWebsite] = useState("");
   const [companyName, setCompanyName] = useState("");
 
+  // 🟢 WABA Action Menu & Business Profile States
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [selectedProfileChannel, setSelectedProfileChannel] = useState<any>(null);
   const [profileForm, setProfileForm] = useState({
@@ -68,11 +69,25 @@ function ConfigContent() {
     email: "",
     address: "",
     website: "",
-    category: "OTHER",
+    category: "PROFESSIONAL_SERVICES",
   });
   const [profileImageFile, setProfileImageFile] = useState<any>(null);
   const [profileImagePreview, setProfileImagePreview] = useState<string>("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Meta official categories list
+  const metaCategories = [
+    { value: "PROFESSIONAL_SERVICES", label: "Professional Services" },
+    { value: "RETAIL", label: "Retail & Shopping" },
+    { value: "AUTOMOTIVE", label: "Automotive" },
+    { value: "ENTERTAINMENT", label: "Entertainment" },
+    { value: "FINANCE", label: "Finance & Banking" },
+    { value: "EDUCATION", label: "Education" },
+    { value: "BEAUTY", label: "Beauty, Cosmetic & Personal Care" },
+    { value: "HOTEL", label: "Hotel & Lodging" },
+    { value: "RESTAURANT", label: "Restaurant" },
+    { value: "OTHER", label: "Other Business" },
+  ];
 
   useEffect(() => {
     window.fbAsyncInit = function () {
@@ -106,7 +121,7 @@ function ConfigContent() {
         .catch(() => {});
     }
 
-    // 🟢 Backend se direct fetch karenge jo Meta se securely live fetch aur format karke de raha hai
+    // Backend se direct fetch karenge jo Meta se securely live fetch aur format karke de raha hai
     fetch("/api/configuration/channels")
       .then(res => res.json())
       .then((data) => {
@@ -216,6 +231,99 @@ function ConfigContent() {
     }
   };
 
+  // 🟢 Business Profile Modal Handlers
+  const handleOpenProfileModal = async (channel: any) => {
+    setSelectedProfileChannel(channel);
+    setOpenActionMenuId(null);
+    setProfileImageFile(null);
+    setProfileImagePreview("");
+
+    setProfileForm({
+      displayName: channel.displayName || channel.displayPhone || "Fortius Infocom",
+      description: channel.description || "",
+      email: channel.email || "",
+      address: channel.address || "",
+      website: channel.website || "",
+      category: channel.category || "PROFESSIONAL_SERVICES",
+    });
+
+    if (channel.profilePicture) {
+      setProfileImagePreview(channel.profilePicture);
+    }
+
+    try {
+      const res = await fetch(`/api/configuration/business-profile?id=${channel.id}`);
+      const result = await res.json();
+      if (result.success && result.data) {
+        setProfileForm({
+          displayName: result.data.displayName || channel.displayName || "Fortius Infocom",
+          description: result.data.description || channel.description || "",
+          email: result.data.email || channel.email || "",
+          address: result.data.address || channel.address || "",
+          website: result.data.website || channel.website || "",
+          category: result.data.category || channel.category || "PROFESSIONAL_SERVICES",
+        });
+        if (result.data.profilePicture) {
+          setProfileImagePreview(result.data.profilePicture);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch live profile details", err);
+    }
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setProfileImageFile(file);
+      setProfileImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSaveBusinessProfile = async () => {
+    if (!selectedProfileChannel) return;
+    setIsSavingProfile(true);
+    try {
+      let uploadedLogoUrl = profileImagePreview;
+
+      if (profileImageFile) {
+        const formData = new FormData();
+        formData.append("file", profileImageFile);
+        formData.append("userId", localStorage.getItem("userId") || "emergency_admin_id");
+        const uploadRes = await fetch("/api/media", {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+        if (uploadData.success && uploadData.media?.url) {
+          uploadedLogoUrl = uploadData.media.url;
+        }
+      }
+
+      const res = await fetch("/api/configuration/business-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          id: selectedProfileChannel.id, 
+          ...profileForm,
+          profilePicture: uploadedLogoUrl 
+        }),
+      });
+
+      if (res.ok) {
+        alert("✅ Business Profile updated successfully on Meta Cloud API!");
+        setSelectedProfileChannel(null);
+        window.location.reload();
+      } else {
+        alert("❌ Failed to update profile on Meta");
+      }
+    } catch (err) {
+      alert("❌ Error saving business profile.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const handleFacebookSignup = () => {
     if (!window.FB) {
       alert("Facebook SDK is still loading. Please try again in a moment.");
@@ -266,98 +374,6 @@ function ConfigContent() {
         sessionInfoVersion: 3
       }
     });
-  };
-
-  const handleOpenProfileModal = async (channel: any) => {
-    setSelectedProfileChannel(channel);
-    setOpenActionMenuId(null);
-    setProfileImageFile(null);
-    setProfileImagePreview("");
-
-    setProfileForm({
-      displayName: channel.displayName || channel.displayPhone || "100 App",
-      description: channel.description || "",
-      email: channel.email || "",
-      address: channel.address || "",
-      website: channel.website || "",
-      category: channel.category || "OTHER",
-    });
-
-    if (channel.profilePicture) {
-      setProfileImagePreview(channel.profilePicture);
-    }
-
-    try {
-      const res = await fetch(`/api/configuration/business-profile?id=${channel.id}`);
-      const result = await res.json();
-      if (result.success && result.data) {
-        setProfileForm({
-          displayName: channel.displayName || channel.displayPhone || "100 App",
-          description: result.data.description || channel.description || "",
-          email: result.data.email || channel.email || "",
-          address: result.data.address || channel.address || "",
-          website: result.data.website || channel.website || "",
-          category: result.data.category || channel.category || "OTHER",
-        });
-        if (result.data.profilePicture) {
-          setProfileImagePreview(result.data.profilePicture);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch live profile details", err);
-    }
-  };
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setProfileImageFile(file);
-      setProfileImagePreview(URL.createObjectURL(file));
-    }
-  };
-
-  const handleSaveBusinessProfile = async () => {
-    if (!selectedProfileChannel) return;
-    setIsSavingProfile(true);
-    try {
-      let uploadedLogoUrl = profileImagePreview;
-
-      if (profileImageFile) {
-        const formData = new FormData();
-        formData.append("file", profileImageFile);
-        formData.append("userId", localStorage.getItem("userId") || "emergency_admin_id");
-        const uploadRes = await fetch("/api/media", {
-          method: "POST",
-          body: formData,
-        });
-        const uploadData = await uploadRes.json();
-        if (uploadData.success && uploadData.media?.url) {
-          uploadedLogoUrl = uploadData.media.url;
-        }
-      }
-
-      const res = await fetch("/api/configuration/business-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          id: selectedProfileChannel.id, 
-          ...profileForm,
-          profilePicture: uploadedLogoUrl 
-        }),
-      });
-
-      if (res.ok) {
-        alert("Business Profile saved successfully!");
-        setSelectedProfileChannel(null);
-        window.location.reload();
-      } else {
-        alert("Failed to update profile on Meta");
-      }
-    } catch (err) {
-      alert("Error saving business profile.");
-    } finally {
-      setIsSavingProfile(false);
-    }
   };
 
   return (
@@ -421,7 +437,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* WABA CHANNELS TABLE */}
+      {/* WABA CHANNELS TABLE WITH RESTORED ACTIONS MENU */}
       {activeSection === "waba_channels" && (
         <div className="space-y-6">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
@@ -491,7 +507,7 @@ function ConfigContent() {
                           ⋮
                         </button>
                         {openActionMenuId === ch.id && (
-                          <div className="absolute right-3 top-10 bg-white border rounded-xl shadow-lg z-30 w-40 p-1">
+                          <div className="absolute right-3 top-10 bg-white border rounded-xl shadow-lg z-30 w-44 p-1">
                             <button
                               onClick={() => handleOpenProfileModal(ch)}
                               className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-slate-50 rounded-lg text-slate-700 font-semibold cursor-pointer"
@@ -526,15 +542,11 @@ function ConfigContent() {
             </button>
           </div>
 
-          {/* Meta Policy Banner */}
           <div className="bg-blue-50 border border-blue-200 text-blue-900 p-3.5 rounded-xl flex items-center space-x-3 text-[11px]">
             <span>ℹ️</span>
-            <span>
-              As per Meta WhatsApp media retention policies, only media files from the last 30 days are available in the Media Library. Older media is automatically deleted.
-            </span>
+            <span>As per Meta WhatsApp media retention policies, only media files from the last 30 days are available in the Media Library.</span>
           </div>
 
-          {/* Filter Bar */}
           <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between">
             <input
               type="text"
@@ -546,7 +558,6 @@ function ConfigContent() {
             <span className="text-gray-500 font-bold text-[11px]">Total: {filteredMedia.length} record(s)</span>
           </div>
 
-          {/* Media Table */}
           <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -561,9 +572,7 @@ function ConfigContent() {
               <tbody className="divide-y divide-gray-100">
                 {filteredMedia.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-10 text-center text-gray-400 font-medium">
-                      No media files found. Click "+ Add Media" to upload your first file.
-                    </td>
+                    <td colSpan={5} className="p-10 text-center text-gray-400 font-medium">No media files found.</td>
                   </tr>
                 ) : (
                   filteredMedia.map((m: any) => {
@@ -792,6 +801,160 @@ function ConfigContent() {
             <div className="flex justify-start items-center space-x-3 pt-3 border-t">
               <button onClick={handleFacebookSignup} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs">Continue with Facebook</button>
               <button onClick={() => setShowFacebookModal(false)} className="bg-red-500 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🟢 BUSINESS PROFILE MODAL WITH REAL-TIME PREVIEW */}
+      {selectedProfileChannel && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 font-sans text-xs">
+          <div className="bg-white rounded-3xl max-w-5xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-gray-800 text-sm">Business Profile Settings ({selectedProfileChannel.displayPhone})</h3>
+              <button onClick={() => setSelectedProfileChannel(null)} className="text-gray-400 font-bold cursor-pointer text-sm">✕</button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="md:col-span-2 space-y-4">
+                <div className="flex items-center space-x-4 bg-slate-50 p-3 rounded-2xl border">
+                  <div className="w-16 h-16 rounded-full border bg-white overflow-hidden flex items-center justify-center shrink-0 shadow-sm">
+                    {profileImagePreview ? (
+                      <img src={profileImagePreview} alt="Profile Logo" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-2xl">🏢</span>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Display Image / Logo</label>
+                    <input type="file" accept="image/*" onChange={handleImageChange} className="text-xs text-gray-500 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-800 file:text-white cursor-pointer" />
+                    <p className="text-[10px] text-gray-400 mt-1">PNG, JPG up to 5MB. Recommended 640x640px.</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Display Name *</label>
+                  <input 
+                    type="text" 
+                    value={profileForm.displayName} 
+                    onChange={(e) => setProfileForm({ ...profileForm, displayName: e.target.value })} 
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:border-emerald-500 font-bold" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Description / About</label>
+                  <textarea 
+                    rows={3}
+                    value={profileForm.description} 
+                    onChange={(e) => setProfileForm({ ...profileForm, description: e.target.value })} 
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:border-emerald-500 resize-none" 
+                    placeholder="Professional Business Communication Solutions..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Email Address</label>
+                    <input 
+                      type="email" 
+                      value={profileForm.email} 
+                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} 
+                      className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:border-emerald-500" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Website URL</label>
+                    <input 
+                      type="text" 
+                      value={profileForm.website} 
+                      onChange={(e) => setProfileForm({ ...profileForm, website: e.target.value })} 
+                      className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:border-emerald-500" 
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Business Address</label>
+                  <input 
+                    type="text" 
+                    value={profileForm.address} 
+                    onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })} 
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:border-emerald-500" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Category (Fetched from Meta)</label>
+                  <select 
+                    value={profileForm.category}
+                    onChange={(e) => setProfileForm({ ...profileForm, category: e.target.value })}
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:border-emerald-500 cursor-pointer font-medium"
+                  >
+                    {metaCategories.map((cat) => (
+                      <option key={cat.value} value={cat.value}>{cat.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Right Side: WhatsApp Business Profile Live Preview */}
+              <div className="bg-slate-900 rounded-3xl p-4 text-white flex flex-col items-center justify-between shadow-xl">
+                <div className="w-full text-center border-b border-slate-800 pb-2">
+                  <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">📱 Live WhatsApp Preview</span>
+                </div>
+                
+                <div className="bg-white text-slate-800 rounded-2xl w-full p-4 space-y-3 my-4 shadow-lg text-xs">
+                  <div className="flex items-center space-x-3 border-b pb-3">
+                    <div className="w-12 h-12 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center shrink-0 border">
+                      {profileImagePreview ? (
+                        <img src={profileImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <span>🏢</span>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">{profileForm.displayName || "Business Name"}</h4>
+                      <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full inline-block mt-0.5">Official Business Account</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-[11px] text-slate-600">
+                    <p className="italic text-slate-700">{profileForm.description || "Business description..."}</p>
+                    <div className="flex items-center space-x-2 pt-1">
+                      <span>🏷️</span>
+                      <span className="font-medium">{metaCategories.find(c => c.value === profileForm.category)?.label || profileForm.category}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span>📍</span>
+                      <span className="truncate">{profileForm.address || "Address"}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span>✉️</span>
+                      <span className="text-blue-600 truncate">{profileForm.email || "Email"}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span>🌐</span>
+                      <span className="text-blue-600 truncate">{profileForm.website || "Website"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-[10px] text-slate-400 text-center">
+                  Changes sync instantly with Meta Cloud API.
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t">
+              <button onClick={() => setSelectedProfileChannel(null)} className="px-5 py-2.5 border rounded-xl font-bold cursor-pointer hover:bg-gray-50">Cancel</button>
+              <button 
+                onClick={handleSaveBusinessProfile}
+                disabled={isSavingProfile}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold cursor-pointer shadow disabled:opacity-50 transition"
+              >
+                {isSavingProfile ? "Syncing with Meta..." : "💾 Save & Sync to Meta"}
+              </button>
             </div>
           </div>
         </div>

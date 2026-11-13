@@ -47,12 +47,12 @@ export async function POST(req: Request) {
 
     const cleanVariables = Array.isArray(variables) ? variables.filter((v) => v !== undefined && v !== null) : [];
 
-    // Fetch Template details from DB
+    // Fetch Template details from DB safely
     const dbTemplate = await prisma.whatsAppTemplate.findFirst({
       where: { name: templateName, wabaId },
     });
 
-    const headerType = dbTemplate?.headerType?.toUpperCase() || "NONE";
+    const headerType = (dbTemplate as any)?.headerType?.toUpperCase() || "NONE";
     const hasMediaHeader = headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT";
 
     let mediaPayloadParam: any = null;
@@ -60,22 +60,19 @@ export async function POST(req: Request) {
     if (hasMediaHeader) {
       let finalMediaUrl = headerMediaUrl;
 
-      // 🟢 Smart Media Resolver: If headerMediaUrl is a placeholder or fallback, lookup MediaLibrary or Template default
+      // If headerMediaUrl is missing, a placeholder, or a blob/data URI, lookup MediaLibrary safely
       if (!finalMediaUrl || finalMediaUrl.includes("unsplash.com") || finalMediaUrl.includes("dummy.pdf") || finalMediaUrl.includes("ForBiggerBlazes")) {
         const mediaLibMatch = await prisma.mediaLibrary.findFirst({
           where: {
-            OR: [
-              { mediaName: { contains: templateName } },
-              { mediaType: { equals: headerType, mode: "insensitive" } }
-            ]
+            mediaName: { contains: templateName },
           },
           orderBy: { createdAt: "desc" },
         });
 
         if (mediaLibMatch?.url) {
           finalMediaUrl = mediaLibMatch.url;
-        } else if (dbTemplate?.headerMediaUrl) {
-          finalMediaUrl = dbTemplate.headerMediaUrl;
+        } else if ((dbTemplate as any)?.headerMediaUrl) {
+          finalMediaUrl = (dbTemplate as any).headerMediaUrl;
         }
       }
 

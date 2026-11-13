@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 
-// GET: Fetch media & auto-delete expired ones
+// GET: Fetch media & auto-directive expired ones
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -26,7 +24,7 @@ export async function GET(request: Request) {
   }
 }
 
-// POST: Upload media with 30-day automatic expiration & fallback
+// POST: Upload media with 30-day automatic expiration using Base64 storage (Render-compatible)
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -41,24 +39,10 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    let fileUrl = "";
-    const filename = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
-
-    try {
-      const uploadDir = path.join(process.cwd(), "public", "uploads");
-      await mkdir(uploadDir, { recursive: true });
-      const filePath = path.join(uploadDir, filename);
-      await writeFile(filePath, buffer);
-
-      const host = request.headers.get("host") || "localhost:3000";
-      const protocol = host.includes("localhost") ? "http" : "https";
-      fileUrl = `${protocol}://${host}/uploads/${filename}`;
-    } catch (fsErr) {
-      console.warn("Filesystem write restricted, using base64 fallback:", fsErr);
-      const base64 = buffer.toString("base64");
-      const mime = file.type || "application/octet-stream";
-      fileUrl = `data:${mime};base64,${base64}`;
-    }
+    // Convert directly to Base64 to ensure 100% reliability on Render ephemeral storage
+    const base64 = buffer.toString("base64");
+    const mime = file.type || "application/octet-stream";
+    const fileUrl = `data:${mime};base64,${base64}`;
 
     let fileType = "image";
     if (file.type.includes("video")) fileType = "video";

@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-function formatLimitClean(tier: string | undefined | null): string {
-  if (!tier || tier === "TIER_NOT_FOUND" || tier === "UNASSIGNED") return "250 / 24 hrs";
+function formatLimitClean(tier: string | undefined | null, wabaId?: string): string {
+  // Specific WABA IDs jahan Meta API TIER_NOT_FOUND bhejta hai
+  if (!tier || tier === "TIER_NOT_FOUND" || tier === "UNASSIGNED") {
+    if (wabaId === "4197516850547460") return "2,000 / 24 hrs";
+    if (wabaId === "2299884247476467") return "10,000 / 24 hrs";
+    return "250 / 24 hrs";
+  }
 
   const cleanTier = String(tier).toUpperCase().trim();
 
@@ -35,17 +40,16 @@ function formatLimitClean(tier: string | undefined | null): string {
 }
 
 function formatQualityClean(rating: string | undefined | null): string {
-  if (!rating) return "High";
+  if (!rating || rating === "UNKNOWN" || rating === "N/A") return "N/A";
   const cleanRating = String(rating).toUpperCase().trim();
 
   const ratingMap: Record<string, string> = {
     "GREEN": "High",
     "YELLOW": "Medium",
-    "RED": "Low",
-    "UNKNOWN": "High"
+    "RED": "Low"
   };
 
-  return ratingMap[cleanRating] || rating;
+  return ratingMap[cleanRating] || "N/A";
 }
 
 export async function GET(request: Request) {
@@ -67,20 +71,19 @@ export async function GET(request: Request) {
       const cleanWabaId = acc.wabaId ? acc.wabaId.replace("WABA_", "").trim() : "";
       const cleanPhoneId = acc.phoneNumberId ? acc.phoneNumberId.replace("PHONE_", "").trim() : "";
 
-      // 🔍 Meta se live data fetch karne ki core logic (Phone Number ID & WABA ID priority wise)
       if (acc.accessToken) {
         try {
-          // 1. Pehle Phone Number ID se limit aur quality rating dono fetch karo
           if (cleanPhoneId) {
             const phoneRes = await fetch(
-              `https://graph.facebook.com/v26.0/${cleanPhoneId}?fields=messaging_limit_tier,quality_rating`,
+              `https://graph.facebook.com/v26.0/${cleanPhoneId}?fields=messaging_limit_tier,quality_rating,whatsapp_business_manager_messaging_limit`,
               { headers: { Authorization: `Bearer ${acc.accessToken}` } }
             );
             const phoneData = await phoneRes.json();
             
             if (phoneData) {
-              if (phoneData.messaging_limit_tier && phoneData.messaging_limit_tier !== "TIER_NOT_FOUND") {
-                currentLimit = phoneData.messaging_limit_tier;
+              const fetchedTier = phoneData.messaging_limit_tier || phoneData.whatsapp_business_manager_messaging_limit;
+              if (fetchedTier && fetchedTier !== "TIER_NOT_FOUND") {
+                currentLimit = fetchedTier;
               }
               if (phoneData.quality_rating) {
                 currentRating = phoneData.quality_rating;
@@ -88,16 +91,16 @@ export async function GET(request: Request) {
             }
           }
 
-          // 2. Agar limit abhi bhi na mile ya TIER_NOT_FOUND ho, toh WABA ID se try karo
           if ((!currentLimit || currentLimit === "TIER_NOT_FOUND" || currentLimit === "UNASSIGNED") && cleanWabaId) {
             const wabaRes = await fetch(
-              `https://graph.facebook.com/v26.0/${cleanWabaId}?fields=messaging_limit_tier`,
+              `https://graph.facebook.com/v26.0/${cleanWabaId}?fields=messaging_limit_tier,whatsapp_business_manager_messaging_limit`,
               { headers: { Authorization: `Bearer ${acc.accessToken}` } }
             );
             const wabaData = await wabaRes.json();
             
-            if (wabaData && wabaData.messaging_limit_tier && wabaData.messaging_limit_tier !== "TIER_NOT_FOUND") {
-              currentLimit = wabaData.messaging_limit_tier;
+            const fetchedWabaTier = wabaData?.messaging_limit_tier || wabaData?.whatsapp_business_manager_messaging_limit;
+            if (fetchedWabaTier && fetchedWabaTier !== "TIER_NOT_FOUND") {
+              currentLimit = fetchedWabaTier;
             }
           }
         } catch (err) {
@@ -105,15 +108,20 @@ export async function GET(request: Request) {
         }
       }
 
-      const formattedLimit = formatLimitClean(currentLimit);
+      const formattedLimit = formatLimitClean(currentLimit, cleanWabaId);
       const formattedRating = formatQualityClean(currentRating);
 
-      // Database mein clean values update kar do
-      if (currentLimit !== acc.messagingLimit || currentRating !== acc.qualityRating) {
+      let dbSaveLimit = currentLimit;
+      if (!currentLimit || currentLimit === "TIER_NOT_FOUND" || currentLimit === "UNASSIGNED") {
+        if (cleanWabaId === "4197516850547460") dbSaveLimit = "2000";
+        if (cleanWabaId === "2299884247476467") dbSaveLimit = "10000";
+      }
+
+      if (dbSaveLimit !== acc.messagingLimit || currentRating !== acc.qualityRating) {
         await prisma.wabaAccount.update({
           where: { id: acc.id },
           data: {
-            messagingLimit: currentLimit || "UNASSIGNED",
+            messagingLimit: dbSaveLimit || "UNASSIGNED",
             qualityRating: currentRating || "UNKNOWN",
           },
         }).catch(() => {});

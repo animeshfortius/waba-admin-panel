@@ -590,13 +590,35 @@ function ConfigContent() {
                           <span className="font-bold text-gray-800 truncate max-w-xs">{m.mediaName}</span>
                         </td>
                         <td className="p-4 font-mono text-blue-600 truncate max-w-xs">
-                          <a href={resolvedUrl} target="_blank" rel="noreferrer" className="hover:underline">🔗 File URL</a>
-                        </td>
-                        <td className="p-4 font-mono font-semibold text-gray-600">{m.wabaNumber}</td>
-                        <td className="p-4">
-                          <span className={`px-3 py-1 rounded-full font-bold text-[10px] inline-block ${isExpired ? "bg-red-100 text-red-700 border border-red-300" : "bg-emerald-100 text-emerald-800 border border-emerald-300"}`}>
-                            {isExpired ? "Expired" : `${diffDays} days left`}
-                          </span>
+                          <a 
+                            href="#" 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (resolvedUrl.startsWith("data:")) {
+                                try {
+                                  const arr = resolvedUrl.split(',');
+                                  const mime = arr[0].match(/:(.*?);/)[1];
+                                  const bstr = atob(arr[1]);
+                                  let n = bstr.length;
+                                  const u8arr = new Uint8Array(n);
+                                  while (n--) {
+                                    u8arr[n] = bstr.charCodeAt(n);
+                                  }
+                                  const blob = new Blob([u8arr], { type: mime });
+                                  const blobUrl = URL.createObjectURL(blob);
+                                  window.open(blobUrl, '_blank');
+                                } catch (err) {
+                                  console.error(err);
+                                  window.open(resolvedUrl, '_blank');
+                                }
+                              } else {
+                                window.open(resolvedUrl, '_blank');
+                              }
+                            }}
+                            className="hover:underline cursor-pointer"
+                          >
+                            🔗 File URL
+                          </a>
                         </td>
                         <td className="p-4 text-right space-x-2">
                           <button

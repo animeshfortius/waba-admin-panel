@@ -36,79 +36,72 @@ function CampaignsContent() {
   const [templateType, setTemplateType] = useState("All");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
 
-  {/* Header Media Section (Auto-fetched default file with optional override / replace file option) */}
-              {activeTemplate &&
-                activeTemplate.headerType &&
-                activeTemplate.headerType !== "TEXT" &&
-                activeTemplate.headerType !== "NONE" && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <label className="font-bold text-blue-900 text-xs">
-                        HEADER {activeTemplate.headerType} (Auto-Attached from Template)
-                      </label>
-                      <span className="text-[10px] bg-blue-200 text-blue-800 px-2 py-0.5 rounded font-mono">
-                        {overrideFileName ? "File Replaced" : "Default Saved"}
-                      </span>
-                    </div>
+  // Header Media State (Auto-fetched or Overridden File)
+  const [headerMediaUrl, setHeaderMediaUrl] = useState("");
+  const [overrideFileName, setOverrideFileName] = useState("");
 
-                    <div className="bg-white p-2.5 rounded-xl border flex items-center justify-between text-xs font-mono">
-                      <span className="truncate text-gray-700">
-                        {overrideFileName ? `Replaced With: ${overrideFileName}` : headerMediaUrl || "No media attached"}
-                      </span>
-                      {overrideFileName && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOverrideFileName("");
-                            if (activeTemplate?.headerMediaUrl) {
-                              setHeaderMediaUrl(activeTemplate.headerMediaUrl);
-                            }
-                          }}
-                          className="text-red-600 font-bold text-[10px] hover:underline ml-2 cursor-pointer"
-                        >
-                          Reset to Default
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Replace File / Browse Override Option */}
-                    <div className="pt-1">
-                      <label className="block font-semibold text-gray-600 text-[11px] mb-1">
-                        Replace File / Choose a different {activeTemplate.headerType.toLowerCase()} for this campaign:
-                      </label>
-                      <input
-                        type="file"
-                        accept={
-                          activeTemplate.headerType === "IMAGE"
-                            ? "image/*"
-                            : activeTemplate.headerType === "VIDEO"
-                            ? "video/*"
-                            : ".pdf,.doc,.docx"
-                        }
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            const file = e.target.files[0];
-                            setOverrideFileName(file.name);
-                            const reader = new FileReader();
-                            reader.onload = (event) => {
-                              const base64String = event.target?.result as string;
-                              if (base64String) {
-                                setHeaderMediaUrl(base64String);
-                              }
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                        className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
-                      />
-                    </div>
-                  </div>
-                )}
-                
   // Dynamic Variable Mapping States
   const [variableMappings, setVariableMappings] = useState<{
     [key: string]: { type: string; value: string };
   }>({});
+
+  // 🟢 1. First Declare activeTemplate and filtered/derived values so they are accessible everywhere
+  const activeTemplate = useMemo(() => {
+    return allTemplates.find((t) => t.id === selectedTemplateId) || null;
+  }, [allTemplates, selectedTemplateId]);
+
+  const filteredApprovedTemplates = useMemo(() => {
+    return allTemplates.filter((tpl) => {
+      const isApproved = tpl.status?.toUpperCase() === "APPROVED";
+      const matchesWaba = !selectedChannel || tpl.wabaId === selectedChannel;
+      const matchesCat =
+        !selectedCategory || tpl.category?.toUpperCase() === selectedCategory.toUpperCase();
+      return isApproved && matchesWaba && matchesCat;
+    });
+  }, [allTemplates, selectedChannel, selectedCategory]);
+
+  // Auto-fetch default template media when template is selected
+  useEffect(() => {
+    if (activeTemplate) {
+      if (activeTemplate.headerMediaUrl) {
+        setHeaderMediaUrl(activeTemplate.headerMediaUrl);
+      } else {
+        setHeaderMediaUrl("");
+      }
+      setOverrideFileName("");
+    }
+  }, [activeTemplate]);
+
+  const detectedVariables = useMemo(() => {
+    if (!activeTemplate?.bodyText) return [];
+    const matches = activeTemplate.bodyText.match(/\{\{(\d+)\}\}/g) || [];
+    const uniqueVars = Array.from(new Set(matches)).sort((a: any, b: any) => {
+      const numA = parseInt(a.replace(/\D/g, ""), 10);
+      const numB = parseInt(b.replace(/\D/g, ""), 10);
+      return numA - numB;
+    });
+    return uniqueVars as string[];
+  }, [activeTemplate]);
+
+  useEffect(() => {
+    const initialMaps: { [key: string]: { type: string; value: string } } = {};
+    detectedVariables.forEach((v) => {
+      initialMaps[v] = variableMappings[v] || { type: "Assign Const Value", value: "" };
+    });
+    setVariableMappings(initialMaps);
+  }, [detectedVariables]);
+
+  const livePreviewBody = useMemo(() => {
+    if (!activeTemplate) return "There is no template added yet";
+    let text = activeTemplate.bodyText || "";
+    detectedVariables.forEach((v) => {
+      const mappedVal = variableMappings[v]?.value;
+      if (mappedVal) {
+        text = text.split(v).join(mappedVal);
+      }
+    });
+    return text;
+  }, [activeTemplate, detectedVariables, variableMappings]);
 
   // Set Default System Date & Time Campaign Name + Fetch User WABA & Templates
   useEffect(() => {
@@ -136,7 +129,7 @@ function CampaignsContent() {
         })
         .catch(() => fetchWabaAndTemplates(""));
     }
-  }, []);
+  }, [searchParams]);
 
   const fetchWabaAndTemplates = async (uid: string) => {
     try {
@@ -188,63 +181,6 @@ function CampaignsContent() {
     }
     return rawList;
   }, [numbersInput, removeDuplicates, removeBlacklist]);
-
-  const filteredApprovedTemplates = useMemo(() => {
-    return allTemplates.filter((tpl) => {
-      const isApproved = tpl.status?.toUpperCase() === "APPROVED";
-      const matchesWaba = !selectedChannel || tpl.wabaId === selectedChannel;
-      const matchesCat =
-        !selectedCategory || tpl.category?.toUpperCase() === selectedCategory.toUpperCase();
-      return isApproved && matchesWaba && matchesCat;
-    });
-  }, [allTemplates, selectedChannel, selectedCategory]);
-
-  const activeTemplate = useMemo(() => {
-    return allTemplates.find((t) => t.id === selectedTemplateId) || null;
-  }, [allTemplates, selectedTemplateId]);
-
-  // Auto-fetch default template media when template is selected
-  useEffect(() => {
-    if (activeTemplate) {
-      if (activeTemplate.headerMediaUrl) {
-        setHeaderMediaUrl(activeTemplate.headerMediaUrl);
-      } else {
-        setHeaderMediaUrl("");
-      }
-      setOverrideFileName("");
-    }
-  }, [activeTemplate]);
-
-  const detectedVariables = useMemo(() => {
-    if (!activeTemplate?.bodyText) return [];
-    const matches = activeTemplate.bodyText.match(/\{\{(\d+)\}\}/g) || [];
-    const uniqueVars = Array.from(new Set(matches)).sort((a: any, b: any) => {
-      const numA = parseInt(a.replace(/\D/g, ""), 10);
-      const numB = parseInt(b.replace(/\D/g, ""), 10);
-      return numA - numB;
-    });
-    return uniqueVars as string[];
-  }, [activeTemplate]);
-
-  useEffect(() => {
-    const initialMaps: { [key: string]: { type: string; value: string } } = {};
-    detectedVariables.forEach((v) => {
-      initialMaps[v] = variableMappings[v] || { type: "Assign Const Value", value: "" };
-    });
-    setVariableMappings(initialMaps);
-  }, [detectedVariables]);
-
-  const livePreviewBody = useMemo(() => {
-    if (!activeTemplate) return "There is no template added yet";
-    let text = activeTemplate.bodyText || "";
-    detectedVariables.forEach((v) => {
-      const mappedVal = variableMappings[v]?.value;
-      if (mappedVal) {
-        text = text.split(v).join(mappedVal);
-      }
-    });
-    return text;
-  }, [activeTemplate, detectedVariables, variableMappings]);
 
   const handleNextStep1 = () => {
     if (!campaignName.trim()) {
@@ -585,7 +521,7 @@ function CampaignsContent() {
                 </div>
               </div>
 
-              {/* Header Media Section (Auto-fetched default file with optional override file picker) */}
+              {/* Header Media Section (Auto-fetched default file with optional override / replace file option) */}
               {activeTemplate &&
                 activeTemplate.headerType &&
                 activeTemplate.headerType !== "TEXT" &&
@@ -596,20 +532,34 @@ function CampaignsContent() {
                         HEADER {activeTemplate.headerType} (Auto-Attached from Template)
                       </label>
                       <span className="text-[10px] bg-blue-200 text-blue-800 px-2 py-0.5 rounded font-mono">
-                        Default Saved
+                        {overrideFileName ? "File Replaced" : "Default Saved"}
                       </span>
                     </div>
 
                     <div className="bg-white p-2.5 rounded-xl border flex items-center justify-between text-xs font-mono">
                       <span className="truncate text-gray-700">
-                        {overrideFileName ? `Override: ${overrideFileName}` : headerMediaUrl || "No media attached"}
+                        {overrideFileName ? `Replaced With: ${overrideFileName}` : headerMediaUrl || "No media attached"}
                       </span>
+                      {overrideFileName && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOverrideFileName("");
+                            if (activeTemplate?.headerMediaUrl) {
+                              setHeaderMediaUrl(activeTemplate.headerMediaUrl);
+                            }
+                          }}
+                          className="text-red-600 font-bold text-[10px] hover:underline ml-2 cursor-pointer"
+                        >
+                          Reset to Default
+                        </button>
+                      )}
                     </div>
 
-                    {/* Optional Browse File Override */}
+                    {/* Replace File / Browse Override Option */}
                     <div className="pt-1">
                       <label className="block font-semibold text-gray-600 text-[11px] mb-1">
-                        Want to share a different {activeTemplate.headerType.toLowerCase()}? (Optional Browse Override)
+                        Replace File / Choose a different {activeTemplate.headerType.toLowerCase()} for this campaign:
                       </label>
                       <input
                         type="file"
@@ -624,8 +574,14 @@ function CampaignsContent() {
                           if (e.target.files && e.target.files[0]) {
                             const file = e.target.files[0];
                             setOverrideFileName(file.name);
-                            const objectUrl = URL.createObjectURL(file);
-                            setHeaderMediaUrl(objectUrl);
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              const base64String = event.target?.result as string;
+                              if (base64String) {
+                                setHeaderMediaUrl(base64String);
+                              }
+                            };
+                            reader.readAsDataURL(file);
                           }
                         }}
                         className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"

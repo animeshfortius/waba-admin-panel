@@ -22,19 +22,21 @@ export async function GET(request: Request) {
     }
 
     let metaProfile = {
+      displayName: channel.displayName || "",
       description: channel.description || "",
       email: channel.email || "",
       address: channel.address || "",
       website: channel.website || "",
-      category: channel.category || "Other",
+      category: channel.category || "PROFESSIONAL_SERVICES",
       profilePicture: channel.profilePicture || "",
     };
 
-    // Meta Graph API se live profile fetch karo
+    // Meta Graph API v26.0 se live profile fetch karo
     if (channel.accessToken && !channel.accessToken.startsWith("mock_token") && channel.phoneNumberId) {
       try {
+        const cleanPhoneId = channel.phoneNumberId.replace("PHONE_", "").trim();
         const metaRes = await fetch(
-          `https://graph.facebook.com/v18.0/${channel.phoneNumberId}/whatsapp_business_profile?fields=about,address,description,email,websites,vertical,profile_picture_url`,
+          `https://graph.facebook.com/v26.0/${cleanPhoneId}/whatsapp_business_profile?fields=about,address,description,email,websites,vertical,profile_picture_url`,
           {
             headers: { Authorization: `Bearer ${channel.accessToken}` },
           }
@@ -43,11 +45,12 @@ export async function GET(request: Request) {
         if (metaData.data && metaData.data.length > 0) {
           const p = metaData.data[0];
           metaProfile = {
+            displayName: channel.displayName || "",
             description: p.about || p.description || channel.description || "",
             email: p.email || channel.email || "",
             address: p.address || channel.address || "",
             website: (p.websites && p.websites[0]) || channel.website || "",
-            category: p.vertical || channel.category || "Other",
+            category: p.vertical || channel.category || "PROFESSIONAL_SERVICES",
             profilePicture: p.profile_picture_url || channel.profilePicture || "",
           };
         }
@@ -65,7 +68,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { id, displayName, description, email, address, website, category } = body;
+    const { id, displayName, description, email, address, website, category, profilePicture } = body;
 
     if (!id) {
       return NextResponse.json({ error: "Channel ID is required" }, { status: 400 });
@@ -79,10 +82,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Channel not found" }, { status: 404 });
     }
 
+    // Meta Graph API v26.0 par profile sync karo
     if (channel.accessToken && !channel.accessToken.startsWith("mock_token") && channel.phoneNumberId) {
       try {
-        await fetch(
-          `https://graph.facebook.com/v18.0/${channel.phoneNumberId}/whatsapp_business_profile`,
+        const cleanPhoneId = channel.phoneNumberId.replace("PHONE_", "").trim();
+        const metaRes = await fetch(
+          `https://graph.facebook.com/v26.0/${cleanPhoneId}/whatsapp_business_profile`,
           {
             method: "POST",
             headers: {
@@ -96,18 +101,33 @@ export async function POST(request: Request) {
               description: description || "",
               email: email || "",
               websites: website ? [website] : [],
-              vertical: category || "Other",
+              vertical: category || "PROFESSIONAL_SERVICES",
+              ...(profilePicture ? { profile_picture_url: profilePicture } : {}),
             }),
           }
         );
+
+        const metaResult = await metaRes.json();
+        if (!metaRes.ok) {
+          console.error("Meta API Sync Error Response:", metaResult);
+        }
       } catch (metaErr) {
         console.error("Failed to sync profile with Meta BM:", metaErr);
       }
     }
 
+    // Database mein update karo
     const updatedChannel = await prisma.wabaAccount.update({
       where: { id },
-      data: { displayName, description, email, address, website, category },
+      data: { 
+        displayName: displayName || channel.displayName, 
+        description, 
+        email, 
+        address, 
+        website, 
+        category,
+        profilePicture: profilePicture || channel.profilePicture 
+      },
     });
 
     return NextResponse.json({ success: true, data: updatedChannel });

@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
     const cleanVariables = Array.isArray(variables) ? variables.filter((v) => v !== undefined && v !== null) : [];
 
-    // 🟢 Fetch Template details from DB to check its actual headerType
+    // Fetch Template details from DB
     const dbTemplate = await prisma.whatsAppTemplate.findFirst({
       where: { name: templateName, wabaId },
     });
@@ -57,38 +57,75 @@ export async function POST(req: Request) {
 
     let mediaPayloadParam: any = null;
 
-    // 🟢 Only construct media header if template actually requires media header
     if (hasMediaHeader) {
       let finalMediaUrl = headerMediaUrl;
-      if (!finalMediaUrl || finalMediaUrl.startsWith("data:") || finalMediaUrl.length > 500) {
+
+      // 🟢 Smart Media Resolver: If headerMediaUrl is a placeholder or fallback, lookup MediaLibrary or Template default
+      if (!finalMediaUrl || finalMediaUrl.includes("unsplash.com") || finalMediaUrl.includes("dummy.pdf") || finalMediaUrl.includes("ForBiggerBlazes")) {
         const mediaLibMatch = await prisma.mediaLibrary.findFirst({
-          where: { mediaName: { contains: templateName } },
+          where: {
+            OR: [
+              { mediaName: { contains: templateName } },
+              { mediaType: { equals: headerType, mode: "insensitive" } }
+            ]
+          },
           orderBy: { createdAt: "desc" },
         });
 
-        if (mediaLibMatch?.url && !mediaLibMatch.url.startsWith("data:")) {
+        if (mediaLibMatch?.url) {
           finalMediaUrl = mediaLibMatch.url;
-        } else {
-          if (headerType === "VIDEO") {
-            finalMediaUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
-          } else if (headerType === "DOCUMENT") {
-            finalMediaUrl = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
-          } else {
-            finalMediaUrl = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
-          }
+        } else if (dbTemplate?.headerMediaUrl) {
+          finalMediaUrl = dbTemplate.headerMediaUrl;
         }
       }
 
       const mediaType = headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
 
-      let absoluteUrl = finalMediaUrl;
-      if (finalMediaUrl && finalMediaUrl.startsWith("/")) {
-        const host = req.headers.get("host") || "localhost:3000";
-        const protocol = host.includes("localhost") ? "http" : "https";
-        absoluteUrl = `${protocol}://${host}${finalMediaUrl}`;
+      // If URL is a data URI or blob, upload it to Meta media endpoint first to get a valid Media ID
+      if (finalMediaUrl && finalMediaUrl.startsWith("data:")) {
+        try {
+          const arr = finalMediaUrl.split(",");
+          const mimeMatch = arr[0].match(/:(.*?);/);
+          const mimeType = mimeMatch ? mimeMatch[1] : (headerType === "DOCUMENT" ? "application/pdf" : headerType === "VIDEO" ? "video/mp4" : "image/png");
+          const bstr = atob(arr[1]);
+          let n = bstr.length;
+          const u8arr = new Uint8Array(n);
+          while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+          }
+          const blob = new Blob([u8arr], { type: mimeType });
+
+          const formData = new FormData();
+          formData.append("file", blob, headerType === "DOCUMENT" ? "document.pdf" : headerType === "VIDEO" ? "video.mp4" : "image.png");
+          formData.append("messaging_product", "whatsapp");
+
+          const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${cleanPhoneId}/media`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}` },
+            body: formData,
+          });
+
+          const uploadData = await uploadRes.json();
+          if (uploadData && uploadData.id) {
+            mediaPayloadParam = {
+              type: mediaType,
+              [mediaType]: { id: uploadData.id },
+            };
+          }
+        } catch (uploadErr) {
+          console.error("Meta Media Upload Error:", uploadErr);
+        }
       }
 
-      if (absoluteUrl) {
+      // If no media ID was generated via upload, use the URL/Link format
+      if (!mediaPayloadParam && finalMediaUrl) {
+        let absoluteUrl = finalMediaUrl;
+        if (finalMediaUrl.startsWith("/")) {
+          const host = req.headers.get("host") || "localhost:3000";
+          const protocol = host.includes("localhost") ? "http" : "https";
+          absoluteUrl = `${protocol}://${host}${finalMediaUrl}`;
+        }
+
         mediaPayloadParam = {
           type: mediaType,
           [mediaType]: { link: absoluteUrl },
@@ -108,7 +145,6 @@ export async function POST(req: Request) {
 
       const templateComponents: any[] = [];
 
-      // 🟢 Only push header parameter if template is media type and payload exists
       if (hasMediaHeader && mediaPayloadParam) {
         templateComponents.push({
           type: "header",

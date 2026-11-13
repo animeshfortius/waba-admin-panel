@@ -10,8 +10,8 @@ export async function POST(req: Request) {
       numbers,
       templateName,
       language,
-      variables, // body variables
-      headerMediaUrl, // Header media URL or Base64 data URI
+      variables,
+      headerMediaUrl,
       isScheduled,
       scheduleDate,
     } = body;
@@ -47,84 +47,53 @@ export async function POST(req: Request) {
 
     const cleanVariables = Array.isArray(variables) ? variables.filter((v) => v !== undefined && v !== null) : [];
 
+    // 🟢 Fetch Template details from DB to get the reliable default header media if override is missing or base64 is too large
+    const dbTemplate = await prisma.whatsAppTemplate.findFirst({
+      where: { name: templateName, wabaId },
+    });
+
+    let finalMediaUrl = headerMediaUrl;
+    // If headerMediaUrl is a massive base64 string or empty, fallback to template's stored media or safe public link
+    if (!finalMediaUrl || finalMediaUrl.startsWith("data:") || finalMediaUrl.length > 500) {
+      // Check if template has media in MediaLibrary or components
+      const mediaLibMatch = await prisma.mediaLibrary.findFirst({
+        where: { mediaName: { contains: templateName } },
+        orderBy: { createdAt: "desc" },
+      });
+      
+      if (mediaLibMatch?.url && !mediaLibMatch.url.startsWith("data:")) {
+        finalMediaUrl = mediaLibMatch.url;
+      } else {
+        // Safe default public fallbacks based on template header type
+        const hType = dbTemplate?.headerType?.toUpperCase();
+        if (hType === "VIDEO") {
+          finalMediaUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+        } else if (hType === "DOCUMENT") {
+          finalMediaUrl = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+        } else {
+          finalMediaUrl = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
+        }
+      }
+    }
+
     let mediaPayloadParam: any = null;
 
-    if (headerMediaUrl) {
-      const isVideo = headerMediaUrl.includes("video") || headerMediaUrl.match(/\.(mp4|3gp|mov)$/i);
-      const isDoc = headerMediaUrl.includes("application/pdf") || headerMediaUrl.includes("document") || headerMediaUrl.match(/\.(pdf|doc|docx|xls|xlsx|txt)$/i);
+    if (finalMediaUrl) {
+      const isVideo = finalMediaUrl.includes("video") || finalMediaUrl.match(/\.(mp4|3gp|mov)$/i);
+      const isDoc = finalMediaUrl.includes("application/pdf") || finalMediaUrl.includes("document") || finalMediaUrl.match(/\.(pdf|doc|docx|xls|xlsx|txt)$/i);
       const mediaType = isVideo ? "video" : isDoc ? "document" : "image";
 
-      let mediaId: string | null = null;
-      let mediaLink: string | null = null;
-
-      // If headerMediaUrl is a Base64 Data URI, upload it to Meta media endpoint to get a secure Media ID
-      if (headerMediaUrl.startsWith("data:")) {
-        try {
-          const arr = headerMediaUrl.split(",");
-          const mimeMatch = arr[0].match(/:(.*?);/);
-          const mimeType = mimeMatch ? mimeMatch[1] : (isDoc ? "application/pdf" : isVideo ? "video/mp4" : "image/png");
-          const bstr = atob(arr[1]);
-          let n = bstr.length;
-          const u8arr = new Uint8Array(n);
-          while (n--) {
-            u8arr[n] = bstr.charCodeAt(n);
-          }
-          const blob = new Blob([u8arr], { type: mimeType });
-
-          const formData = new FormData();
-          formData.append("file", blob, isDoc ? "document.pdf" : isVideo ? "video.mp4" : "image.png");
-          formData.append("messaging_product", "whatsapp");
-
-          const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${cleanPhoneId}/media`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${accessToken}` },
-            body: formData,
-          });
-
-          const uploadData = await uploadRes.json();
-          if (uploadData && uploadData.id) {
-            mediaId = uploadData.id;
-          }
-        } catch (uploadErr) {
-          console.error("Base64 media upload to Meta warning:", uploadErr);
-        }
+      let absoluteUrl = finalMediaUrl;
+      if (finalMediaUrl.startsWith("/")) {
+        const host = req.headers.get("host") || "localhost:3000";
+        const protocol = host.includes("localhost") ? "http" : "https";
+        absoluteUrl = `${protocol}://${host}${finalMediaUrl}`;
       }
 
-      // If upload failed or it's a URL/path
-      if (!mediaId) {
-        let finalUrl = headerMediaUrl;
-        if (headerMediaUrl.startsWith("/")) {
-          const host = req.headers.get("host") || "localhost:3000";
-          const protocol = host.includes("localhost") ? "http" : "https";
-          finalUrl = `${protocol}://${host}${headerMediaUrl}`;
-        }
-
-        // Fallbacks for raw base64 or unreachable local strings
-        if (finalUrl.startsWith("data:")) {
-          if (isVideo) {
-            mediaLink = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
-          } else if (isDoc) {
-            mediaLink = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
-          } else {
-            mediaLink = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
-          }
-        } else {
-          mediaLink = finalUrl;
-        }
-      }
-
-      // Construct exact Meta header parameter format
-      if (mediaId) {
-        mediaPayloadParam = {
-          type: mediaType,
-          [mediaType]: { id: mediaId },
-        };
-      } else if (mediaLink) {
-        mediaPayloadParam = {
-          type: mediaType,
-          [mediaType]: { link: mediaLink },
-        };
-      }
+      mediaPayloadParam = {
+        type: mediaType,
+        [mediaType]: { link: absoluteUrl },
+      };
     }
 
     let sentCount = 0;

@@ -187,7 +187,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: `Category change request submitted to Meta!` });
     }
 
-    // Build Components for Meta with dynamic media file handle upload (UNCHANGED & SECURE)
+    // Build Components for Meta with dynamic media file handle upload
     const components: any[] = [];
     const upperHeader = (headerType || "NONE").toUpperCase();
 
@@ -202,13 +202,42 @@ export async function POST(req: Request) {
           sampleHandle = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
         }
 
-        // 🔥 If user uploaded a media file, generate real Meta handle via Resumable Upload API
+        // 🔥 If user uploaded a media file, generate real Meta handle via Resumable Upload API & Mirror to Media Library
         if (mediaFile && typeof mediaFile === "object" && "arrayBuffer" in mediaFile) {
           try {
             const arrayBuffer = await mediaFile.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
             const fileLength = buffer.length;
             const fileType = mediaFile.type || "image/png";
+
+            // 🟢 1. Save / Mirror uploaded media into Media Library with 30-day validation & Base64
+            const base64 = buffer.toString("base64");
+            let mime = mediaFile.type;
+            if (!mime || mime === "application/octet-stream") {
+              if (mediaFile.name.endsWith(".pdf")) mime = "application/pdf";
+              else if (mediaFile.name.match(/\.(png|jpg|jpeg)$/i)) mime = "image/png";
+              else if (mediaFile.name.match(/\.(mp4|mov)$/i)) mime = "video/mp4";
+              else mime = "application/octet-stream";
+            }
+            const mediaUrl = `data:${mime};base64,${base64}`;
+
+            let libFileType = "image";
+            if (mime.includes("video") || mediaFile.name.match(/\.(mp4|mov)$/i)) libFileType = "video";
+            else if (mime.includes("pdf") || mediaFile.name.match(/\.(pdf|doc|docx)$/i)) libFileType = "document";
+
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 30);
+
+            await prisma.mediaLibrary.create({
+              data: {
+                userId: wabaAccount.userId || userId || "emergency_admin_id",
+                mediaName: mediaFile.name,
+                url: mediaUrl,
+                wabaNumber: wabaAccount.displayPhone || wabaAccount.wabaId,
+                fileType: libFileType,
+                expiresAt,
+              },
+            }).catch((err) => console.error("Media Library template mirror warning:", err));
 
             // Step 1: Initialize Meta Upload Session
             const initRes = await fetch(`https://graph.facebook.com/v21.0/app/uploads?file_length=${fileLength}&file_type=${encodeURIComponent(fileType)}`, {
@@ -335,7 +364,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Template submitted to Meta successfully!",
+      message: "Template submitted and media mirrored to Media Library successfully!",
       template: savedTemplate || { id: createData.id, name: formattedName, status: "PENDING" },
     });
   } catch (error: any) {

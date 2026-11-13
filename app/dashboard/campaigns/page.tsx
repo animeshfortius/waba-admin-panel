@@ -556,7 +556,7 @@ function CampaignsContent() {
                       )}
                     </div>
 
-                    {/* Replace File / Browse Override Option (Fixed to prevent base64 payload overflow) */}
+                    {/* Replace File / Browse Override Option */}
                     <div className="pt-1">
                       <label className="block font-semibold text-gray-600 text-[11px] mb-1">
                         Replace File / Choose a different {activeTemplate.headerType.toLowerCase()} for this campaign:
@@ -570,17 +570,30 @@ function CampaignsContent() {
                             ? "video/*"
                             : ".pdf,.doc,.docx"
                         }
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           if (e.target.files && e.target.files[0]) {
                             const file = e.target.files[0];
                             setOverrideFileName(file.name);
-                            // 🟢 Use safe placeholder link instead of massive base64 string to avoid JSON overflow
-                            const safeLink = activeTemplate.headerType === "VIDEO"
-                              ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
-                              : activeTemplate.headerType === "DOCUMENT"
-                              ? "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
-                              : "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
-                            setHeaderMediaUrl(safeLink);
+                            
+                            const uploadData = new FormData();
+                            uploadData.append("file", file);
+                            uploadData.append("wabaId", selectedChannel);
+
+                            try {
+                              const res = await fetch("/api/media/upload", {
+                                method: "POST",
+                                body: uploadData,
+                              });
+                              const data = await res.json();
+                              if (data.success && data.mediaId) {
+                                setHeaderMediaUrl(data.mediaId);
+                              } else {
+                                alert(`Failed to upload media: ${data.error}`);
+                              }
+                            } catch (err) {
+                              console.error("File upload error:", err);
+                              alert("Network error uploading media file.");
+                            }
                           }
                         }}
                         className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"

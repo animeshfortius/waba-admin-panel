@@ -106,62 +106,12 @@ function ConfigContent() {
         .catch(() => {});
     }
 
+    // 🟢 Backend se direct fetch karenge jo Meta se securely live fetch aur format karke de raha hai
     fetch("/api/configuration/channels")
       .then(res => res.json())
-      .then(async (data) => {
+      .then((data) => {
         if (Array.isArray(data)) {
           setChannels(data);
-
-          const updatedChannels = await Promise.all(
-            data.map(async (acc) => {
-              if (!acc.accessToken || acc.accessToken.startsWith("mock_token")) {
-                return acc;
-              }
-
-              let messagingLimit = acc.messagingLimit;
-              let qualityRating = acc.qualityRating;
-
-              const rawWabaId = acc.wabaId || acc.waba_id || "";
-              const rawPhoneId = acc.phoneNumberId || acc.phone_number_id || "";
-              
-              const cleanWabaId = rawWabaId.replace("WABA_", "").trim();
-              const cleanPhoneId = rawPhoneId.replace("PHONE_", "").trim();
-
-              try {
-                if (cleanWabaId) {
-                  const limitRes = await fetch(
-                    `https://graph.facebook.com/v26.0/${cleanWabaId}?fields=messaging_limit_tier`,
-                    { headers: { Authorization: `Bearer ${acc.accessToken}` } }
-                  );
-                  const limitData = await limitRes.json();
-                  if (limitData && limitData.messaging_limit_tier) {
-                    messagingLimit = limitData.messaging_limit_tier;
-                  }
-                }
-
-                if (cleanPhoneId) {
-                  const ratingRes = await fetch(
-                    `https://graph.facebook.com/v26.0/${cleanPhoneId}?fields=quality_rating`,
-                    { headers: { Authorization: `Bearer ${acc.accessToken}` } }
-                  );
-                  const ratingData = await ratingRes.json();
-                  if (ratingData && ratingData.quality_rating) {
-                    qualityRating = ratingData.quality_rating;
-                  }
-                }
-              } catch (err) {
-                console.error("Client-side Meta fetch error:", err);
-              }
-
-              return {
-                ...acc,
-                messagingLimit,
-                qualityRating,
-              };
-            })
-          );
-
-          setChannels(updatedChannels);
         }
       })
       .catch(() => {});
@@ -512,7 +462,7 @@ function ConfigContent() {
                         ✔ {ch.messagingLimit || "Fetching..."}
                       </td>
                       <td className="p-3 whitespace-nowrap font-semibold text-slate-700">
-                        ✔ {ch.qualityRating || "Fetching..."}
+                        ✔ {ch.qualityRating || "N/A"}
                       </td>
                       <td className="p-3">
                         <button
@@ -676,7 +626,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* MEDIA UPLOAD MODAL (FIXED WITH FormData & /api/media) */}
+      {/* MEDIA UPLOAD MODAL */}
       {showMediaModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -735,7 +685,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* OTHER SECTIONS (Contacts, Groups, Blacklist, etc.) remain as-is */}
+      {/* OTHER SECTIONS */}
       {activeSection === "contacts" && (
         <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
           <div className="flex justify-between items-center">

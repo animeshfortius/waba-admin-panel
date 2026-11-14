@@ -55,7 +55,10 @@ export default function ReportsPage() {
         ...(selectedChannel && { channel: selectedChannel }),
       });
 
-      const res = await fetch(`/api/reports?${queryParams.toString()}`);
+      // 🟢 Disabled caching to ensure real-time live database updates
+      const res = await fetch(`/api/reports?${queryParams.toString()}`, {
+        cache: "no-store",
+      });
       const data = await res.json();
       if (data.success) {
         setCampaignData(data.campaigns || []);

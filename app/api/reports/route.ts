@@ -1,28 +1,36 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// Helper function to get exact IST (Indian Standard Time) format
+function formatIST(dateInput: Date | string | null) {
+  if (!dateInput) return "N/A";
+  const date = new Date(dateInput);
+  return date.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
+    const userId = searchParams.get("userId") || "admin";
     const tab = searchParams.get("tab") || "campaign";
-
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "User ID missing" }, { status: 400 });
-    }
 
     let wabaAccounts = await prisma.wabaAccount.findMany({
       select: { wabaId: true, displayPhone: true, displayName: true, userId: true }
     });
 
-    if (userId !== "admin" && userId !== "emergency_admin_id") {
-      const filtered = wabaAccounts.filter(acc => acc.userId === userId);
-      if (filtered.length > 0) wabaAccounts = filtered;
-    }
+    const whereClause = (userId === "admin" || userId === "emergency_admin_id") ? {} : { userId };
 
-    // 🟢 Fetch real campaign message logs from database
     const messageLogs = await prisma.campaignLog.findMany({
-      where: userId === "admin" ? {} : { userId },
+      where: whereClause,
       orderBy: { createdAt: "desc" },
     });
 
@@ -35,30 +43,35 @@ export async function GET(req: Request) {
       });
     }
 
-    // Map logs for Delivery Report tab
-    const deliveryLogs = messageLogs.map((log) => ({
-      id: log.id,
-      date: new Date(log.sentAt).toLocaleString(),
-      channel: log.channel,
-      number: log.recipient,
-      status: log.status,
-      messageId: log.messageId || "N/A",
-      acknowledgement: `Sent On: ${new Date(log.sentAt).toLocaleTimeString()} | Delivery On: ${log.deliveredAt ? new Date(log.deliveredAt).toLocaleTimeString() : "Pending"} | Read On: ${log.readAt ? new Date(log.readAt).toLocaleTimeString() : "N/A"}`,
-      interfaceType: "Web",
-      templateType: "Utility",
-      templateName: log.templateName,
-      bodyText: `Campaign: ${log.campaignName}`,
-      cost: log.cost.toFixed(3),
-      errorDetails: log.errorDetails || "N/A"
-    }));
+    // Map logs with accurate IST Date & Time
+    const deliveryLogs = messageLogs.map((log) => {
+      const sentStr = formatIST(log.sentAt);
+      const deliveredStr = log.deliveredAt ? formatIST(log.deliveredAt) : "Pending";
+      const readStr = log.readAt ? formatIST(log.readAt) : "N/A";
 
-    // Group logs by campaign name for Campaign Report tab with accurate total counts
+      return {
+        id: log.id,
+        date: sentStr,
+        channel: log.channel,
+        number: log.recipient,
+        status: log.status,
+        messageId: log.messageId || "N/A",
+        acknowledgement: `Sent On: ${sentStr} | Delivery On: ${deliveredStr} | Read On: ${readStr}`,
+        interfaceType: "Web",
+        templateType: "Utility",
+        templateName: log.templateName,
+        bodyText: `Campaign: ${log.campaignName}`,
+        cost: log.cost.toFixed(3),
+        errorDetails: log.errorDetails || "N/A"
+      };
+    });
+
     const campaignMap: { [key: string]: any } = {};
     messageLogs.forEach((log) => {
       if (!campaignMap[log.campaignName]) {
         campaignMap[log.campaignName] = {
           id: log.id,
-          date: new Date(log.createdAt).toLocaleString(),
+          date: formatIST(log.createdAt),
           campaignInfo: log.campaignName,
           templateInfo: log.templateName,
           channel: log.channel,
@@ -68,7 +81,7 @@ export async function GET(req: Request) {
           error: log.errorDetails
         };
       }
-      campaignMap[log.campaignName].totalCount += 1; // 🟢 Accurately counts all numbers in this campaign
+      campaignMap[log.campaignName].totalCount += 1;
       campaignMap[log.campaignName].cost += log.cost;
     });
 

@@ -1,21 +1,31 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// 1. Meta Webhook Verification (GET)
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const mode = searchParams.get("hub.mode");
-  const token = searchParams.get("hub.verify_token");
-  const challenge = searchParams.get("hub.challenge");
+  try {
+    const { searchParams } = new URL(req.url);
+    const mode = searchParams.get("hub.mode");
+    const token = searchParams.get("hub.verify_token");
+    const challenge = searchParams.get("hub.challenge");
 
-  const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || "fortius_token";
+    const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || "fortius_token";
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    return new NextResponse(challenge, { status: 200 });
+    if (mode === "subscribe" && token === VERIFY_TOKEN) {
+      // Return challenge as plain text with 200 OK
+      return new NextResponse(challenge, {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+
+    return new NextResponse("Forbidden", { status: 403 });
+  } catch (error) {
+    return new NextResponse("Internal Error", { status: 500 });
   }
-
-  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 }
 
+// 2. Handle Incoming WhatsApp Statuses & Messages (POST)
 export async function POST(req: Request) {
   try {
     const body = await req.json();

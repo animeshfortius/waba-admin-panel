@@ -20,7 +20,7 @@ export default function ReportsPage() {
   const [isJourney, setIsJourney] = useState("");
   const [wabaChannels, setWabaChannels] = useState<any[]>([]);
 
-  // 🟢 Specific Campaign Drill-down filter state
+  // Specific Campaign Drill-down filter state
   const [campaignFilter, setCampaignFilter] = useState("");
 
   // Analytics Stats Cards fallback from API
@@ -38,7 +38,6 @@ export default function ReportsPage() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
-  // 🟢 Fetch live reports with dateRange, status, and channel filters
   useEffect(() => {
     const userId = localStorage.getItem("userId") || "admin";
     fetchLiveReports(userId);
@@ -48,7 +47,7 @@ export default function ReportsPage() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [activeTab, campaignStatus, selectedChannel, dateRange]);
+  }, [activeTab, dateRange]);
 
   // Reset pagination on tab change or filter change
   useEffect(() => {
@@ -61,7 +60,8 @@ export default function ReportsPage() {
         userId,
         tab: activeTab,
         dateRange,
-        ...(campaignStatus && { status: campaignStatus }),
+        // Only send status to backend if we are on delivery tab, otherwise handle campaign filters gracefully
+        ...(activeTab === "delivery" && campaignStatus && { status: campaignStatus }),
         ...(selectedChannel && { channel: selectedChannel }),
       });
 
@@ -106,16 +106,15 @@ export default function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  // 🟢 Filter datasets based on active filters and drill-downs
+  // 🟢 Filter datasets properly based on tab logic
   const filteredCampaigns = useMemo(() => {
     return campaignData.filter((item) => {
       if (campaignFilter && item.campaignInfo !== campaignFilter) return false;
       if (selectedChannel && !String(item.channel).includes(selectedChannel)) return false;
-      if (campaignStatus && item.status !== campaignStatus) return false;
       if (templateSearch && !item.templateInfo?.toLowerCase().includes(templateSearch.toLowerCase())) return false;
       return true;
     });
-  }, [campaignData, campaignFilter, selectedChannel, campaignStatus, templateSearch]);
+  }, [campaignData, campaignFilter, selectedChannel, templateSearch]);
 
   const filteredDeliveries = useMemo(() => {
     return deliveryData.filter((item) => {
@@ -175,7 +174,7 @@ export default function ReportsPage() {
     return activeDataset.slice(start, start + rowsPerPage);
   }, [activeDataset, currentPage, rowsPerPage]);
 
-  // 🟢 Dynamic Stats Calculation (Campaign-wise / Filter-wise exact counting)
+  // 🟢 Dynamic Stats Calculation for Campaign / Delivery / Particular Campaign
   const stats = useMemo(() => {
     let targetList = activeTab === "campaign" ? filteredCampaigns : filteredDeliveries;
     if (activeTab !== "campaign" && activeTab !== "delivery") {
@@ -185,29 +184,27 @@ export default function ReportsPage() {
     let total = targetList.length;
     let sent = 0, delivered = 0, read = 0, failed = 0;
 
-    targetList.forEach((item) => {
-      const s = (item.status || "").toUpperCase();
-      if (s === "SENT") sent++;
-      else if (s === "DELIVERED") delivered++;
-      else if (s === "READ") read++;
-      else if (s === "FAILED") failed++;
-      else if (activeTab === "campaign" && item.totalCount) {
-        total = filteredCampaigns.reduce((acc, curr) => acc + (Number(curr.totalCount) || 1), 0);
-      }
-    });
-
-    if (!campaignFilter && !selectedChannel && !campaignStatus && !templateSearch && total === 0) {
-      return apiStats;
+    if (activeTab === "campaign" && !campaignFilter) {
+      // For general campaign overview, use total count sum
+      total = filteredCampaigns.reduce((acc, curr) => acc + (Number(curr.totalCount) || 1), 0);
+      sent = apiStats.sent;
+      delivered = apiStats.delivered;
+      read = apiStats.read;
+      failed = apiStats.failed;
+    } else {
+      // For delivery report or specific campaign drill-down, calculate exact status counts from deliveryData
+      targetList.forEach((item) => {
+        const s = (item.status || "").toUpperCase();
+        if (s === "SENT") sent++;
+        else if (s === "DELIVERED") delivered++;
+        else if (s === "READ") read++;
+        else if (s === "FAILED") failed++;
+      });
+      total = targetList.length;
     }
 
-    return { 
-      total: total || apiStats.total, 
-      sent: sent || (campaignFilter ? 0 : apiStats.sent), 
-      delivered: delivered || (campaignFilter ? 0 : apiStats.delivered), 
-      read: read || (campaignFilter ? 0 : apiStats.read), 
-      failed: failed || (campaignFilter ? 0 : apiStats.failed) 
-    };
-  }, [activeTab, filteredCampaigns, filteredDeliveries, activeDataset, campaignFilter, selectedChannel, campaignStatus, templateSearch, apiStats]);
+    return { total: total || 0, sent: sent || 0, delivered: delivered || 0, read: read || 0, failed: failed || 0 };
+  }, [activeTab, filteredCampaigns, filteredDeliveries, activeDataset, campaignFilter, apiStats]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 lg:p-6 text-xs font-sans">
@@ -281,7 +278,7 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* 🟢 Functional Date Picker Dropdown */}
+        {/* Date Picker Dropdown */}
         <div className="relative">
           <button
             onClick={() => setShowDatePicker(!showDatePicker)}
@@ -575,7 +572,7 @@ export default function ReportsPage() {
           )}
         </div>
 
-        {/* 🟢 PAGINATION & ROWS PER PAGE CONTROLS BAR */}
+        {/* PAGINATION & ROWS PER PAGE CONTROLS BAR */}
         <div className="bg-gray-50 border-t p-4 flex flex-wrap items-center justify-between gap-4 text-xs">
           <div className="flex items-center space-x-2">
             <span className="text-gray-600 font-medium">Showing {paginatedData.length > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0} to {Math.min(currentPage * rowsPerPage, activeDataset.length)} of {activeDataset.length} entries</span>

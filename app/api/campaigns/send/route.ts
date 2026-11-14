@@ -136,8 +136,8 @@ export async function POST(req: Request) {
         },
       };
 
-      let messageStatus = "SENT"; // 🟢 Start as SENT so webhook can update it live
-      let metaMessageId = null;
+      let messageStatus = "SENT";
+      let metaMessageId: string | null = null;
       let errorMsg = "N/A";
       const now = new Date();
 
@@ -158,8 +158,8 @@ export async function POST(req: Request) {
 
         if (metaRes.ok && metaData.messages?.[0]?.id) {
           sentCount++;
-          messageStatus = "SENT"; // 🟢 Keep as SENT initially
-          metaMessageId = metaData.messages[0].id;
+          messageStatus = "SENT";
+          metaMessageId = String(metaData.messages[0].id).trim();
         } else {
           failedCount++;
           messageStatus = "FAILED";
@@ -179,26 +179,51 @@ export async function POST(req: Request) {
         });
       }
 
-      // Save record with SENT status and null deliveredAt/readAt (Webhook will update them)
+      // 🟢 Bulletproof Save/Upsert to database to avoid unique constraint crashes
       try {
-        await prisma.campaignLog.create({
-          data: {
-            userId: ownerUserId,
-            campaignName: campaignName || `Campaign_${templateName}`,
-            templateName: templateName,
-            channel: channelNumber,
-            recipient: `+${formattedNumber}`,
-            status: messageStatus, // SENT or FAILED
-            messageId: metaMessageId,
-            cost: dbTemplate?.category === "MARKETING" ? 0.804 : 0.155,
-            errorDetails: errorMsg,
-            sentAt: now,
-            deliveredAt: null, // 🟢 Will be filled by Webhook when delivered
-            readAt: null,      // 🟢 Will be filled by Webhook when read
-          },
-        });
-      } catch (logErr) {
-        console.error("Failed to save campaign log to database:", logErr);
+        if (metaMessageId) {
+          await prisma.campaignLog.upsert({
+            where: { messageId: metaMessageId },
+            update: {
+              status: messageStatus,
+              errorDetails: errorMsg,
+            },
+            create: {
+              userId: ownerUserId,
+              campaignName: campaignName || `Campaign_${templateName}`,
+              templateName: templateName,
+              channel: channelNumber,
+              recipient: `+${formattedNumber}`,
+              status: messageStatus,
+              messageId: metaMessageId,
+              cost: dbTemplate?.category === "MARKETING" ? 0.804 : 0.155,
+              errorDetails: errorMsg,
+              sentAt: now,
+              deliveredAt: null,
+              readAt: null,
+            },
+          });
+        } else {
+          // Fallback create if metaMessageId is missing on failure
+          await prisma.campaignLog.create({
+            data: {
+              userId: ownerUserId,
+              campaignName: campaignName || `Campaign_${templateName}`,
+              templateName: templateName,
+              channel: channelNumber,
+              recipient: `+${formattedNumber}`,
+              status: messageStatus,
+              messageId: null,
+              cost: dbTemplate?.category === "MARKETING" ? 0.804 : 0.155,
+              errorDetails: errorMsg,
+              sentAt: now,
+              deliveredAt: null,
+              readAt: null,
+            },
+          });
+        }
+      } catch (logErr: any) {
+        console.error("❌ Failed to save campaign log to database:", logErr.message);
       }
     }
 

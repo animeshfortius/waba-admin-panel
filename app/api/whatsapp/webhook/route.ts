@@ -32,11 +32,13 @@ export async function POST(req: Request) {
         for (const change of entry.changes || []) {
           if (change.field === "messages") {
             const value = change.value;
+            const metadata = value.metadata;
+            const channelNumber = metadata?.display_phone_number || metadata?.phone_number_id || "Unknown";
 
             if (value.statuses) {
               for (const statusObj of value.statuses) {
                 const messageId = statusObj.id?.trim();
-                const recipientId = statusObj.recipient_id?.trim(); // e.g., "919140901457"
+                const recipientId = statusObj.recipient_id?.trim();
                 const rawStatus = statusObj.status?.toUpperCase(); // SENT, DELIVERED, READ, FAILED
                 const timestamp = statusObj.timestamp ? new Date(Number(statusObj.timestamp) * 1000) : new Date();
 
@@ -48,80 +50,67 @@ export async function POST(req: Request) {
                 if (rawStatus === "FAILED") status = "FAILED";
 
                 try {
-                  let updated = false;
+                  const cleanRecip = recipientId ? recipientId.replace(/\D/g, "").slice(-10) : "";
 
-                  // 1️⃣ Try matching by exact WAMID first
+                  // 1️⃣ Try finding existing log by WAMID or recipient
+                  let matchMsg = null;
                   if (messageId) {
-                    const matchMsg = await prisma.campaignLog.findFirst({
+                    matchMsg = await prisma.campaignLog.findFirst({
                       where: { messageId: messageId }
                     });
-
-                    if (matchMsg) {
-                      let updateData: any = { status };
-                      if (status === "DELIVERED") updateData.deliveredAt = timestamp;
-                      if (status === "READ") {
-                        if (!matchMsg.deliveredAt) updateData.deliveredAt = timestamp;
-                        updateData.readAt = timestamp;
-                        updateData.status = "READ";
-                      }
-                      if (status === "FAILED" && statusObj.errors?.[0]) {
-                        updateData.errorDetails = statusObj.errors[0].message;
-                      }
-
-                      await prisma.campaignLog.update({
-                        where: { id: matchMsg.id },
-                        data: updateData,
-                      });
-                      console.log(`✅ WEBHOOK UPDATED BY WAMID -> ID: ${matchMsg.id} to ${status}`);
-                      continue;
-                    }
                   }
 
-                  // 2️⃣ Fallback: Match by Recipient Phone Number (Even if WAMID was null)
-                  if (recipientId) {
-                    const cleanRecip = recipientId.replace(/\D/g.test(recipientId) ? /\D/g : "", "").slice(-10); // Last 10 digits for safety
-                    
-                    const candidateLogs = await prisma.campaignLog.findMany({
+                  if (!matchMsg && cleanRecip) {
+                    matchMsg = await prisma.campaignLog.findFirst({
                       where: {
                         recipient: { contains: cleanRecip },
                         status: { not: "READ" }
                       },
-                      orderBy: { sentAt: "desc" },
-                      take: 3
+                      orderBy: { sentAt: "desc" }
                     });
-
-                    if (candidateLogs.length > 0) {
-                      const logToUpdate = candidateLogs[0];
-                      let updateData: any = { status };
-
-                      // Attach wamid if it was missing
-                      if (messageId && !logToUpdate.messageId) {
-                        updateData.messageId = messageId;
-                      }
-                      if (status === "DELIVERED") updateData.deliveredAt = timestamp;
-                      if (status === "READ") {
-                        if (!logToUpdate.deliveredAt) updateData.deliveredAt = timestamp;
-                        updateData.readAt = timestamp;
-                        updateData.status = "READ";
-                      }
-                      if (status === "FAILED" && statusObj.errors?.[0]) {
-                        updateData.errorDetails = statusObj.errors[0].message;
-                      }
-
-                      await prisma.campaignLog.update({
-                        where: { id: logToUpdate.id },
-                        data: updateData,
-                      });
-                      console.log(`✅ WEBHOOK UPDATED BY PHONE FALLBACK -> Recipient: ${recipientId} to ${status}`);
-                      updated = true;
-                    }
                   }
 
-                  if (!updated) {
-                    console.log(`ℹ️ No log found to update for wamid [${messageId}] / recipient [${recipientId}]`);
+                  if (matchMsg) {
+                    // Update existing log
+                    let updateData: any = { status };
+                    if (messageId && !matchMsg.messageId) updateData.messageId = messageId;
+                    if (status === "DELIVERED") updateData.deliveredAt = timestamp;
+                    if (status === "READ") {
+                      if (!matchMsg.deliveredAt) updateData.deliveredAt = timestamp;
+                      updateData.readAt = timestamp;
+                      updateData.status = "READ";
+                    }
+                    if (status === "FAILED" && statusObj.errors?.[0]) {
+                      updateData.errorDetails = statusObj.errors[0].message;
+                    }
+
+                    await prisma.campaignLog.update({
+                      where: { id: matchMsg.id },
+                      data: updateData,
+                    });
+                    console.log(`✅ WEBHOOK UPDATED -> ID: ${matchMsg.id} to ${status}`);
+                  } else {
+                    // 2️⃣ Race Condition Fix: If log not found yet, auto-create it!
+                    await prisma.campaignLog.create({
+                      data: {
+                        userId: "admin", // Fallback system user
+                        campaignName: "Auto_Webhook_Campaign",
+                        templateName: "Direct_Message",
+                        channel: channelNumber,
+                        recipient: recipientId || "Unknown",
+                        status: status,
+                        messageId: messageId || null,
+                        cost: 0.155,
+                        sentAt: timestamp,
+                        deliveredAt: status === "DELIVERED" || status === "READ" ? timestamp : null,
+                        readAt: status === "READ" ? timestamp : null,
+                        errorDetails: status === "FAILED" ? statusObj.errors?.[0]?.message || "Failed" : "N/A"
+                      }
+                    });
+                    console.log(`🚀 WEBHOOK AUTO-CREATED LOG -> Wamid: ${messageId} | Status: ${status}`);
                   }
                 } catch (dbErr: any) {
-                  console.error(`❌ Webhook DB Update Error:`, dbErr.message);
+                  console.error(`❌ Webhook DB Error:`, dbErr.message);
                 }
               }
             }

@@ -154,3 +154,42 @@ model CampaignLog {
   @@index([messageId])
   @@index([recipient])
 }
+model ChatSession {
+  id             String        @id @default(uuid())
+  userId         String        // Tenant / Admin ID
+  customerPhone  String        // Customer WhatsApp number
+  customerName   String?       // Customer Name
+  channel        String        // WABA phone number / channel used
+  status         String        @default("OPEN") // OPEN, PENDING, RESOLVED
+  assignedTo     String?       // Agent username or ID
+  isBotActive    Boolean       @default(true) // AiSensy style bot/human toggle
+  lastMessage    String?       
+  lastMessageAt  DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  messages       ChatMessage[]
+  notes          ChatNote[]    // Internal team whisper notes
+}
+
+model ChatMessage {
+  id            String      @id @default(uuid())
+  chatSessionId String
+  chatSession   ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+  senderType    String      // "CUSTOMER", "AGENT", "BOT", "AI"
+  senderName    String?     // Agent or Bot name
+  messageBody   String      // Text message body
+  messageType   String      @default("text") // text, image, template, interactive
+  mediaUrl      String?     
+  status        String      @default("SENT") // SENT, DELIVERED, READ, FAILED
+  wabaMessageId String?     // Meta wamid
+  createdAt     DateTime    @default(now())
+}
+
+model ChatNote {
+  id            String      @id @default(uuid())
+  chatSessionId String
+  chatSession   ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+  agentName     String      // Who wrote the note
+  noteBody      String      // Internal whisper note content
+  createdAt     DateTime    @default(now())
+}

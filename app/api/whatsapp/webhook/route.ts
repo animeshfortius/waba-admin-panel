@@ -30,6 +30,99 @@ export async function POST(req: Request) {
             const metadata = value.metadata;
             const channelNumber = metadata?.display_phone_number || metadata?.phone_number_id || "Unknown";
 
+            // 1️⃣ HANDLE INCOMING MESSAGES FOR LIVE AGENT CHAT MODULE
+            if (value.messages) {
+              for (const msgObj of value.messages) {
+                const customerPhone = msgObj.from?.trim();
+                const messageId = msgObj.id?.trim();
+                const timestamp = msgObj.timestamp ? new Date(Number(msgObj.timestamp) * 1000) : new Date();
+                
+                // Extract text body or media caption
+                const messageText = msgObj.text?.body || msgObj.button?.text || msgObj.interactive?.button_reply?.title || "[Media / Interactive Message]";
+
+                if (customerPhone) {
+                  try {
+                    const cleanChannelDigits = channelNumber.replace(/\D/g, "").slice(-10);
+
+                    // Find or create chat session for live inbox
+                    let session = await prisma.chatSession.findFirst({
+                      where: { 
+                        customerPhone, 
+                        channel: { contains: cleanChannelDigits } 
+                      },
+                    });
+
+                    if (!session) {
+                      session = await prisma.chatSession.create({
+                        data: {
+                          userId: "admin",
+                          customerPhone,
+                          customerName: value.contacts?.[0]?.profile?.name || null,
+                          channel: channelNumber,
+                          status: "OPEN",
+                          isBotActive: true, // Default bot active on new inbound lead
+                          lastMessage: messageText,
+                          lastMessageAt: timestamp,
+                        },
+                      });
+                    } else {
+                      session = await prisma.chatSession.update({
+                        where: { id: session.id },
+                        data: {
+                          customerName: value.contacts?.[0]?.profile?.name || session.customerName,
+                          lastMessage: messageText,
+                          lastMessageAt: timestamp,
+                          status: "OPEN", // Re-open chat on new customer message
+                        },
+                      });
+                    }
+
+                    // Save incoming customer message
+                    await prisma.chatMessage.create({
+                      data: {
+                        chatSessionId: session.id,
+                        senderType: "CUSTOMER",
+                        messageBody: messageText,
+                        messageType: msgObj.type || "text",
+                        status: "DELIVERED",
+                        wabaMessageId: messageId || null,
+                        createdAt: timestamp,
+                      },
+                    });
+
+                    // 🤖 AI Auto-Responder: If bot mode is active, trigger automated response
+                    if (session.isBotActive) {
+                      const botReplyText = `Namaste! 🙏 Fortius Infocom AI Assistant mein aapka swagat hai. Aapka message mil gaya hai, hamari team jald hi aapse sampark karegi.`;
+
+                      await prisma.chatMessage.create({
+                        data: {
+                          chatSessionId: session.id,
+                          senderType: "BOT",
+                          senderName: "Fortius AI Bot",
+                          messageBody: botReplyText,
+                          messageType: "text",
+                          status: "SENT",
+                        },
+                      });
+
+                      await prisma.chatSession.update({
+                        where: { id: session.id },
+                        data: {
+                          lastMessage: botReplyText,
+                          lastMessageAt: new Date(),
+                        },
+                      });
+                    }
+
+                    console.log(`💬 LIVE CHAT INBOUND -> From: ${customerPhone} | Msg: ${messageText}`);
+                  } catch (chatErr: any) {
+                    console.error(`❌ Live Chat Webhook Error:`, chatErr.message);
+                  }
+                }
+              }
+            }
+
+            // 2️⃣ HANDLE MESSAGE STATUS UPDATES (SENT, DELIVERED, READ, FAILED)
             if (value.statuses) {
               for (const statusObj of value.statuses) {
                 const messageId = statusObj.id?.trim();
@@ -45,12 +138,10 @@ export async function POST(req: Request) {
                 if (rawStatus === "FAILED") status = "FAILED";
 
                 try {
-                  // Webhook wale number ke aakhri 10 digits nikaalo
                   const cleanWebhook = recipientId ? recipientId.replace(/\D/g, "").slice(-10) : "";
-
                   let matchedLogs: any[] = [];
 
-                  // 1️⃣ STEP 1: Exact wamid (messageId) se match karo
+                  // Step 1: Match by exact wamid (messageId)
                   if (messageId) {
                     const byWamid = await prisma.campaignLog.findMany({
                       where: { messageId: messageId }
@@ -60,12 +151,12 @@ export async function POST(req: Request) {
                     }
                   }
 
-                  // 2️⃣ STEP 2: JS Normalization Match (DB ke saare unread/sent logs laakar last 10 digits compare karo)
+                  // Step 2: Match by last 10 digits in recent unread logs
                   if (matchedLogs.length === 0 && cleanWebhook.length >= 10) {
                     const recentLogs = await prisma.campaignLog.findMany({
                       where: { status: { not: "READ" } },
                       orderBy: { createdAt: "desc" },
-                      take: 300 // Last 300 active logs check honge
+                      take: 300
                     });
 
                     matchedLogs = recentLogs.filter(log => {
@@ -93,9 +184,9 @@ export async function POST(req: Request) {
                       data: updateData,
                     });
 
-                    console.log(`🔥 JS NORMALIZED MATCH -> Phone: ${cleanWebhook} | Updated ${logIds.length} rows to ${status}`);
+                    console.log(`🔥 STATUS UPDATE -> Phone: ${cleanWebhook} | Updated ${logIds.length} rows to ${status}`);
                   } else {
-                    // 3️⃣ STEP 3: Agar sach mein kahin match na ho, tabhi fallback create karo
+                    // Step 3: Fallback creation if log not found
                     await prisma.campaignLog.create({
                       data: {
                         userId: "admin",
@@ -114,9 +205,8 @@ export async function POST(req: Request) {
                     });
                     console.log(`🚀 FALLBACK CREATED -> Recipient: ${recipientId} | Status: ${status}`);
                   }
-
                 } catch (dbErr: any) {
-                  console.error(`❌ Webhook DB Error:`, dbErr.message);
+                  console.error(`❌ Webhook Status DB Error:`, dbErr.message);
                 }
               }
             }

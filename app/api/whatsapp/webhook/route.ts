@@ -7,16 +7,11 @@ export async function GET(req: Request) {
     const mode = searchParams.get("hub.mode");
     const token = searchParams.get("hub.verify_token");
     const challenge = searchParams.get("hub.challenge");
-
     const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || "fortius_token";
 
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      return new NextResponse(challenge, {
-        status: 200,
-        headers: { "Content-Type": "text/plain" },
-      });
+      return new NextResponse(challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
     }
-
     return new NextResponse("Forbidden", { status: 403 });
   } catch (error) {
     return new NextResponse("Internal Error", { status: 500 });
@@ -39,7 +34,7 @@ export async function POST(req: Request) {
               for (const statusObj of value.statuses) {
                 const messageId = statusObj.id?.trim();
                 const recipientId = statusObj.recipient_id?.trim();
-                const rawStatus = statusObj.status?.toUpperCase(); // SENT, DELIVERED, READ, FAILED
+                const rawStatus = statusObj.status?.toUpperCase();
                 const timestamp = statusObj.timestamp ? new Date(Number(statusObj.timestamp) * 1000) : new Date();
 
                 if (!recipientId && !messageId) continue;
@@ -52,41 +47,46 @@ export async function POST(req: Request) {
                 try {
                   const cleanRecip = recipientId ? recipientId.replace(/\D/g, "").slice(-10) : "";
 
-                  let updateCount = 0;
+                  // 🟢 BULLETPROOF LOGIC: Phone number ke basis par sabse naye 'SENT' message ko pakdo aur update karo!
+                  let targetLog = null;
 
-                  // 🟢 1. Update ALL rows matching this WAMID instantly (No duplicates left behind)
-                  if (messageId) {
-                    const updateRes = await prisma.campaignLog.updateMany({
-                      where: { messageId: messageId },
-                      data: {
-                        status: status,
-                        ...(status === "DELIVERED" ? { deliveredAt: timestamp } : {}),
-                        ...(status === "READ" ? { deliveredAt: timestamp, readAt: timestamp, status: "READ" } : {}),
-                        ...(status === "FAILED" && statusObj.errors?.[0] ? { errorDetails: statusObj.errors[0].message } : {})
-                      }
-                    });
-                    updateCount = updateRes.count;
-                  }
-
-                  // 🟢 2. If WAMID didn't match, update by recipient phone number
-                  if (updateCount === 0 && cleanRecip) {
-                    const fallbackRes = await prisma.campaignLog.updateMany({
+                  if (cleanRecip) {
+                    targetLog = await prisma.campaignLog.findFirst({
                       where: {
                         recipient: { contains: cleanRecip },
-                        status: { not: "READ" }
+                        status: { not: "READ" } // Agar already read nahi hai toh uthao
                       },
-                      data: {
-                        status: status,
-                        ...(messageId ? { messageId: messageId } : {}),
-                        ...(status === "DELIVERED" ? { deliveredAt: timestamp } : {}),
-                        ...(status === "READ" ? { deliveredAt: timestamp, readAt: timestamp, status: "READ" } : {})
-                      }
+                      orderBy: { createdAt: "desc" }
                     });
-                    updateCount = fallbackRes.count;
                   }
 
-                  // 🟢 3. If still no record exists, auto-create it
-                  if (updateCount === 0) {
+                  // Agar phone number se na mile toh messageId se try karo
+                  if (!targetLog && messageId) {
+                    targetLog = await prisma.campaignLog.findFirst({
+                      where: { messageId: messageId }
+                    });
+                  }
+
+                  if (targetLog) {
+                    let updateData: any = { status };
+                    if (messageId) updateData.messageId = messageId;
+                    if (status === "DELIVERED") updateData.deliveredAt = timestamp;
+                    if (status === "READ") {
+                      if (!targetLog.deliveredAt) updateData.deliveredAt = timestamp;
+                      updateData.readAt = timestamp;
+                      updateData.status = "READ";
+                    }
+                    if (status === "FAILED" && statusObj.errors?.[0]) {
+                      updateData.errorDetails = statusObj.errors[0].message;
+                    }
+
+                    await prisma.campaignLog.update({
+                      where: { id: targetLog.id },
+                      data: updateData,
+                    });
+                    console.log(`🔥 SUCCESS UPDATED -> ID: ${targetLog.id} | Phone: ${cleanRecip} to ${status}`);
+                  } else {
+                    // Agar ekdum naya hai toh create kar do
                     await prisma.campaignLog.create({
                       data: {
                         userId: "admin",
@@ -103,9 +103,7 @@ export async function POST(req: Request) {
                         errorDetails: status === "FAILED" ? statusObj.errors?.[0]?.message || "Failed" : "N/A"
                       }
                     });
-                    console.log(`🚀 WEBHOOK AUTO-CREATED LOG -> Wamid: ${messageId} | Status: ${status}`);
-                  } else {
-                    console.log(`✅ WEBHOOK UPDATED ALL (${updateCount} rows) -> Wamid: ${messageId} to ${status}`);
+                    console.log(`🚀 CREATED NEW LOG -> Phone: ${cleanRecip} | Status: ${status}`);
                   }
 
                 } catch (dbErr: any) {

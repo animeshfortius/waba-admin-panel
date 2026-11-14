@@ -52,47 +52,41 @@ export async function POST(req: Request) {
                 try {
                   const cleanRecip = recipientId ? recipientId.replace(/\D/g, "").slice(-10) : "";
 
-                  // 1️⃣ Try finding existing log by WAMID (Message ID)
-                  let matchMsg = null;
+                  let updateCount = 0;
+
+                  // 🟢 1. Update ALL rows matching this WAMID instantly (No duplicates left behind)
                   if (messageId) {
-                    matchMsg = await prisma.campaignLog.findFirst({
-                      where: { messageId: messageId }
+                    const updateRes = await prisma.campaignLog.updateMany({
+                      where: { messageId: messageId },
+                      data: {
+                        status: status,
+                        ...(status === "DELIVERED" ? { deliveredAt: timestamp } : {}),
+                        ...(status === "READ" ? { deliveredAt: timestamp, readAt: timestamp, status: "READ" } : {}),
+                        ...(status === "FAILED" && statusObj.errors?.[0] ? { errorDetails: statusObj.errors[0].message } : {})
+                      }
                     });
+                    updateCount = updateRes.count;
                   }
 
-                  // 2️⃣ If WAMID not found, match by recipient number (picks the latest log for this number)
-                  if (!matchMsg && cleanRecip) {
-                    matchMsg = await prisma.campaignLog.findFirst({
+                  // 🟢 2. If WAMID didn't match, update by recipient phone number
+                  if (updateCount === 0 && cleanRecip) {
+                    const fallbackRes = await prisma.campaignLog.updateMany({
                       where: {
-                        recipient: { contains: cleanRecip }
+                        recipient: { contains: cleanRecip },
+                        status: { not: "READ" }
                       },
-                      orderBy: { sentAt: "desc" }
+                      data: {
+                        status: status,
+                        ...(messageId ? { messageId: messageId } : {}),
+                        ...(status === "DELIVERED" ? { deliveredAt: timestamp } : {}),
+                        ...(status === "READ" ? { deliveredAt: timestamp, readAt: timestamp, status: "READ" } : {})
+                      }
                     });
+                    updateCount = fallbackRes.count;
                   }
 
-                  if (matchMsg) {
-                    // Update existing log & bind wamid if it was missing or N/A
-                    let updateData: any = { status };
-                    if (messageId && (!matchMsg.messageId || matchMsg.messageId === "N/A")) {
-                      updateData.messageId = messageId;
-                    }
-                    if (status === "DELIVERED") updateData.deliveredAt = timestamp;
-                    if (status === "READ") {
-                      if (!matchMsg.deliveredAt) updateData.deliveredAt = timestamp;
-                      updateData.readAt = timestamp;
-                      updateData.status = "READ";
-                    }
-                    if (status === "FAILED" && statusObj.errors?.[0]) {
-                      updateData.errorDetails = statusObj.errors[0].message;
-                    }
-
-                    await prisma.campaignLog.update({
-                      where: { id: matchMsg.id },
-                      data: updateData,
-                    });
-                    console.log(`✅ WEBHOOK UPDATED -> ID: ${matchMsg.id} to ${status} (Matched Recipient/WAMID)`);
-                  } else {
-                    // 3️⃣ Fallback only if no record exists at all
+                  // 🟢 3. If still no record exists, auto-create it
+                  if (updateCount === 0) {
                     await prisma.campaignLog.create({
                       data: {
                         userId: "admin",
@@ -110,7 +104,10 @@ export async function POST(req: Request) {
                       }
                     });
                     console.log(`🚀 WEBHOOK AUTO-CREATED LOG -> Wamid: ${messageId} | Status: ${status}`);
+                  } else {
+                    console.log(`✅ WEBHOOK UPDATED ALL (${updateCount} rows) -> Wamid: ${messageId} to ${status}`);
                   }
+
                 } catch (dbErr: any) {
                   console.error(`❌ Webhook DB Error:`, dbErr.message);
                 }

@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<"campaign" | "delivery" | "schedule" | "fallback" | "api" | "service">("campaign");
-  const [dateRange, setDateRange] = useState("15-Oct-2026 - 14-Nov-2026");
+  const [dateRange, setDateRange] = useState("All");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showDownloadNotification, setShowDownloadNotification] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Pagination & Rows Per Page states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
 
   // Filter states & Waba Channels
   const [selectedChannel, setSelectedChannel] = useState("");
@@ -19,8 +23,8 @@ export default function ReportsPage() {
   // 🟢 Specific Campaign Drill-down filter state
   const [campaignFilter, setCampaignFilter] = useState("");
 
-  // Analytics Stats Cards
-  const [stats, setStats] = useState({ total: 1, sent: 0, delivered: 1, read: 1, failed: 0 });
+  // Analytics Stats Cards fallback from API
+  const [apiStats, setApiStats] = useState({ total: 1, sent: 0, delivered: 1, read: 1, failed: 0 });
 
   // Dynamic datasets from API
   const [campaignData, setCampaignData] = useState<any[]>([]);
@@ -46,6 +50,11 @@ export default function ReportsPage() {
     return () => clearInterval(interval);
   }, [activeTab, campaignStatus, selectedChannel]);
 
+  // Reset pagination on tab change or filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, campaignFilter, selectedChannel, templateSearch, campaignStatus, isJourney]);
+
   const fetchLiveReports = async (userId: string) => {
     try {
       const queryParams = new URLSearchParams({
@@ -63,8 +72,12 @@ export default function ReportsPage() {
       if (data.success) {
         setCampaignData(data.campaigns || []);
         setDeliveryData(data.deliveries || []);
+        setScheduleData(data.schedules || []);
+        setFallbackData(data.fallbacks || []);
+        setApiData(data.apis || []);
+        setServiceData(data.services || []);
         if (data.wabaAccounts) setWabaChannels(data.wabaAccounts);
-        if (data.stats) setStats(data.stats);
+        if (data.stats) setApiStats(data.stats);
       }
     } catch (err) {
       console.error("Failed to fetch live reports:", err);
@@ -93,14 +106,108 @@ export default function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  // 🟢 Filter deliveries based on selected campaign drill-down or search filters
-  const filteredDeliveries = deliveryData.filter((item) => {
-    if (campaignFilter && item.campaignName !== campaignFilter) return false;
-    if (selectedChannel && item.channel !== selectedChannel) return false;
-    if (campaignStatus && item.status !== campaignStatus) return false;
-    if (templateSearch && !item.templateName?.toLowerCase().includes(templateSearch.toLowerCase())) return false;
-    return true;
-  });
+  // 🟢 Filter datasets based on active filters and drill-downs
+  const filteredCampaigns = useMemo(() => {
+    return campaignData.filter((item) => {
+      if (campaignFilter && item.campaignInfo !== campaignFilter) return false;
+      if (selectedChannel && !String(item.channel).includes(selectedChannel)) return false;
+      if (campaignStatus && item.status !== campaignStatus) return false;
+      if (templateSearch && !item.templateInfo?.toLowerCase().includes(templateSearch.toLowerCase())) return false;
+      return true;
+    });
+  }, [campaignData, campaignFilter, selectedChannel, campaignStatus, templateSearch]);
+
+  const filteredDeliveries = useMemo(() => {
+    return deliveryData.filter((item) => {
+      if (campaignFilter && item.campaignName !== campaignFilter) return false;
+      if (selectedChannel && !String(item.channel).includes(selectedChannel)) return false;
+      if (campaignStatus && item.status !== campaignStatus) return false;
+      if (templateSearch && !item.templateName?.toLowerCase().includes(templateSearch.toLowerCase())) return false;
+      return true;
+    });
+  }, [deliveryData, campaignFilter, selectedChannel, campaignStatus, templateSearch]);
+
+  const filteredSchedules = useMemo(() => {
+    return scheduleData.filter((item) => {
+      if (templateSearch && !item.templateName?.toLowerCase().includes(templateSearch.toLowerCase())) return false;
+      return true;
+    });
+  }, [scheduleData, templateSearch]);
+
+  const filteredFallbacks = useMemo(() => {
+    return fallbackData.filter((item) => {
+      if (campaignStatus && item.status !== campaignStatus) return false;
+      return true;
+    });
+  }, [fallbackData, campaignStatus]);
+
+  const filteredApis = useMemo(() => {
+    return apiData.filter((item) => {
+      if (campaignStatus && item.status !== campaignStatus) return false;
+      return true;
+    });
+  }, [apiData, campaignStatus]);
+
+  const filteredServices = useMemo(() => {
+    return serviceData.filter((item) => {
+      if (campaignStatus && item.status !== campaignStatus) return false;
+      return true;
+    });
+  }, [serviceData, campaignStatus]);
+
+  // Active Tab Dataset selection
+  const activeDataset = useMemo(() => {
+    switch (activeTab) {
+      case "campaign": return filteredCampaigns;
+      case "delivery": return filteredDeliveries;
+      case "schedule": return filteredSchedules;
+      case "fallback": return filteredFallbacks;
+      case "api": return filteredApis;
+      case "service": return filteredServices;
+      default: return filteredCampaigns;
+    }
+  }, [activeTab, filteredCampaigns, filteredDeliveries, filteredSchedules, filteredFallbacks, filteredApis, filteredServices]);
+
+  // Pagination computations
+  const totalPages = Math.ceil(activeDataset.length / rowsPerPage) || 1;
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * rowsPerPage;
+    return activeDataset.slice(start, start + rowsPerPage);
+  }, [activeDataset, currentPage, rowsPerPage]);
+
+  // 🟢 Dynamic Stats Calculation (Campaign-wise / Filter-wise exact counting)
+  const stats = useMemo(() => {
+    let targetList = activeTab === "campaign" ? filteredCampaigns : filteredDeliveries;
+    if (activeTab !== "campaign" && activeTab !== "delivery") {
+      targetList = activeDataset;
+    }
+
+    let total = targetList.length;
+    let sent = 0, delivered = 0, read = 0, failed = 0;
+
+    targetList.forEach((item) => {
+      const s = (item.status || "").toUpperCase();
+      if (s === "SENT") sent++;
+      else if (s === "DELIVERED") delivered++;
+      else if (s === "READ") read++;
+      else if (s === "FAILED") failed++;
+      else if (activeTab === "campaign" && item.totalCount) {
+        total = filteredCampaigns.reduce((acc, curr) => acc + (Number(curr.totalCount) || 1), 0);
+      }
+    });
+
+    if (!campaignFilter && !selectedChannel && !campaignStatus && !templateSearch && total === 0) {
+      return apiStats;
+    }
+
+    return { 
+      total: total || apiStats.total, 
+      sent: sent || (campaignFilter ? 0 : apiStats.sent), 
+      delivered: delivered || (campaignFilter ? 0 : apiStats.delivered), 
+      read: read || (campaignFilter ? 0 : apiStats.read), 
+      failed: failed || (campaignFilter ? 0 : apiStats.failed) 
+    };
+  }, [activeTab, filteredCampaigns, filteredDeliveries, activeDataset, campaignFilter, selectedChannel, campaignStatus, templateSearch, apiStats]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 lg:p-6 text-xs font-sans">
@@ -174,7 +281,7 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* Date Picker Button */}
+        {/* Date Picker Button (Default All) */}
         <div className="relative">
           <button
             onClick={() => setShowDatePicker(!showDatePicker)}
@@ -192,6 +299,7 @@ export default function ReportsPage() {
                 <button onClick={() => setShowDatePicker(false)} className="text-gray-400">✕</button>
               </div>
               <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => { setDateRange("All"); setShowDatePicker(false); }} className="p-2 border rounded-lg hover:bg-emerald-50 text-left font-bold cursor-pointer bg-emerald-50 text-emerald-800">All (Default)</button>
                 <button onClick={() => { setDateRange("Today"); setShowDatePicker(false); }} className="p-2 border rounded-lg hover:bg-emerald-50 text-left font-medium cursor-pointer">Today</button>
                 <button onClick={() => { setDateRange("Yesterday"); setShowDatePicker(false); }} className="p-2 border rounded-lg hover:bg-emerald-50 text-left font-medium cursor-pointer">Yesterday</button>
                 <button onClick={() => { setDateRange("Last 7 Days"); setShowDatePicker(false); }} className="p-2 border rounded-lg hover:bg-emerald-50 text-left font-medium cursor-pointer">Last 7 Days</button>
@@ -202,7 +310,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* METRIC SUMMARY CARDS */}
+      {/* METRIC SUMMARY CARDS (Dynamic Campaign / Filter Wise Exact Counts) */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
           <div className="text-gray-400 font-semibold text-[10px]">TOTAL</div>
@@ -231,10 +339,10 @@ export default function ReportsPage() {
         <div className="flex justify-between items-center border-b pb-3">
           <h3 className="font-bold text-sm text-gray-800 flex items-center space-x-2">
             <span>🔍</span>
-            <span>Filter Records ({activeTab.toUpperCase()})</span>
+            <span>Filter Records ({activeTab.toUpperCase()}) {campaignFilter && `for "${campaignFilter}"`}</span>
           </h3>
           <div className="space-x-2">
-            <button onClick={() => { setSelectedChannel(""); setTemplateSearch(""); setCampaignStatus(""); setCampaignFilter(""); }} className="text-xs text-gray-500 font-semibold hover:text-gray-800 px-3 py-1.5 cursor-pointer">Reset</button>
+            <button onClick={() => { setSelectedChannel(""); setTemplateSearch(""); setCampaignStatus(""); setCampaignFilter(""); setDateRange("All"); }} className="text-xs text-gray-500 font-semibold hover:text-gray-800 px-3 py-1.5 cursor-pointer">Reset</button>
             <button onClick={() => fetchLiveReports(localStorage.getItem("userId") || "admin")} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow transition cursor-pointer">
               Apply Filter
             </button>
@@ -300,7 +408,7 @@ export default function ReportsPage() {
       </div>
 
       {/* DATA TABLES SECTION */}
-      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden flex">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col">
         <div className={`flex-1 overflow-x-auto transition-all ${showPreviewModal ? "w-2/3" : "w-full"}`}>
           {loading ? (
             <div className="p-12 text-center text-gray-500 font-semibold">Loading live reports from Meta & database...</div>
@@ -323,10 +431,10 @@ export default function ReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {campaignData.length === 0 ? (
+                    {paginatedData.length === 0 ? (
                       <tr><td colSpan={9} className="p-8 text-center text-gray-400">No campaign reports found.</td></tr>
                     ) : (
-                      campaignData.map((item) => (
+                      paginatedData.map((item) => (
                         <tr key={item.id} className="hover:bg-gray-50 transition">
                           <td className="p-4 font-mono text-gray-700">{item.date}</td>
                           <td className="p-4 font-bold text-gray-900">{item.campaignInfo}</td>
@@ -335,7 +443,6 @@ export default function ReportsPage() {
                           <td className="p-4 font-mono font-bold text-gray-800">₹{item.cost}</td>
                           <td className="p-4 font-bold">{item.totalCount}</td>
                           
-                          {/* Replaced Error Details with Professional Timestamp */}
                           <td className="p-4 font-mono text-[11px] text-gray-700 w-[230px]">
                             {item.createdAt ? new Date(item.createdAt).toLocaleString('en-IN', {
                               day: '2-digit',
@@ -390,10 +497,10 @@ export default function ReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {filteredDeliveries.length === 0 ? (
-                      <tr><td colSpan={10} className="p-8 text-center text-gray-400">No delivery reports found for this campaign.</td></tr>
+                    {paginatedData.length === 0 ? (
+                      <tr><td colSpan={10} className="p-8 text-center text-gray-400">No delivery reports found.</td></tr>
                     ) : (
-                      filteredDeliveries.map((item) => (
+                      paginatedData.map((item) => (
                         <tr key={item.id} className="hover:bg-gray-50 transition">
                           <td className="p-3 font-mono">{item.date}</td>
                           <td className="p-3 font-bold text-gray-800">{item.campaignName}</td>
@@ -412,7 +519,6 @@ export default function ReportsPage() {
 
                           <td className="p-3 font-bold text-emerald-600">₹{item.cost}</td>
 
-                          {/* Replaced Error Details with Professional Timestamp */}
                           <td className="p-3 font-mono text-[11px] text-gray-700 w-[230px]">
                             {item.createdAt ? new Date(item.createdAt).toLocaleString('en-IN', {
                               day: '2-digit',
@@ -433,8 +539,80 @@ export default function ReportsPage() {
                   </tbody>
                 </table>
               )}
+
+              {/* OTHER TABS (SCHEDULE, FALLBACK, API, SERVICE) */}
+              {["schedule", "fallback", "api", "service"].includes(activeTab) && (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
+                      <th className="p-4">ID / Info</th>
+                      <th className="p-4">Template / Name</th>
+                      <th className="p-4">Channel</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">TIMESTAMP</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {paginatedData.length === 0 ? (
+                      <tr><td colSpan={5} className="p-8 text-center text-gray-400">No {activeTab} reports found.</td></tr>
+                    ) : (
+                      paginatedData.map((item) => (
+                        <tr key={item.id} className="hover:bg-gray-50 transition">
+                          <td className="p-4 font-bold text-gray-900">{item.campaignInfo || item.id}</td>
+                          <td className="p-4 text-emerald-700 font-medium">{item.templateName || item.name || "N/A"}</td>
+                          <td className="p-4 font-mono">{item.channel || "N/A"}</td>
+                          <td className="p-4 font-bold">{item.status || "COMPLETED"}</td>
+                          <td className="p-4 font-mono text-[11px]">
+                            {item.createdAt ? new Date(item.createdAt).toLocaleString('en-IN') : (item.date || "N/A")}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              )}
             </>
           )}
+        </div>
+
+        {/* 🟢 PAGINATION & ROWS PER PAGE CONTROLS BAR */}
+        <div className="bg-gray-50 border-t p-4 flex flex-wrap items-center justify-between gap-4 text-xs">
+          <div className="flex items-center space-x-2">
+            <span className="text-gray-600 font-medium">Showing {paginatedData.length > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0} to {Math.min(currentPage * rowsPerPage, activeDataset.length)} of {activeDataset.length} entries</span>
+            <select
+              value={rowsPerPage}
+              onChange={(e) => {
+                setRowsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="border rounded-lg px-2 py-1 bg-white font-bold text-gray-700 focus:outline-none cursor-pointer"
+            >
+              <option value={20}>20 per page</option>
+              <option value={50}>50 per page</option>
+              <option value={100}>100 per page</option>
+              <option value={200}>200 per page</option>
+            </select>
+          </div>
+
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 border rounded-lg bg-white font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              Previous
+            </button>
+            <span className="px-3 py-1.5 font-bold text-gray-800">
+              Page {currentPage} of {totalPages || 1}
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="px-3 py-1.5 border rounded-lg bg-white font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              Next
+            </button>
+          </div>
         </div>
 
         {/* RIGHT SIDE MOBILE PREVIEW MODAL */}

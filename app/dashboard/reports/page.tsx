@@ -34,15 +34,28 @@ export default function ReportsPage() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
+  // 🟢 Auto-refresh polling (Every 5 seconds fetches fresh DB status)
   useEffect(() => {
     const userId = localStorage.getItem("userId") || "admin";
     fetchLiveReports(userId);
-  }, [activeTab]);
+
+    const interval = setInterval(() => {
+      fetchLiveReports(userId);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [activeTab, campaignStatus, selectedChannel]);
 
   const fetchLiveReports = async (userId: string) => {
-    setLoading(true);
     try {
-      const res = await fetch(`/api/reports?userId=${userId}&tab=all`);
+      const queryParams = new URLSearchParams({
+        userId,
+        tab: activeTab,
+        ...(campaignStatus && { status: campaignStatus }),
+        ...(selectedChannel && { channel: selectedChannel }),
+      });
+
+      const res = await fetch(`/api/reports?${queryParams.toString()}`);
       const data = await res.json();
       if (data.success) {
         setCampaignData(data.campaigns || []);
@@ -149,7 +162,7 @@ export default function ReportsPage() {
               key={tab.id}
               onClick={() => {
                 setActiveTab(tab.id as any);
-                if (tab.id !== "delivery") setCampaignFilter(""); // ✅ Ab tab.id compare hoga
+                if (tab.id !== "delivery") setCampaignFilter("");
               }}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${activeTab === tab.id ? "bg-emerald-600 text-white shadow" : "text-gray-600 hover:bg-gray-100"}`}
             >
@@ -333,7 +346,6 @@ export default function ReportsPage() {
                             </span>
                           </td>
                           <td className="p-4 text-center space-x-1.5">
-                            {/* 🟢 VIEW BUTTON: Switches to Delivery Report filtered by this campaign */}
                             <button
                               onClick={() => {
                                 setCampaignFilter(item.campaignInfo);

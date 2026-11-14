@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// 👇 1. Prevent Next.js Caching so data is always fresh from database
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 // Helper function to get exact IST (Indian Standard Time) format
 function formatIST(dateInput: Date | string | null) {
   if (!dateInput) return "N/A";
@@ -40,6 +44,10 @@ export async function GET(req: Request) {
         deliveries: [],
         wabaAccounts,
         stats: { total: 0, sent: 0, delivered: 0, read: 0, failed: 0 }
+      }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        }
       });
     }
 
@@ -99,10 +107,14 @@ export async function GET(req: Request) {
       wabaAccounts,
       stats: {
         total: messageLogs.length,
-        sent: messageLogs.filter(l => l.status === "SENT").length,
-        delivered: messageLogs.filter(l => l.status === "DELIVERED").length,
-        read: messageLogs.filter(l => l.status === "READ").length,
-        failed: messageLogs.filter(l => l.status === "FAILED").length,
+        sent: messageLogs.filter(l => l.status?.toUpperCase() === "SENT").length,
+        delivered: messageLogs.filter(l => l.status?.toUpperCase() === "DELIVERED").length,
+        read: messageLogs.filter(l => l.status?.toUpperCase() === "READ").length,
+        failed: messageLogs.filter(l => l.status?.toUpperCase() === "FAILED").length,
+      }
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
       }
     });
   } catch (error: any) {

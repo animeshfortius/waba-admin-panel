@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// 1. Meta Webhook Verification (GET)
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -24,7 +23,6 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. Handle Incoming WhatsApp Statuses & Messages (POST)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -35,80 +33,92 @@ export async function POST(req: Request) {
           if (change.field === "messages") {
             const value = change.value;
 
-            // Handle statuses (sent, delivered, read, failed)
             if (value.statuses) {
               for (const statusObj of value.statuses) {
                 const messageId = statusObj.id?.trim();
-                const recipientId = statusObj.recipient_id?.trim();
-                const status = statusObj.status?.toUpperCase(); // SENT, DELIDERED, READ, FAILED
+                const recipientId = statusObj.recipient_id?.trim(); // e.g. "919495863045"
+                const rawStatus = statusObj.status?.toUpperCase(); // SENT, DELIVERED, READ, FAILED
                 const timestamp = statusObj.timestamp ? new Date(Number(statusObj.timestamp) * 1000) : new Date();
 
-                if (!messageId && !recipientId) continue;
+                if (!recipientId && !messageId) continue;
 
-                let updateData: any = { status };
-
-                if (status === "DELIVERED") {
-                  updateData.deliveredAt = timestamp;
-                } else if (status === "READ") {
-                  updateData.readAt = timestamp;
-                  updateData.status = "READ";
-                } else if (status === "FAILED") {
-                  if (statusObj.errors && statusObj.errors[0]) {
-                    updateData.errorDetails = statusObj.errors[0].message || "Failed";
-                  }
-                }
-
-                if (messageId) {
-                  updateData.messageId = messageId;
-                }
+                let status = rawStatus;
+                if (rawStatus === "DELIVERED") status = "DELIVERED";
+                if (rawStatus === "READ") status = "READ";
+                if (rawStatus === "FAILED") status = "FAILED";
 
                 try {
-                  let updated = false;
+                  let updatedLog = null;
 
-                  // 1. Try updating by exact messageId first
+                  // 1. Try finding and updating by exact messageId first
                   if (messageId) {
-                    const matchByMsgId = await prisma.campaignLog.findFirst({
+                    updatedLog = await prisma.campaignLog.findFirst({
                       where: { messageId: messageId }
                     });
 
-                    if (matchByMsgId) {
+                    if (updatedLog) {
+                      let updateData: any = { status };
+                      if (status === "DELIVERED") updateData.deliveredAt = timestamp;
+                      if (status === "READ") {
+                        if (!updatedLog.deliveredAt) updateData.deliveredAt = timestamp;
+                        updateData.readAt = timestamp;
+                        updateData.status = "READ";
+                      }
+                      if (status === "FAILED" && statusObj.errors?.[0]) {
+                        updateData.errorDetails = statusObj.errors[0].message;
+                      }
+
                       await prisma.campaignLog.update({
-                        where: { id: matchByMsgId.id },
+                        where: { id: updatedLog.id },
                         data: updateData,
                       });
-                      updated = true;
+                      console.log(`✅ Updated via MessageID [${messageId}] to Status: ${status}`);
+                      continue;
                     }
                   }
 
-                  // 2. Fallback: If not found by messageId, find by recipient phone number
-                  if (!updated && recipientId) {
-                    const matchByRecipient = await prisma.campaignLog.findFirst({
+                  // 2. Fallback: Find latest log by recipient phone number if messageId not found
+                  if (recipientId) {
+                    const candidateLogs = await prisma.campaignLog.findMany({
                       where: {
                         OR: [
                           { recipient: recipientId },
                           { recipient: `+${recipientId}` }
                         ],
-                        status: { not: "READ" } // Don't overwrite already read messages if possible
+                        status: { not: "READ" }
                       },
-                      orderBy: { sentAt: "desc" }
+                      orderBy: { sentAt: "desc" },
+                      take: 1
                     });
 
-                    if (matchByRecipient) {
+                    if (candidateLogs.length > 0) {
+                      const logToUpdate = candidateLogs[0];
+                      let updateData: any = { status };
+
+                      if (messageId && !logToUpdate.messageId) {
+                        updateData.messageId = messageId; // Bind wamid retroactively
+                      }
+                      if (status === "DELIVERED") updateData.deliveredAt = timestamp;
+                      if (status === "READ") {
+                        if (!logToUpdate.deliveredAt) updateData.deliveredAt = timestamp;
+                        updateData.readAt = timestamp;
+                        updateData.status = "READ";
+                      }
+                      if (status === "FAILED" && statusObj.errors?.[0]) {
+                        updateData.errorDetails = statusObj.errors[0].message;
+                      }
+
                       await prisma.campaignLog.update({
-                        where: { id: matchByRecipient.id },
+                        where: { id: logToUpdate.id },
                         data: updateData,
                       });
-                      updated = true;
+                      console.log(`✅ Updated via Recipient Phone [${recipientId}] to Status: ${status}`);
+                    } else {
+                      console.log(`ℹ️ No pending campaign log found for recipient: ${recipientId}`);
                     }
                   }
-
-                  if (updated) {
-                    console.log(`✅ Successfully Updated Status to [${status}] for ID/Recipient: ${messageId || recipientId}`);
-                  } else {
-                    console.log(`ℹ️ Skipped: No matching log found for messageId [${messageId}] / recipient [${recipientId}]`);
-                  }
                 } catch (dbErr: any) {
-                  console.error(`❌ DB Update Error for [${messageId}]:`, dbErr.message);
+                  console.error(`❌ Webhook DB Update Error:`, dbErr.message);
                 }
               }
             }

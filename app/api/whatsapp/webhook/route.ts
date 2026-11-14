@@ -45,33 +45,15 @@ export async function POST(req: Request) {
                 if (rawStatus === "FAILED") status = "FAILED";
 
                 try {
-                  let targetLog = null;
                   const cleanRecip = recipientId ? recipientId.replace(/\D/g, "").slice(-10) : "";
 
-                  // 1️⃣ STEP 1: Exact wamid (messageId) se match karo
-                  if (messageId) {
-                    targetLog = await prisma.campaignLog.findFirst({
-                      where: { messageId: messageId }
-                    });
-                  }
-
-                  // 2️⃣ STEP 2: Agar wamid se na mile, toh poore database mein phone number (last 10 digits) se sabse naya SENT/DELIVERED log dhoondho
-                  if (!targetLog && cleanRecip) {
-                    targetLog = await prisma.campaignLog.findFirst({
-                      where: {
-                        recipient: { contains: cleanRecip }
-                      },
-                      orderBy: { createdAt: "desc" }
-                    });
-                  }
-
-                  if (targetLog) {
-                    // 🟢 Asli campaign row mil gayi! Ab isko update karenge, naya row nahi banayenge.
+                  if (cleanRecip) {
+                    // 🟢 BULLETPROOF FIX: Us phone number ke saare pending/sent records ko ek sath update karo!
                     let updateData: any = { status };
-                    if (messageId && !targetLog.messageId) updateData.messageId = messageId;
-                    if (status === "DELIVERED" && !targetLog.deliveredAt) updateData.deliveredAt = timestamp;
+                    if (messageId) updateData.messageId = messageId;
+                    if (status === "DELIVERED") updateData.deliveredAt = timestamp;
                     if (status === "READ") {
-                      if (!targetLog.deliveredAt) updateData.deliveredAt = timestamp;
+                      updateData.deliveredAt = timestamp;
                       updateData.readAt = timestamp;
                       updateData.status = "READ";
                     }
@@ -79,30 +61,36 @@ export async function POST(req: Request) {
                       updateData.errorDetails = statusObj.errors[0].message;
                     }
 
-                    await prisma.campaignLog.update({
-                      where: { id: targetLog.id },
+                    const updateResult = await prisma.campaignLog.updateMany({
+                      where: {
+                        recipient: { contains: cleanRecip },
+                        status: { not: "READ" } // Jo already READ ho chuke hain unhe chhod kar baaki sab update honge
+                      },
                       data: updateData,
                     });
-                    console.log(`🔥 REAL CAMPAIGN UPDATED -> ID: ${targetLog.id} | Phone: ${cleanRecip} to ${status}`);
-                  } else {
-                    // 3️⃣ STEP 3: Agar sach mein database mein kahin bhi row nahi hai, tabhi naya create karo
-                    await prisma.campaignLog.create({
-                      data: {
-                        userId: "admin",
-                        campaignName: "Direct_Chat_Campaign",
-                        templateName: "Direct_Message",
-                        channel: channelNumber,
-                        recipient: recipientId || "Unknown",
-                        status: status,
-                        messageId: messageId || null,
-                        cost: 0.155,
-                        sentAt: timestamp,
-                        deliveredAt: status === "DELIVERED" || status === "READ" ? timestamp : null,
-                        readAt: status === "READ" ? timestamp : null,
-                        errorDetails: status === "FAILED" ? statusObj.errors?.[0]?.message || "Failed" : "N/A"
-                      }
-                    });
-                    console.log(`🚀 FALLBACK CREATED -> Recipient: ${recipientId} | Status: ${status}`);
+
+                    console.log(`🔥 MASS UPDATED -> Phone: ${cleanRecip} | Count: ${updateResult.count} rows to ${status}`);
+
+                    // Agar ek bhi row update nahi hui (matlab naya number hai), toh ek fresh row create kar do
+                    if (updateResult.count === 0) {
+                      await prisma.campaignLog.create({
+                        data: {
+                          userId: "admin",
+                          campaignName: "Direct_Chat_Campaign",
+                          templateName: "Direct_Message",
+                          channel: channelNumber,
+                          recipient: recipientId || "Unknown",
+                          status: status,
+                          messageId: messageId || null,
+                          cost: 0.155,
+                          sentAt: timestamp,
+                          deliveredAt: status === "DELIVERED" || status === "READ" ? timestamp : null,
+                          readAt: status === "READ" ? timestamp : null,
+                          errorDetails: status === "FAILED" ? statusObj.errors?.[0]?.message || "Failed" : "N/A"
+                        }
+                      });
+                      console.log(`🚀 FALLBACK CREATED -> Recipient: ${recipientId} | Status: ${status}`);
+                    }
                   }
 
                 } catch (dbErr: any) {

@@ -28,7 +28,6 @@ export async function POST(req: Request) {
           if (change.field === "messages") {
             const value = change.value;
             const metadata = value.metadata;
-            const channelNumber = metadata?.display_phone_number || metadata?.phone_number_id || "Unknown";
 
             if (value.statuses) {
               for (const statusObj of value.statuses) {
@@ -37,7 +36,7 @@ export async function POST(req: Request) {
                 const rawStatus = statusObj.status?.toUpperCase();
                 const timestamp = statusObj.timestamp ? new Date(Number(statusObj.timestamp) * 1000) : new Date();
 
-                if (!recipientId && !messageId) continue;
+                if (!messageId && !recipientId) continue;
 
                 let status = rawStatus;
                 if (rawStatus === "DELIVERED") status = "DELIVERED";
@@ -45,32 +44,37 @@ export async function POST(req: Request) {
                 if (rawStatus === "FAILED") status = "FAILED";
 
                 try {
-                  const cleanRecip = recipientId ? recipientId.replace(/\D/g, "").slice(-10) : "";
-
-                  // 🟢 BULLETPROOF LOGIC: Phone number ke basis par sabse naye 'SENT' message ko pakdo aur update karo!
                   let targetLog = null;
 
-                  if (cleanRecip) {
-                    targetLog = await prisma.campaignLog.findFirst({
-                      where: {
-                        recipient: { contains: cleanRecip },
-                        status: { not: "READ" } // Agar already read nahi hai toh uthao
-                      },
-                      orderBy: { createdAt: "desc" }
-                    });
-                  }
-
-                  // Agar phone number se na mile toh messageId se try karo
-                  if (!targetLog && messageId) {
+                  // 1️⃣ PRIMARY MATCH: Exact messageId (wamid) match (Sabse accurate)
+                  if (messageId) {
                     targetLog = await prisma.campaignLog.findFirst({
                       where: { messageId: messageId }
                     });
                   }
 
+                  // 2️⃣ FALLBACK MATCH: By recipient phone number (last 10 digits)
+                  if (!targetLog && recipientId) {
+                    const cleanRecip = recipientId.replace(/\D/g, "").slice(-10);
+                    if (cleanRecip.length >= 10) {
+                      targetLog = await prisma.campaignLog.findFirst({
+                        where: {
+                          recipient: { contains: cleanRecip },
+                          status: { not: "READ" }
+                        },
+                        orderBy: { createdAt: "desc" }
+                      });
+                    }
+                  }
+
                   if (targetLog) {
                     let updateData: any = { status };
-                    if (messageId) updateData.messageId = messageId;
-                    if (status === "DELIVERED") updateData.deliveredAt = timestamp;
+                    if (messageId && !targetLog.messageId) {
+                      updateData.messageId = messageId;
+                    }
+                    if (status === "DELIVERED") {
+                      if (!targetLog.deliveredAt) updateData.deliveredAt = timestamp;
+                    }
                     if (status === "READ") {
                       if (!targetLog.deliveredAt) updateData.deliveredAt = timestamp;
                       updateData.readAt = timestamp;
@@ -84,26 +88,9 @@ export async function POST(req: Request) {
                       where: { id: targetLog.id },
                       data: updateData,
                     });
-                    console.log(`🔥 SUCCESS UPDATED -> ID: ${targetLog.id} | Phone: ${cleanRecip} to ${status}`);
+                    console.log(`✅ WEBHOOK UPDATED -> ID: ${targetLog.id} to ${status} (Wamid: ${messageId})`);
                   } else {
-                    // Agar ekdum naya hai toh create kar do
-                    await prisma.campaignLog.create({
-                      data: {
-                        userId: "admin",
-                        campaignName: "Auto_Webhook_Campaign",
-                        templateName: "Direct_Message",
-                        channel: channelNumber,
-                        recipient: recipientId || "Unknown",
-                        status: status,
-                        messageId: messageId || null,
-                        cost: 0.155,
-                        sentAt: timestamp,
-                        deliveredAt: status === "DELIVERED" || status === "READ" ? timestamp : null,
-                        readAt: status === "READ" ? timestamp : null,
-                        errorDetails: status === "FAILED" ? statusObj.errors?.[0]?.message || "Failed" : "N/A"
-                      }
-                    });
-                    console.log(`🚀 CREATED NEW LOG -> Phone: ${cleanRecip} | Status: ${status}`);
+                    console.log(`⚠️ No matching campaign log found for Wamid: ${messageId}, Recipient: ${recipientId}`);
                   }
 
                 } catch (dbErr: any) {

@@ -76,6 +76,17 @@ export default function Sidebar() {
           <span>Reports</span>
         </Link>
 
+        {/* 🟢 Live Chat / Live Agent Inbox Module */}
+        <Link
+          href="/dashboard/chat"
+          className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+            pathname === "/dashboard/chat" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+          }`}
+        >
+          <span>💬</span>
+          <span>Live Chat</span>
+        </Link>
+
         <Link
           href="/dashboard/api-docs"
           className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${

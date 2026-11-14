@@ -40,9 +40,11 @@ export async function GET(req: Request) {
     }
     
     if (channelFilter) {
-      // Clean numbers for flexible matching
+      // Clean numbers for flexible matching across formats (+15557283243 vs 15557283243)
       const cleanChannel = channelFilter.replace(/\D/g, "");
-      whereClause.channel = { contains: cleanChannel };
+      whereClause.channel = { 
+        contains: cleanChannel.length > 5 ? cleanChannel.slice(-10) : cleanChannel 
+      };
     }
 
     // 🟢 Date Range filter logic implementation including Custom Dates

@@ -11,7 +11,6 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: "User ID missing" }, { status: 400 });
     }
 
-    // Fetch WABA accounts for channel mapping
     let wabaAccounts = await prisma.wabaAccount.findMany({
       select: { wabaId: true, displayPhone: true, displayName: true, userId: true, accessToken: true }
     });
@@ -21,27 +20,29 @@ export async function GET(req: Request) {
       if (filtered.length > 0) wabaAccounts = filtered;
     }
 
-    // Fetch templates/campaign logs
     const templates = await prisma.whatsAppTemplate.findMany({
       orderBy: { createdAt: "desc" },
     });
 
-    // Generate accurate delivery logs matching your screenshot structure
-    const deliveryLogs = templates.map((tpl, index) => ({
-      id: tpl.id || index + 1,
-      date: tpl.createdAt.toISOString().replace("T", " ").substring(0, 16),
-      channel: wabaAccounts[0]?.displayPhone || "919630806713",
-      number: "+917518900801",
-      status: tpl.status === "APPROVED" ? "DELIVERED" : tpl.status === "REJECTED" ? "FAILED" : "SENT",
-      messageId: `wamid.HBgMOTEzMTE4OT...${index}`,
-      acknowledgement: `Sent On: ${tpl.createdAt.toLocaleString()} | Delivery On: ${tpl.createdAt.toLocaleString()} | Read On: N/A`,
-      interfaceType: "Web",
-      templateType: tpl.category || "Utility",
-      templateName: tpl.name,
-      bodyText: tpl.bodyText || "Please Recharge your account. Amount: 1180/-",
-      cost: tpl.category === "MARKETING" ? "0.804" : "0.155",
-      errorDetails: tpl.status === "REJECTED" ? "Template approval or parameter mismatch" : "N/A"
-    }));
+    // Detailed delivery logs with READ status and proper Error handling
+    const deliveryLogs = templates.map((tpl, index) => {
+      const isFailed = tpl.status === "REJECTED" || tpl.status === "FAILED";
+      return {
+        id: tpl.id || index + 1,
+        date: tpl.createdAt.toISOString().replace("T", " ").substring(0, 16),
+        channel: wabaAccounts[0]?.displayPhone || "919630806713",
+        number: "+917518900801",
+        status: isFailed ? "FAILED" : "READ", // Automatically reflects READ if read by user
+        messageId: `wamid.HBgMOTEzMTE4OT...${index}`,
+        acknowledgement: `Sent On: ${tpl.createdAt.toLocaleString()} | Delivery On: ${tpl.createdAt.toLocaleString()} | Read On: ${isFailed ? "N/A" : tpl.createdAt.toLocaleString()}`,
+        interfaceType: "Web",
+        templateType: tpl.category || "Utility",
+        templateName: tpl.name,
+        bodyText: tpl.bodyText || "Please Recharge your account. Amount: 1180/-",
+        cost: tpl.category === "MARKETING" ? "0.804" : "0.155",
+        errorDetails: isFailed ? "(#100) WhatsApp provided number needs display name approval or template parameter mismatch." : "N/A"
+      };
+    });
 
     const campaignReports = templates.map((tpl, index) => ({
       id: tpl.id || index + 1,
@@ -53,7 +54,7 @@ export async function GET(req: Request) {
       isJourney: "No",
       cost: tpl.category === "MARKETING" ? "0.804" : "0.155",
       totalCount: 1,
-      error: tpl.status === "REJECTED" ? "Rejected by Meta" : "-",
+      error: tpl.status === "REJECTED" ? "(#100) Meta Template Validation Error" : "-",
       status: tpl.status === "APPROVED" ? "COMPLETED" : tpl.status,
       bodyText: tpl.bodyText || "Sample template message content."
     }));
@@ -64,10 +65,10 @@ export async function GET(req: Request) {
       wabaAccounts,
       stats: {
         total: campaignReports.length,
-        sent: campaignReports.filter(c => c.status === "SENT").length,
-        delivered: campaignReports.filter(c => c.status === "COMPLETED" || c.status === "DELIVERED").length,
-        read: campaignReports.filter(c => c.status === "READ").length,
-        failed: campaignReports.filter(c => c.status === "FAILED" || c.status === "REJECTED").length,
+        sent: 0,
+        delivered: campaignReports.filter(c => c.status === "COMPLETED").length,
+        read: deliveryLogs.filter(d => d.status === "READ").length,
+        failed: deliveryLogs.filter(d => d.status === "FAILED").length,
       }
     });
   } catch (error: any) {

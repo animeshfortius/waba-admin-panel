@@ -17,7 +17,7 @@ export default function ReportsPage() {
   const [wabaChannels, setWabaChannels] = useState<any[]>([]);
 
   // Analytics Stats Cards
-  const [stats, setStats] = useState({ total: 1, sent: 0, delivered: 1, read: 0, failed: 0 });
+  const [stats, setStats] = useState({ total: 1, sent: 0, delivered: 1, read: 1, failed: 0 });
 
   // Dynamic datasets from API
   const [campaignData, setCampaignData] = useState<any[]>([]);
@@ -27,7 +27,7 @@ export default function ReportsPage() {
   const [apiData, setApiData] = useState<any[]>([]);
   const [serviceData, setServiceData] = useState<any[]>([]);
 
-  // Mobile Preview & Action Modal State
+  // Mobile Preview Modal State
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
@@ -67,8 +67,8 @@ export default function ReportsPage() {
   const handleDownloadCSV = (item: any) => {
     const csvContent = "data:text/csv;charset=utf-8," + 
       [
-        "ID,Info/Name,Template,Status,Cost",
-        `"${item.id || 1}","${item.campaignInfo || item.number || "N/A"}","${item.templateName || item.templateInfo || "N/A"}","${item.status || "DELIVERED"}","${item.cost || "0.00"}"`
+        "ID,Info/Name,Template,Status,Error,Cost",
+        `"${item.id || 1}","${item.campaignInfo || item.number || "N/A"}","${item.templateName || item.templateInfo || "N/A"}","${item.status || "READ"}","${item.errorDetails || item.error || "N/A"}","${item.cost || "0.00"}"`
       ].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -238,9 +238,9 @@ export default function ReportsPage() {
               className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none"
             >
               <option value="">All Status</option>
+              <option value="READ">READ</option>
               <option value="DELIVERED">DELIVERED</option>
               <option value="SENT">SENT</option>
-              <option value="READ">READ</option>
               <option value="FAILED">FAILED</option>
             </select>
           </div>
@@ -278,13 +278,14 @@ export default function ReportsPage() {
                       <th className="p-4">Interface / Channel</th>
                       <th className="p-4">Cost</th>
                       <th className="p-4">Total Count</th>
+                      <th className="p-4">Error Details</th>
                       <th className="p-4">Status</th>
                       <th className="p-4 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {campaignData.length === 0 ? (
-                      <tr><td colSpan={8} className="p-8 text-center text-gray-400">No campaign reports found.</td></tr>
+                      <tr><td colSpan={9} className="p-8 text-center text-gray-400">No campaign reports found.</td></tr>
                     ) : (
                       campaignData.map((item) => (
                         <tr key={item.id} className="hover:bg-gray-50 transition">
@@ -294,6 +295,7 @@ export default function ReportsPage() {
                           <td className="p-4 font-mono">+{item.channel}</td>
                           <td className="p-4 font-mono font-bold text-gray-800">₹{item.cost}</td>
                           <td className="p-4 font-bold">{item.totalCount}</td>
+                          <td className="p-4 font-mono text-[10px] text-red-600 max-w-[150px] truncate" title={item.error}>{item.error || "N/A"}</td>
                           <td className="p-4">
                             <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full text-[10px]">
                               {item.status}
@@ -310,7 +312,7 @@ export default function ReportsPage() {
                 </table>
               )}
 
-              {/* DELIVERY REPORT TAB */}
+              {/* DELIVERY REPORT TAB WITH AUTO-READ & ERROR DETAILS */}
               {activeTab === "delivery" && (
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
@@ -323,12 +325,13 @@ export default function ReportsPage() {
                       <th className="p-3">Acknowledgement</th>
                       <th className="p-3">Interface / Type</th>
                       <th className="p-3">Cost</th>
+                      <th className="p-3">Error Details</th>
                       <th className="p-3 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {deliveryData.length === 0 ? (
-                      <tr><td colSpan={9} className="p-8 text-center text-gray-400">No delivery reports found.</td></tr>
+                      <tr><td colSpan={10} className="p-8 text-center text-gray-400">No delivery reports found.</td></tr>
                     ) : (
                       deliveryData.map((item) => (
                         <tr key={item.id} className="hover:bg-gray-50 transition">
@@ -336,14 +339,17 @@ export default function ReportsPage() {
                           <td className="p-3 font-mono">{item.channel}</td>
                           <td className="p-3 font-mono font-bold text-gray-900">{item.number}</td>
                           <td className="p-3">
-                            <span className="font-bold px-2 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800">
-                              {item.status}
+                            <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${item.status === "READ" ? "bg-indigo-100 text-indigo-800" : item.status === "DELIVERED" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
+                              {item.status} {item.status === "READ" && "✓✓"}
                             </span>
                           </td>
-                          <td className="p-3 font-mono text-gray-400 truncate max-w-[120px]" title={item.messageId}>{item.messageId}</td>
+                          <td className="p-3 font-mono text-gray-400 truncate max-w-[100px]" title={item.messageId}>{item.messageId}</td>
                           <td className="p-3 font-mono text-[10px] text-gray-600">{item.acknowledgement}</td>
                           <td className="p-3 font-mono">Interface: {item.interfaceType}<br/>Type: {item.templateType}</td>
                           <td className="p-3 font-bold text-emerald-600">₹{item.cost}</td>
+                          <td className="p-3 font-mono text-[10px] text-red-600 max-w-[130px]" title={item.errorDetails}>
+                            {item.errorDetails !== "N/A" ? <span className="bg-red-50 p-1 rounded border border-red-200 block truncate">{item.errorDetails}</span> : "N/A"}
+                          </td>
                           <td className="p-3 text-center">
                             <button onClick={() => { setSelectedItem(item); setShowPreviewModal(true); }} className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold hover:bg-blue-100 cursor-pointer">View</button>
                           </td>
@@ -353,64 +359,16 @@ export default function ReportsPage() {
                   </tbody>
                 </table>
               )}
-
-              {/* API REPORT TAB */}
-              {activeTab === "api" && (
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                      <th className="p-4">Timestamp</th>
-                      <th className="p-4">Endpoint</th>
-                      <th className="p-4">Method</th>
-                      <th className="p-4">Response Code</th>
-                      <th className="p-4">Latency</th>
-                      <th className="p-4 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    <tr className="hover:bg-gray-50">
-                      <td className="p-4 font-mono">14 Nov 2026 11:31 AM</td>
-                      <td className="p-4 font-mono text-blue-600">/v21.0/messages</td>
-                      <td className="p-4 font-bold">POST</td>
-                      <td className="p-4 font-bold text-emerald-600">200 OK</td>
-                      <td className="p-4 font-mono text-gray-500">124ms</td>
-                      <td className="p-4 text-center"><button onClick={() => alert("API Payload Verified")} className="bg-blue-50 text-blue-600 px-2 py-1 rounded">Inspect</button></td>
-                    </tr>
-                  </tbody>
-                </table>
-              )}
-
-              {/* SERVICE REPORT TAB */}
-              {activeTab === "service" && (
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                      <th className="p-4">Service Name</th>
-                      <th className="p-4">Health Status</th>
-                      <th className="p-4">Uptime</th>
-                      <th className="p-4">Last Ping</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    <tr className="hover:bg-gray-50">
-                      <td className="p-4 font-bold">Meta Cloud Webhook Listener</td>
-                      <td className="p-4 font-bold text-emerald-600">Healthy 🟢</td>
-                      <td className="p-4 font-mono font-bold">99.99%</td>
-                      <td className="p-4 text-gray-500">Just now</td>
-                    </tr>
-                  </tbody>
-                </table>
-              )}
             </>
           )}
         </div>
 
-        {/* RIGHT SIDE MOBILE PREVIEW MODAL (As seen in your screenshot) */}
+        {/* RIGHT SIDE MOBILE PREVIEW MODAL */}
         {showPreviewModal && selectedItem && (
           <div className="w-80 border-l bg-gray-50 p-4 flex flex-col justify-between shadow-lg relative animate-in slide-in-from-right duration-200">
             <div>
               <div className="flex justify-between items-center border-b pb-2 mb-3">
-                <span className="font-bold text-gray-800">Mobile Preview</span>
+                <span className="font-bold text-gray-800">Actual Sent Message Preview</span>
                 <button onClick={() => setShowPreviewModal(false)} className="text-gray-500 font-bold hover:text-black cursor-pointer text-sm">✕</button>
               </div>
 
@@ -424,7 +382,7 @@ export default function ReportsPage() {
                   <div className="bg-white text-gray-900 p-3 rounded-xl shadow space-y-2">
                     <div className="font-bold text-emerald-800 text-xs">{selectedItem.templateName || selectedItem.campaignInfo}</div>
                     <p className="whitespace-pre-wrap text-[11px] leading-relaxed">{selectedItem.bodyText || "Please Recharge your PS LIC Software. Gpay & Phone pay fwd. Amount: 1180/-. Perfect Solution"}</p>
-                    <div className="text-[9px] text-right text-gray-400 font-mono mt-1">✓✓ 11:31 AM</div>
+                    <div className="text-[9px] text-right text-indigo-600 font-bold font-mono mt-1">✓✓ READ (11:35 AM)</div>
                   </div>
                 </div>
               </div>
@@ -432,7 +390,8 @@ export default function ReportsPage() {
 
             <div className="mt-4 pt-3 border-t text-[11px] space-y-1 font-mono text-gray-600">
               <div><strong>Recipient:</strong> {selectedItem.number || "+917518900801"}</div>
-              <div><strong>Status:</strong> <span className="text-emerald-700 font-bold">{selectedItem.status}</span></div>
+              <div><strong>Status:</strong> <span className="text-indigo-700 font-bold">{selectedItem.status}</span></div>
+              <div><strong>Error Info:</strong> <span className="text-red-600">{selectedItem.errorDetails || "None"}</span></div>
               <div><strong>Cost:</strong> ₹{selectedItem.cost}</div>
             </div>
           </div>

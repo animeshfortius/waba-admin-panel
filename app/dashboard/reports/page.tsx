@@ -149,7 +149,7 @@ export default function ReportsPage() {
               key={tab.id}
               onClick={() => {
                 setActiveTab(tab.id as any);
-                if (tab !== "delivery") setCampaignFilter(""); // Reset drill-down when switching to other tabs
+                if (tab.id !== "delivery") setCampaignFilter(""); // ✅ Ab tab.id compare hoga
               }}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${activeTab === tab.id ? "bg-emerald-600 text-white shadow" : "text-gray-600 hover:bg-gray-100"}`}
             >

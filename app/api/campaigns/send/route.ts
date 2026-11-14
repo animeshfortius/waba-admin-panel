@@ -55,6 +55,44 @@ export async function POST(req: Request) {
       where: { name: templateName, wabaId },
     });
 
+    const headerType = (dbTemplate as any)?.headerType?.toUpperCase() || "NONE";
+    const hasMediaHeader = headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT";
+
+    let mediaPayloadParam: any = null;
+
+    if (hasMediaHeader) {
+      let mediaValue = headerMediaUrl;
+      const isMetaId = mediaValue && /^\d+$/.test(String(mediaValue).trim());
+
+      if (isMetaId) {
+        const mediaKey = headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
+        mediaPayloadParam = {
+          type: mediaKey,
+          [mediaKey]: { id: String(mediaValue).trim() },
+        };
+      } else {
+        if (!mediaValue || !mediaValue.startsWith("http")) {
+          mediaValue = (dbTemplate as any)?.headerMediaUrl;
+        }
+
+        if (!mediaValue || !mediaValue.startsWith("http")) {
+          if (headerType === "VIDEO") {
+            mediaValue = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+          } else if (headerType === "DOCUMENT") {
+            mediaValue = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+          } else {
+            mediaValue = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
+          }
+        }
+
+        const mediaKey = headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
+        mediaPayloadParam = {
+          type: mediaKey,
+          [mediaKey]: { link: mediaValue },
+        };
+      }
+    }
+
     let sentCount = 0;
     let failedCount = 0;
     const errors: any[] = [];
@@ -65,6 +103,25 @@ export async function POST(req: Request) {
         formattedNumber = `91${formattedNumber}`;
       }
 
+      const templateComponents: any[] = [];
+
+      if (hasMediaHeader && mediaPayloadParam) {
+        templateComponents.push({
+          type: "header",
+          parameters: [mediaPayloadParam],
+        });
+      }
+
+      if (cleanVariables.length > 0) {
+        templateComponents.push({
+          type: "body",
+          parameters: cleanVariables.map((val) => ({
+            type: "text",
+            text: String(val).trim() || " - ",
+          })),
+        });
+      }
+
       const payload = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
@@ -72,7 +129,10 @@ export async function POST(req: Request) {
         type: "template",
         template: {
           name: templateName,
-          language: { code: language || "en_US" },
+          language: {
+            code: language || "en_US",
+          },
+          ...(templateComponents.length > 0 ? { components: templateComponents } : {}),
         },
       };
 
@@ -104,24 +164,37 @@ export async function POST(req: Request) {
           failedCount++;
           messageStatus = "FAILED";
           errorMsg = metaData.error?.message || "Unknown Meta API Error";
-          errors.push({ number: formattedNumber, error: errorMsg });
+          errors.push({
+            number: formattedNumber,
+            error: errorMsg,
+          });
         }
       } catch (err: any) {
         failedCount++;
         messageStatus = "FAILED";
         errorMsg = err.message || "Network request failed";
-        errors.push({ number: formattedNumber, error: errorMsg });
+        errors.push({
+          number: formattedNumber,
+          error: errorMsg,
+        });
       }
 
-      // 🟢 Save to Database with explicit debug logs
+      // 🟢 Bulletproof Save/Upsert to Database using unique fallback if wamid is missing
       try {
-        const savedLog = await prisma.campaignLog.create({
-          data: {
+        const uniqueMsgId = metaMessageId || `FAILED_${formattedNumber}_${Date.now()}_${Math.random()}`;
+
+        const savedLog = await prisma.campaignLog.upsert({
+          where: { messageId: uniqueMsgId },
+          update: {
+            status: messageStatus,
+            errorDetails: errorMsg,
+          },
+          create: {
             userId: ownerUserId,
             campaignName: campaignName || `Campaign_${templateName}`,
             templateName: templateName,
             channel: channelNumber,
-            recipient: formattedNumber, // Storing clean numbers like "919495863045"
+            recipient: formattedNumber,
             status: messageStatus,
             messageId: metaMessageId,
             cost: dbTemplate?.category === "MARKETING" ? 0.804 : 0.155,
@@ -135,6 +208,17 @@ export async function POST(req: Request) {
       } catch (logErr: any) {
         console.error(`❌ DB SAVE FAILED for ${formattedNumber}:`, logErr.message);
       }
+    }
+
+    if (sentCount === 0 && failedCount > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Meta Error: ${errors[0]?.error}`,
+          details: errors,
+        },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json({

@@ -21,7 +21,6 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId") || "admin";
-    const tab = searchParams.get("tab") || "campaign";
 
     let wabaAccounts = await prisma.wabaAccount.findMany({
       select: { wabaId: true, displayPhone: true, displayName: true, userId: true }
@@ -37,13 +36,14 @@ export async function GET(req: Request) {
     if (messageLogs.length === 0) {
       return NextResponse.json({
         success: true,
-        data: [],
+        campaigns: [],
+        deliveries: [],
         wabaAccounts,
         stats: { total: 0, sent: 0, delivered: 0, read: 0, failed: 0 }
       });
     }
 
-    // Map logs with accurate IST Date & Time
+    // Map delivery logs
     const deliveryLogs = messageLogs.map((log) => {
       const sentStr = formatIST(log.sentAt);
       const deliveredStr = log.deliveredAt ? formatIST(log.deliveredAt) : "Pending";
@@ -52,6 +52,7 @@ export async function GET(req: Request) {
       return {
         id: log.id,
         date: sentStr,
+        campaignName: log.campaignName,
         channel: log.channel,
         number: log.recipient,
         status: log.status,
@@ -61,11 +62,12 @@ export async function GET(req: Request) {
         templateType: "Utility",
         templateName: log.templateName,
         bodyText: `Campaign: ${log.campaignName}`,
-        cost: log.cost.toFixed(3),
+        cost: typeof log.cost === 'number' ? log.cost.toFixed(3) : log.cost,
         errorDetails: log.errorDetails || "N/A"
       };
     });
 
+    // Map campaign reports
     const campaignMap: { [key: string]: any } = {};
     messageLogs.forEach((log) => {
       if (!campaignMap[log.campaignName]) {
@@ -82,14 +84,18 @@ export async function GET(req: Request) {
         };
       }
       campaignMap[log.campaignName].totalCount += 1;
-      campaignMap[log.campaignName].cost += log.cost;
+      campaignMap[log.campaignName].cost += Number(log.cost || 0);
     });
 
-    const campaignReports = Object.values(campaignMap);
+    const campaignReports = Object.values(campaignMap).map(c => ({
+      ...c,
+      cost: c.cost.toFixed(3)
+    }));
 
     return NextResponse.json({
       success: true,
-      data: tab === "delivery" ? deliveryLogs : campaignReports,
+      campaigns: campaignReports,
+      deliveries: deliveryLogs,
       wabaAccounts,
       stats: {
         total: messageLogs.length,
@@ -101,6 +107,6 @@ export async function GET(req: Request) {
     });
   } catch (error: any) {
     console.error("Reports API Error:", error);
-    return NextResponse.json({ success: false, error: error.message, data: [], wabaAccounts: [] }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message, campaigns: [], deliveries: [], wabaAccounts: [] }, { status: 500 });
   }
 }

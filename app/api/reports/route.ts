@@ -23,7 +23,6 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId") || "admin";
     const statusFilter = searchParams.get("status");
-    const channelFilter = searchParams.get("channel");
     const dateRange = searchParams.get("dateRange") || "All";
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
@@ -32,22 +31,14 @@ export async function GET(req: Request) {
       select: { wabaId: true, displayPhone: true, displayName: true, userId: true }
     });
 
-    // 🟢 Build dynamic Prisma where clause for server-side filtering
+    // 🟢 Safe base where clause (Only User and Date/Status filtering, avoiding channel mismatch)
     const whereClause: any = (userId === "admin" || userId === "emergency_admin_id") ? {} : { userId };
     
     if (statusFilter) {
       whereClause.status = statusFilter;
     }
-    
-    if (channelFilter) {
-      // Clean numbers for flexible matching across formats (+15557283243 vs 15557283243)
-      const cleanChannel = channelFilter.replace(/\D/g, "");
-      whereClause.channel = { 
-        contains: cleanChannel.length > 5 ? cleanChannel.slice(-10) : cleanChannel 
-      };
-    }
 
-    // 🟢 Date Range filter logic implementation including Custom Dates
+    // Date Range filter logic implementation including Custom Dates
     if (dateRange === "Today") {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
@@ -92,7 +83,7 @@ export async function GET(req: Request) {
       });
     }
 
-    const deliveryLogs = messageLogs.map((log) => {
+    const deliveryLogs = messageLogs.log ? [] : messageLogs.map((log) => {
       const sentStr = formatIST(log.sentAt);
       const deliveredStr = log.deliveredAt ? formatIST(log.deliveredAt) : "Pending";
       const readStr = log.readAt ? formatIST(log.readAt) : "N/A";

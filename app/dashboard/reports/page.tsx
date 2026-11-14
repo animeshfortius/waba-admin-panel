@@ -55,7 +55,7 @@ export default function ReportsPage() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [activeTab, appliedDateRange, appliedCampaignStatus, appliedChannel]);
+  }, [activeTab, appliedDateRange, appliedCampaignStatus]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -70,7 +70,6 @@ export default function ReportsPage() {
         ...(appliedDateRange === "Custom" && customStartDate && { startDate: customStartDate }),
         ...(appliedDateRange === "Custom" && customEndDate && { endDate: customEndDate }),
         ...(activeTab === "delivery" && appliedCampaignStatus && { status: appliedCampaignStatus }),
-        ...(appliedChannel && { channel: appliedChannel }),
       });
 
       const res = await fetch(`/api/reports?${queryParams.toString()}`, {
@@ -141,11 +140,16 @@ export default function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  // 🟢 Clean Template Name specific filtering
   const filteredCampaigns = useMemo(() => {
     return campaignData.filter((item) => {
       if (campaignFilter && item.campaignInfo !== campaignFilter) return false;
-      if (appliedChannel && !String(item.channel).includes(appliedChannel)) return false;
+      if (appliedChannel) {
+        const cleanSelected = appliedChannel.replace(/\D/g, "");
+        const cleanItemChannel = String(item.channel || "").replace(/\D/g, "");
+        if (cleanSelected && cleanItemChannel && !cleanItemChannel.includes(cleanSelected) && !cleanSelected.includes(cleanItemChannel)) {
+          return false;
+        }
+      }
       if (appliedTemplateSearch && !item.templateInfo?.toLowerCase().includes(appliedTemplateSearch.toLowerCase())) return false;
       return true;
     });
@@ -154,7 +158,13 @@ export default function ReportsPage() {
   const filteredDeliveries = useMemo(() => {
     return deliveryData.filter((item) => {
       if (campaignFilter && item.campaignName !== campaignFilter) return false;
-      if (appliedChannel && !String(item.channel).includes(appliedChannel)) return false;
+      if (appliedChannel) {
+        const cleanSelected = appliedChannel.replace(/\D/g, "");
+        const cleanItemChannel = String(item.channel || "").replace(/\D/g, "");
+        if (cleanSelected && cleanItemChannel && !cleanItemChannel.includes(cleanSelected) && !cleanSelected.includes(cleanItemChannel)) {
+          return false;
+        }
+      }
       if (appliedCampaignStatus && item.status !== appliedCampaignStatus) return false;
       if (appliedTemplateSearch && !item.templateName?.toLowerCase().includes(appliedTemplateSearch.toLowerCase())) return false;
       return true;
@@ -237,7 +247,7 @@ export default function ReportsPage() {
   }, [activeTab, filteredCampaigns, filteredDeliveries, activeDataset, campaignFilter, apiStats]);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-4 lg:p-6 text-xs font-sans">
+    <div className="space-y-6 w-full p-4 lg:p-6 text-xs font-sans">
       
       {/* Top Header & Breadcrumb */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
@@ -705,7 +715,7 @@ export default function ReportsPage() {
             <div className="mt-4 pt-3 border-t text-[11px] space-y-1 font-mono text-gray-600">
               <div><strong>Recipient:</strong> {selectedItem.number || "+917518900801"}</div>
               <div><strong>Status:</strong> <span className="text-indigo-700 font-bold">{selectedItem.status}</span></div>
-              <div><strong>Timestamp:</strong> <span className="text-gray-800">{selectedItem.createdAt ? new Date(srcTimestamp(selectedItem.createdAt)).toLocaleString('en-IN') : "N/A"}</span></div>
+              <div><strong>Timestamp:</strong> <span className="text-gray-800">{selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleString('en-IN') : "N/A"}</span></div>
               <div><strong>Cost:</strong> ₹{selectedItem.cost}</div>
             </div>
           </div>
@@ -713,8 +723,4 @@ export default function ReportsPage() {
       </div>
     </div>
   );
-}
-
-function srcTimestamp(val: any) {
-  return val;
 }

@@ -36,7 +36,7 @@ export async function POST(req: Request) {
             if (value.statuses) {
               for (const statusObj of value.statuses) {
                 const messageId = statusObj.id?.trim();
-                const recipientId = statusObj.recipient_id?.trim(); // e.g. "919495863045"
+                const recipientId = statusObj.recipient_id?.trim(); // e.g., "919140901457"
                 const rawStatus = statusObj.status?.toUpperCase(); // SENT, DELIVERED, READ, FAILED
                 const timestamp = statusObj.timestamp ? new Date(Number(statusObj.timestamp) * 1000) : new Date();
 
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
                 try {
                   let updated = false;
 
-                  // 1. Match by exact Message ID
+                  // 1️⃣ Try matching by exact WAMID first
                   if (messageId) {
                     const matchMsg = await prisma.campaignLog.findFirst({
                       where: { messageId: messageId }
@@ -77,26 +77,24 @@ export async function POST(req: Request) {
                     }
                   }
 
-                  // 2. Match by Recipient Phone (Flexible lookup)
+                  // 2️⃣ Fallback: Match by Recipient Phone Number (Even if WAMID was null)
                   if (recipientId) {
-                    const cleanRecip = recipientId.replace(/\D/g, "");
+                    const cleanRecip = recipientId.replace(/\D/g.test(recipientId) ? /\D/g : "", "").slice(-10); // Last 10 digits for safety
+                    
                     const candidateLogs = await prisma.campaignLog.findMany({
                       where: {
-                        OR: [
-                          { recipient: cleanRecip },
-                          { recipient: `+${cleanRecip}` },
-                          { recipient: { endsWith: cleanRecip } }
-                        ],
+                        recipient: { contains: cleanRecip },
                         status: { not: "READ" }
                       },
                       orderBy: { sentAt: "desc" },
-                      take: 1
+                      take: 3
                     });
 
                     if (candidateLogs.length > 0) {
                       const logToUpdate = candidateLogs[0];
                       let updateData: any = { status };
 
+                      // Attach wamid if it was missing
                       if (messageId && !logToUpdate.messageId) {
                         updateData.messageId = messageId;
                       }
@@ -114,16 +112,16 @@ export async function POST(req: Request) {
                         where: { id: logToUpdate.id },
                         data: updateData,
                       });
-                      console.log(`✅ WEBHOOK UPDATED BY PHONE -> ID: ${logToUpdate.id} to ${status}`);
+                      console.log(`✅ WEBHOOK UPDATED BY PHONE FALLBACK -> Recipient: ${recipientId} to ${status}`);
                       updated = true;
                     }
                   }
 
                   if (!updated) {
-                    console.log(`ℹ️ No matching log found for wamid [${messageId}] / recipient [${recipientId}]`);
+                    console.log(`ℹ️ No log found to update for wamid [${messageId}] / recipient [${recipientId}]`);
                   }
                 } catch (dbErr: any) {
-                  console.error(`❌ Webhook DB Error:`, dbErr.message);
+                  console.error(`❌ Webhook DB Update Error:`, dbErr.message);
                 }
               }
             }
@@ -134,7 +132,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: any) {
-    console.error("❌ Webhook Error:", error);
+    console.error("❌ Webhook Fatal Error:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

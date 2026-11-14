@@ -45,30 +45,12 @@ export async function POST(req: Request) {
 
                 if (!messageId) continue;
 
-                // First, check if this messageId exists in database
-                const existingLog = await prisma.campaignLog.findFirst({
-                  where: { messageId: { equals: messageId } },
-                });
-
-                if (!existingLog) {
-                  console.log(`⚠️ Warning: Message ID ${messageId} NOT FOUND in CampaignLog database!`);
-                  continue;
-                }
-
                 let updateData: any = { status };
 
                 if (status === "DELIVERED") {
-                  // Only update deliveredAt if it's not already delivered/read to preserve original timestamp
-                  if (!existingLog.deliveredAt) {
-                    updateData.deliveredAt = timestamp;
-                  }
+                  updateData.deliveredAt = timestamp;
                 } else if (status === "READ") {
-                  if (!existingLog.deliveredAt) {
-                    updateData.deliveredAt = timestamp;
-                  }
-                  if (!existingLog.readAt) {
-                    updateData.readAt = timestamp;
-                  }
+                  updateData.readAt = timestamp;
                   updateData.status = "READ";
                 } else if (status === "FAILED") {
                   if (statusObj.errors && statusObj.errors[0]) {
@@ -76,13 +58,16 @@ export async function POST(req: Request) {
                   }
                 }
 
-                // Perform update using the unique ID of the log entry for 100% reliability
-                const updateResult = await prisma.campaignLog.update({
-                  where: { id: existingLog.id },
-                  data: updateData,
-                });
-
-                console.log(`✅ Successfully Updated DB Record ID ${existingLog.id} to Status: ${updateData.status}`);
+                try {
+                  // Direct update using unique messageId
+                  const updatedLog = await prisma.campaignLog.update({
+                    where: { messageId: messageId },
+                    data: updateData,
+                  });
+                  console.log(`✅ Successfully Updated CampaignLog ID: ${updatedLog.id} to Status: ${status}`);
+                } catch (dbErr: any) {
+                  console.log(`⚠️ Warning: Message ID [${messageId}] not found in DB or update failed:`, dbErr.message);
+                }
               }
             }
           }

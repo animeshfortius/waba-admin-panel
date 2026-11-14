@@ -143,12 +143,11 @@ model CampaignLog {
   channel      String    // WABA Number / Display Phone
   recipient    String    // Target Mobile Number
   status       String    // SENT, DELIVERED, READ, FAILED
-  messageId    String?   // Meta wamid
+  messageId    String?   @unique // 👈 Made unique for direct webhook matching
   cost         Float     @default(0.0)
   errorDetails String?   @default("N/A")
   sentAt       DateTime  @default(now())
   deliveredAt  DateTime?
   readAt       DateTime?
   createdAt    DateTime  @default(now())
-  @@index([messageId])
 }

@@ -28,6 +28,7 @@ export async function POST(req: Request) {
           if (change.field === "messages") {
             const value = change.value;
             const metadata = value.metadata;
+            const channelNumber = metadata?.display_phone_number || metadata?.phone_number_id || "Unknown";
 
             if (value.statuses) {
               for (const statusObj of value.statuses) {
@@ -46,14 +47,14 @@ export async function POST(req: Request) {
                 try {
                   let targetLog = null;
 
-                  // 1️⃣ PRIMARY MATCH: Exact messageId (wamid) match (Sabse accurate)
+                  // 1️⃣ Try matching by exact messageId (wamid)
                   if (messageId) {
                     targetLog = await prisma.campaignLog.findFirst({
                       where: { messageId: messageId }
                     });
                   }
 
-                  // 2️⃣ FALLBACK MATCH: By recipient phone number (last 10 digits)
+                  // 2️⃣ Try matching by recipient phone number (last 10 digits)
                   if (!targetLog && recipientId) {
                     const cleanRecip = recipientId.replace(/\D/g, "").slice(-10);
                     if (cleanRecip.length >= 10) {
@@ -68,13 +69,10 @@ export async function POST(req: Request) {
                   }
 
                   if (targetLog) {
+                    // Update existing log
                     let updateData: any = { status };
-                    if (messageId && !targetLog.messageId) {
-                      updateData.messageId = messageId;
-                    }
-                    if (status === "DELIVERED") {
-                      if (!targetLog.deliveredAt) updateData.deliveredAt = timestamp;
-                    }
+                    if (messageId && !targetLog.messageId) updateData.messageId = messageId;
+                    if (status === "DELIVERED" && !targetLog.deliveredAt) updateData.deliveredAt = timestamp;
                     if (status === "READ") {
                       if (!targetLog.deliveredAt) updateData.deliveredAt = timestamp;
                       updateData.readAt = timestamp;
@@ -88,9 +86,26 @@ export async function POST(req: Request) {
                       where: { id: targetLog.id },
                       data: updateData,
                     });
-                    console.log(`✅ WEBHOOK UPDATED -> ID: ${targetLog.id} to ${status} (Wamid: ${messageId})`);
+                    console.log(`✅ WEBHOOK UPDATED -> ID: ${targetLog.id} to ${status}`);
                   } else {
-                    console.log(`⚠️ No matching campaign log found for Wamid: ${messageId}, Recipient: ${recipientId}`);
+                    // 3️⃣ BULLETPROOF FALLBACK: If record not found at all, AUTO-CREATE it so status is never lost!
+                    await prisma.campaignLog.create({
+                      data: {
+                        userId: "admin",
+                        campaignName: "Live_Webhook_Campaign",
+                        templateName: "Direct_Message",
+                        channel: channelNumber,
+                        recipient: recipientId || "Unknown",
+                        status: status,
+                        messageId: messageId || null,
+                        cost: 0.155,
+                        sentAt: timestamp,
+                        deliveredAt: status === "DELIVERED" || status === "READ" ? timestamp : null,
+                        readAt: status === "READ" ? timestamp : null,
+                        errorDetails: status === "FAILED" ? statusObj.errors?.[0]?.message || "Failed" : "N/A"
+                      }
+                    });
+                    console.log(`🚀 WEBHOOK AUTO-CREATED -> Recipient: ${recipientId} | Status: ${status}`);
                   }
 
                 } catch (dbErr: any) {

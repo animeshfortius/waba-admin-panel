@@ -48,7 +48,6 @@ export async function POST(req: Request) {
                   const cleanRecip = recipientId ? recipientId.replace(/\D/g, "").slice(-10) : "";
 
                   if (cleanRecip) {
-                    // 🟢 BULLETPROOF FIX: Us phone number ke saare pending/sent records ko ek sath update karo!
                     let updateData: any = { status };
                     if (messageId) updateData.messageId = messageId;
                     if (status === "DELIVERED") updateData.deliveredAt = timestamp;
@@ -61,17 +60,17 @@ export async function POST(req: Request) {
                       updateData.errorDetails = statusObj.errors[0].message;
                     }
 
+                    // 🟢 MASS UPDATE: Update ALL campaign rows for this phone number at once
                     const updateResult = await prisma.campaignLog.updateMany({
                       where: {
                         recipient: { contains: cleanRecip },
-                        status: { not: "READ" } // Jo already READ ho chuke hain unhe chhod kar baaki sab update honge
+                        status: { not: "READ" }
                       },
                       data: updateData,
                     });
 
                     console.log(`🔥 MASS UPDATED -> Phone: ${cleanRecip} | Count: ${updateResult.count} rows to ${status}`);
 
-                    // Agar ek bhi row update nahi hui (matlab naya number hai), toh ek fresh row create kar do
                     if (updateResult.count === 0) {
                       await prisma.campaignLog.create({
                         data: {

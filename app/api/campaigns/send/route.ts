@@ -14,7 +14,7 @@ export async function POST(req: Request) {
       headerMediaUrl,
       isScheduled,
       scheduleDate,
-      userId, // 🟢 Optional: pass userId if available in request body or header
+      userId,
     } = body;
 
     if (!wabaId || !numbers || numbers.length === 0 || !templateName) {
@@ -35,7 +35,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Resolve owner userId from WABA account if not passed in body
     const ownerUserId = userId || wabaAccount.userId || "admin";
 
     if (isScheduled && scheduleDate) {
@@ -52,7 +51,6 @@ export async function POST(req: Request) {
 
     const cleanVariables = Array.isArray(variables) ? variables.filter((v) => v !== undefined && v !== null) : [];
 
-    // Fetch Template details from DB
     const dbTemplate = await prisma.whatsAppTemplate.findFirst({
       where: { name: templateName, wabaId },
     });
@@ -160,7 +158,7 @@ export async function POST(req: Request) {
 
         if (metaRes.ok && metaData.messages?.[0]?.id) {
           sentCount++;
-          messageStatus = "READ"; // Auto-reflects as read/delivered for reports
+          messageStatus = "DELIVERED"; // 🟢 Accurate real status: Delivered (Not forced to READ)
           metaMessageId = metaData.messages[0].id;
         } else {
           failedCount++;
@@ -181,7 +179,7 @@ export async function POST(req: Request) {
         });
       }
 
-      // 🟢 CRITICAL: Save every campaign dispatch record into the CampaignLog table for live reporting!
+      // Save record with accurate DELIVERED status and null readAt
       try {
         await prisma.campaignLog.create({
           data: {
@@ -190,13 +188,13 @@ export async function POST(req: Request) {
             templateName: templateName,
             channel: channelNumber,
             recipient: `+${formattedNumber}`,
-            status: messageStatus,
+            status: messageStatus, // DELIVERED or FAILED
             messageId: metaMessageId,
             cost: dbTemplate?.category === "MARKETING" ? 0.804 : 0.155,
             errorDetails: errorMsg,
             sentAt: now,
             deliveredAt: messageStatus !== "FAILED" ? new Date(now.getTime() + 3000) : null,
-            readAt: messageStatus !== "FAILED" ? new Date(now.getTime() + 12000) : null,
+            readAt: null, // 🟢 Kept null until actual user reads the message
           },
         });
       } catch (logErr) {

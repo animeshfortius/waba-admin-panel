@@ -31,7 +31,7 @@ export async function GET(req: Request) {
       select: { wabaId: true, displayPhone: true, displayName: true, userId: true }
     });
 
-    // 🟢 Safe base where clause (Only User and Date/Status filtering, avoiding channel mismatch)
+    // 🟢 Build dynamic Prisma where clause for server-side filtering
     const whereClause: any = (userId === "admin" || userId === "emergency_admin_id") ? {} : { userId };
     
     if (statusFilter) {
@@ -83,7 +83,7 @@ export async function GET(req: Request) {
       });
     }
 
-    const deliveryLogs = messageLogs.log ? [] : messageLogs.map((log) => {
+    const deliveryLogs = messageLogs.map((log) => {
       const sentStr = formatIST(log.sentAt);
       const deliveredStr = log.deliveredAt ? formatIST(log.deliveredAt) : "Pending";
       const readStr = log.readAt ? formatIST(log.readAt) : "N/A";

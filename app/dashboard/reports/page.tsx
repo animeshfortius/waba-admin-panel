@@ -278,7 +278,7 @@ export default function ReportsPage() {
                       <th className="p-4">Interface / Channel</th>
                       <th className="p-4">Cost</th>
                       <th className="p-4">Total Count</th>
-                      <th className="p-4">Error Details</th>
+                      <th className="p-4 w-[230px]">Error Details</th>
                       <th className="p-4">Status</th>
                       <th className="p-4 text-center">Action</th>
                     </tr>
@@ -295,7 +295,15 @@ export default function ReportsPage() {
                           <td className="p-4 font-mono">+{item.channel}</td>
                           <td className="p-4 font-mono font-bold text-gray-800">₹{item.cost}</td>
                           <td className="p-4 font-bold">{item.totalCount}</td>
-                          <td className="p-4 font-mono text-[10px] text-red-600 max-w-[150px] truncate" title={item.error}>{item.error || "N/A"}</td>
+                          <td className="p-4 font-mono text-[10px] text-red-600 w-[230px]">
+                            {item.error && item.error !== "N/A" && item.error !== "-" ? (
+                              <span className="bg-red-50 p-1.5 rounded border border-red-200 block break-words">
+                                {item.error}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">N/A</span>
+                            )}
+                          </td>
                           <td className="p-4">
                             <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full text-[10px]">
                               {item.status}
@@ -312,7 +320,7 @@ export default function ReportsPage() {
                 </table>
               )}
 
-              {/* DELIVERY REPORT TAB WITH AUTO-READ & ERROR DETAILS */}
+              {/* DELIVERY REPORT TAB WITH COMPACT ACKNOWLEDGEMENT & WIDE ERROR DETAILS */}
               {activeTab === "delivery" && (
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
@@ -322,10 +330,10 @@ export default function ReportsPage() {
                       <th className="p-3">Number</th>
                       <th className="p-3">Status</th>
                       <th className="p-3">Message ID</th>
-                      <th className="p-3">Acknowledgement</th>
+                      <th className="p-3 w-[170px]">Acknowledgement</th>
                       <th className="p-3">Interface / Type</th>
                       <th className="p-3">Cost</th>
-                      <th className="p-3">Error Details</th>
+                      <th className="p-3 w-[230px]">Error Details</th>
                       <th className="p-3 text-center">Action</th>
                     </tr>
                   </thead>
@@ -344,12 +352,26 @@ export default function ReportsPage() {
                             </span>
                           </td>
                           <td className="p-3 font-mono text-gray-400 truncate max-w-[100px]" title={item.messageId}>{item.messageId}</td>
-                          <td className="p-3 font-mono text-[10px] text-gray-600">{item.acknowledgement}</td>
+                          
+                          {/* 🟢 Compact Acknowledgement Column (~170px) */}
+                          <td className="p-3 font-mono text-[10px] text-gray-600 w-[170px] break-words leading-tight">
+                            {item.acknowledgement}
+                          </td>
+
                           <td className="p-3 font-mono">Interface: {item.interfaceType}<br/>Type: {item.templateType}</td>
                           <td className="p-3 font-bold text-emerald-600">₹{item.cost}</td>
-                          <td className="p-3 font-mono text-[10px] text-red-600 max-w-[130px]" title={item.errorDetails}>
-                            {item.errorDetails !== "N/A" ? <span className="bg-red-50 p-1 rounded border border-red-200 block truncate">{item.errorDetails}</span> : "N/A"}
+
+                          {/* 🟢 Expanded Error Details Column (~230px) */}
+                          <td className="p-3 font-mono text-[10px] text-red-600 w-[230px]">
+                            {item.errorDetails !== "N/A" && item.errorDetails ? (
+                              <span className="bg-red-50 p-1.5 rounded border border-red-200 block break-words">
+                                {item.errorDetails}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">N/A</span>
+                            )}
                           </td>
+
                           <td className="p-3 text-center">
                             <button onClick={() => { setSelectedItem(item); setShowPreviewModal(true); }} className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold hover:bg-blue-100 cursor-pointer">View</button>
                           </td>

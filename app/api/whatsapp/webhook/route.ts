@@ -47,29 +47,32 @@ export async function POST(req: Request) {
                 try {
                   let targetLog = null;
 
-                  // 1️⃣ Try matching by exact messageId (wamid)
+                  // 1️⃣ Sabse pehle exact wamid (messageId) se match karo
                   if (messageId) {
                     targetLog = await prisma.campaignLog.findFirst({
                       where: { messageId: messageId }
                     });
                   }
 
-                  // 2️⃣ Try matching by recipient phone number (last 10 digits)
+                  // 2️⃣ Agar wamid se na mile, toh recipient phone number ke aakhri 10 digits se match karo
                   if (!targetLog && recipientId) {
                     const cleanRecip = recipientId.replace(/\D/g, "").slice(-10);
                     if (cleanRecip.length >= 10) {
-                      targetLog = await prisma.campaignLog.findFirst({
-                        where: {
-                          recipient: { contains: cleanRecip },
-                          status: { not: "READ" }
-                        },
-                        orderBy: { createdAt: "desc" }
+                      // Database ke saare unread/sent logs uthao aur aakhri 10 digit match karo
+                      const recentLogs = await prisma.campaignLog.findMany({
+                        where: { status: { not: "READ" } },
+                        orderBy: { createdAt: "desc" },
+                        take: 50
                       });
+
+                      targetLog = recentLogs.find(l => {
+                        const dbClean = l.recipient ? l.recipient.replace(/\D/g, "").slice(-10) : "";
+                        return dbClean === cleanRecip;
+                      }) || null;
                     }
                   }
 
                   if (targetLog) {
-                    // Update existing log
                     let updateData: any = { status };
                     if (messageId && !targetLog.messageId) updateData.messageId = messageId;
                     if (status === "DELIVERED" && !targetLog.deliveredAt) updateData.deliveredAt = timestamp;
@@ -86,9 +89,9 @@ export async function POST(req: Request) {
                       where: { id: targetLog.id },
                       data: updateData,
                     });
-                    console.log(`✅ WEBHOOK UPDATED -> ID: ${targetLog.id} to ${status}`);
+                    console.log(`🔥 BULLETPROOF UPDATED -> ID: ${targetLog.id} to ${status}`);
                   } else {
-                    // 3️⃣ BULLETPROOF FALLBACK: If record not found at all, AUTO-CREATE it so status is never lost!
+                    // 3️⃣ Agar kahin bhi match na ho, toh auto-create kar do taaki status miss na ho
                     await prisma.campaignLog.create({
                       data: {
                         userId: "admin",
@@ -105,7 +108,7 @@ export async function POST(req: Request) {
                         errorDetails: status === "FAILED" ? statusObj.errors?.[0]?.message || "Failed" : "N/A"
                       }
                     });
-                    console.log(`🚀 WEBHOOK AUTO-CREATED -> Recipient: ${recipientId} | Status: ${status}`);
+                    console.log(`🚀 AUTO-CREATED LOG -> Recipient: ${recipientId} | Status: ${status}`);
                   }
 
                 } catch (dbErr: any) {

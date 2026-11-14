@@ -12,7 +12,6 @@ export async function GET(req: Request) {
     const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || "fortius_token";
 
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      // Return challenge as plain text with 200 OK
       return new NextResponse(challenge, {
         status: 200,
         headers: { "Content-Type": "text/plain" },
@@ -38,20 +37,38 @@ export async function POST(req: Request) {
             const value = change.value;
             if (value.statuses) {
               for (const statusObj of value.statuses) {
-                const messageId = statusObj.id;
+                const messageId = statusObj.id?.trim();
                 const status = statusObj.status?.toUpperCase(); // SENT, DELIVERED, READ, FAILED
                 const timestamp = statusObj.timestamp ? new Date(Number(statusObj.timestamp) * 1000) : new Date();
 
-                console.log(`📌 Processing status update: Message ID ${messageId} -> ${status}`);
+                console.log(`📌 Processing status update: Message ID [${messageId}] -> Status [${status}]`);
 
                 if (!messageId) continue;
 
+                // First, check if this messageId exists in database
+                const existingLog = await prisma.campaignLog.findFirst({
+                  where: { messageId: { equals: messageId } },
+                });
+
+                if (!existingLog) {
+                  console.log(`⚠️ Warning: Message ID ${messageId} NOT FOUND in CampaignLog database!`);
+                  continue;
+                }
+
                 let updateData: any = { status };
-                
+
                 if (status === "DELIVERED") {
-                  updateData.deliveredAt = timestamp;
+                  // Only update deliveredAt if it's not already delivered/read to preserve original timestamp
+                  if (!existingLog.deliveredAt) {
+                    updateData.deliveredAt = timestamp;
+                  }
                 } else if (status === "READ") {
-                  updateData.readAt = timestamp;
+                  if (!existingLog.deliveredAt) {
+                    updateData.deliveredAt = timestamp;
+                  }
+                  if (!existingLog.readAt) {
+                    updateData.readAt = timestamp;
+                  }
                   updateData.status = "READ";
                 } else if (status === "FAILED") {
                   if (statusObj.errors && statusObj.errors[0]) {
@@ -59,12 +76,13 @@ export async function POST(req: Request) {
                   }
                 }
 
-                const updateResult = await prisma.campaignLog.updateMany({
-                  where: { messageId },
+                // Perform update using the unique ID of the log entry for 100% reliability
+                const updateResult = await prisma.campaignLog.update({
+                  where: { id: existingLog.id },
                   data: updateData,
                 });
 
-                console.log(`✅ DB Update Result for Message ID ${messageId}:`, updateResult);
+                console.log(`✅ Successfully Updated DB Record ID ${existingLog.id} to Status: ${updateData.status}`);
               }
             }
           }

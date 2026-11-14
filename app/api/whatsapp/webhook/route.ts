@@ -46,33 +46,27 @@ export async function POST(req: Request) {
 
                 try {
                   let targetLog = null;
+                  const cleanRecip = recipientId ? recipientId.replace(/\D/g, "").slice(-10) : "";
 
-                  // 1️⃣ Sabse pehle exact wamid (messageId) se match karo
+                  // 1️⃣ STEP 1: Exact wamid (messageId) se match karo
                   if (messageId) {
                     targetLog = await prisma.campaignLog.findFirst({
                       where: { messageId: messageId }
                     });
                   }
 
-                  // 2️⃣ Agar wamid se na mile, toh recipient phone number ke aakhri 10 digits se match karo
-                  if (!targetLog && recipientId) {
-                    const cleanRecip = recipientId.replace(/\D/g, "").slice(-10);
-                    if (cleanRecip.length >= 10) {
-                      // Database ke saare unread/sent logs uthao aur aakhri 10 digit match karo
-                      const recentLogs = await prisma.campaignLog.findMany({
-                        where: { status: { not: "READ" } },
-                        orderBy: { createdAt: "desc" },
-                        take: 50
-                      });
-
-                      targetLog = recentLogs.find(l => {
-                        const dbClean = l.recipient ? l.recipient.replace(/\D/g, "").slice(-10) : "";
-                        return dbClean === cleanRecip;
-                      }) || null;
-                    }
+                  // 2️⃣ STEP 2: Agar wamid se na mile, toh poore database mein phone number (last 10 digits) se sabse naya SENT/DELIVERED log dhoondho
+                  if (!targetLog && cleanRecip) {
+                    targetLog = await prisma.campaignLog.findFirst({
+                      where: {
+                        recipient: { contains: cleanRecip }
+                      },
+                      orderBy: { createdAt: "desc" }
+                    });
                   }
 
                   if (targetLog) {
+                    // 🟢 Asli campaign row mil gayi! Ab isko update karenge, naya row nahi banayenge.
                     let updateData: any = { status };
                     if (messageId && !targetLog.messageId) updateData.messageId = messageId;
                     if (status === "DELIVERED" && !targetLog.deliveredAt) updateData.deliveredAt = timestamp;
@@ -89,13 +83,13 @@ export async function POST(req: Request) {
                       where: { id: targetLog.id },
                       data: updateData,
                     });
-                    console.log(`🔥 BULLETPROOF UPDATED -> ID: ${targetLog.id} to ${status}`);
+                    console.log(`🔥 REAL CAMPAIGN UPDATED -> ID: ${targetLog.id} | Phone: ${cleanRecip} to ${status}`);
                   } else {
-                    // 3️⃣ Agar kahin bhi match na ho, toh auto-create kar do taaki status miss na ho
+                    // 3️⃣ STEP 3: Agar sach mein database mein kahin bhi row nahi hai, tabhi naya create karo
                     await prisma.campaignLog.create({
                       data: {
                         userId: "admin",
-                        campaignName: "Live_Webhook_Campaign",
+                        campaignName: "Direct_Chat_Campaign",
                         templateName: "Direct_Message",
                         channel: channelNumber,
                         recipient: recipientId || "Unknown",
@@ -108,7 +102,7 @@ export async function POST(req: Request) {
                         errorDetails: status === "FAILED" ? statusObj.errors?.[0]?.message || "Failed" : "N/A"
                       }
                     });
-                    console.log(`🚀 AUTO-CREATED LOG -> Recipient: ${recipientId} | Status: ${status}`);
+                    console.log(`🚀 FALLBACK CREATED -> Recipient: ${recipientId} | Status: ${status}`);
                   }
 
                 } catch (dbErr: any) {

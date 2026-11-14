@@ -179,17 +179,10 @@ export async function POST(req: Request) {
         });
       }
 
-      // 🟢 Bulletproof Save/Upsert to Database using unique fallback if wamid is missing
+      // 🟢 Save Log to Database
       try {
-        const uniqueMsgId = metaMessageId || `FAILED_${formattedNumber}_${Date.now()}_${Math.random()}`;
-
-        const savedLog = await prisma.campaignLog.upsert({
-          where: { messageId: uniqueMsgId },
-          update: {
-            status: messageStatus,
-            errorDetails: errorMsg,
-          },
-          create: {
+        const savedLog = await prisma.campaignLog.create({
+          data: {
             userId: ownerUserId,
             campaignName: campaignName || `Campaign_${templateName}`,
             templateName: templateName,
@@ -204,7 +197,7 @@ export async function POST(req: Request) {
             readAt: null,
           },
         });
-        console.log(`💾 SUCCESS SAVING LOG -> ID: ${savedLog.id} | Recipient: ${formattedNumber} | Wamid: ${metaMessageId}`);
+        console.log(`💾 SUCCESS CREATED LOG -> ID: ${savedLog.id} | Recipient: ${formattedNumber} | Wamid: ${metaMessageId}`);
       } catch (logErr: any) {
         console.error(`❌ DB SAVE FAILED for ${formattedNumber}:`, logErr.message);
       }

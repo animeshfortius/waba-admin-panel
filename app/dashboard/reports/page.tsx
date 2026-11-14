@@ -6,7 +6,7 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<"campaign" | "delivery" | "schedule" | "fallback" | "api" | "service">("campaign");
   const [dateRange, setDateRange] = useState("All");
   
-  // 🟢 Custom Date Range States (From Date & To Date)
+  // Custom Date Range States
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -18,13 +18,13 @@ export default function ReportsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(20);
 
-  // Input filter states (Temporary until Apply Filter is clicked)
+  // Input filter states
   const [inputChannel, setInputChannel] = useState("");
   const [inputTemplateSearch, setInputTemplateSearch] = useState("");
   const [inputCampaignStatus, setInputCampaignStatus] = useState("");
   const [inputIsJourney, setInputIsJourney] = useState("");
 
-  // 🟢 Active applied filter states (Triggered only on "Apply Filter" click)
+  // Applied filter states
   const [appliedChannel, setAppliedChannel] = useState("");
   const [appliedTemplateSearch, setAppliedTemplateSearch] = useState("");
   const [appliedCampaignStatus, setAppliedCampaignStatus] = useState("");
@@ -32,14 +32,10 @@ export default function ReportsPage() {
   const [appliedDateRange, setAppliedDateRange] = useState("All");
 
   const [wabaChannels, setWabaChannels] = useState<any[]>([]);
-
-  // Specific Campaign Drill-down filter state
   const [campaignFilter, setCampaignFilter] = useState("");
 
-  // Analytics Stats Cards fallback from API
   const [apiStats, setApiStats] = useState({ total: 1, sent: 0, delivered: 1, read: 1, failed: 0 });
 
-  // Dynamic datasets from API
   const [campaignData, setCampaignData] = useState<any[]>([]);
   const [deliveryData, setDeliveryData] = useState<any[]>([]);
   const [scheduleData, setScheduleData] = useState<any[]>([]);
@@ -47,11 +43,9 @@ export default function ReportsPage() {
   const [apiData, setApiData] = useState<any[]>([]);
   const [serviceData, setServiceData] = useState<any[]>([]);
 
-  // Mobile Preview Modal State
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
-  // Fetch reports when tab or applied filters change
   useEffect(() => {
     const userId = localStorage.getItem("userId") || "admin";
     fetchLiveReports(userId);
@@ -63,7 +57,6 @@ export default function ReportsPage() {
     return () => clearInterval(interval);
   }, [activeTab, appliedDateRange, appliedCampaignStatus, appliedChannel]);
 
-  // Reset pagination on tab change or filter change
   useEffect(() => {
     setCurrentPage(1);
   }, [activeTab, campaignFilter, appliedChannel, appliedTemplateSearch, appliedCampaignStatus, appliedIsJourney, appliedDateRange]);
@@ -101,7 +94,6 @@ export default function ReportsPage() {
     }
   };
 
-  // 🟢 Handle Apply Filter click
   const handleApplyFilters = () => {
     setAppliedChannel(inputChannel);
     setAppliedTemplateSearch(inputTemplateSearch);
@@ -111,7 +103,6 @@ export default function ReportsPage() {
     setCurrentPage(1);
   };
 
-  // 🟢 Handle Reset Filters click
   const handleResetFilters = () => {
     setInputChannel("");
     setInputTemplateSearch("");
@@ -150,7 +141,7 @@ export default function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  // Filter datasets based on applied filters
+  // 🟢 Clean Template Name specific filtering
   const filteredCampaigns = useMemo(() => {
     return campaignData.filter((item) => {
       if (campaignFilter && item.campaignInfo !== campaignFilter) return false;
@@ -198,7 +189,6 @@ export default function ReportsPage() {
     });
   }, [serviceData, appliedCampaignStatus]);
 
-  // Active Tab Dataset selection
   const activeDataset = useMemo(() => {
     switch (activeTab) {
       case "campaign": return filteredCampaigns;
@@ -211,14 +201,12 @@ export default function ReportsPage() {
     }
   }, [activeTab, filteredCampaigns, filteredDeliveries, filteredSchedules, filteredFallbacks, filteredApis, filteredServices]);
 
-  // Pagination computations
   const totalPages = Math.ceil(activeDataset.length / rowsPerPage) || 1;
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
     return activeDataset.slice(start, start + rowsPerPage);
   }, [activeDataset, currentPage, rowsPerPage]);
 
-  // Dynamic Stats Calculation
   const stats = useMemo(() => {
     let targetList = activeTab === "campaign" ? filteredCampaigns : filteredDeliveries;
     if (activeTab !== "campaign" && activeTab !== "delivery") {
@@ -320,7 +308,7 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* 🟢 Date Picker with Custom Range Support */}
+        {/* Date Picker Dropdown */}
         <div className="relative">
           <button
             onClick={() => setShowDatePicker(!showDatePicker)}
@@ -345,7 +333,6 @@ export default function ReportsPage() {
                 <button onClick={() => { setDateRange("Last 30 Days"); setShowDatePicker(false); }} className={`p-2 border rounded-lg text-left font-medium cursor-pointer ${dateRange === "Last 30 Days" ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "hover:bg-gray-50"}`}>Last 30 Days</button>
               </div>
 
-              {/* Custom Date Inputs */}
               <div className="border-t pt-2 space-y-2">
                 <span className="font-bold text-gray-600 block">Custom Range:</span>
                 <div className="grid grid-cols-2 gap-2">
@@ -718,7 +705,7 @@ export default function ReportsPage() {
             <div className="mt-4 pt-3 border-t text-[11px] space-y-1 font-mono text-gray-600">
               <div><strong>Recipient:</strong> {selectedItem.number || "+917518900801"}</div>
               <div><strong>Status:</strong> <span className="text-indigo-700 font-bold">{selectedItem.status}</span></div>
-              <div><strong>Timestamp:</strong> <span className="text-gray-800">{selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleString('en-IN') : "N/A"}</span></div>
+              <div><strong>Timestamp:</strong> <span className="text-gray-800">{selectedItem.createdAt ? new Date(srcTimestamp(selectedItem.createdAt)).toLocaleString('en-IN') : "N/A"}</span></div>
               <div><strong>Cost:</strong> ₹{selectedItem.cost}</div>
             </div>
           </div>
@@ -726,4 +713,8 @@ export default function ReportsPage() {
       </div>
     </div>
   );
+}
+
+function srcTimestamp(val: any) {
+  return val;
 }

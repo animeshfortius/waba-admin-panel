@@ -135,3 +135,19 @@ model WhatsAppTemplate {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
+model CampaignLog {
+  id           String    @id @default(uuid())
+  userId       String
+  campaignName String
+  templateName String
+  channel      String    // WABA Number / Display Phone
+  recipient    String    // Target Mobile Number
+  status       String    // SENT, DELIVERED, READ, FAILED
+  messageId    String?   // Meta wamid
+  cost         Float     @default(0.0)
+  errorDetails String?   @default("N/A")
+  sentAt       DateTime  @default(now())
+  deliveredAt  DateTime?
+  readAt       DateTime?
+  createdAt    DateTime  @default(now())
+}

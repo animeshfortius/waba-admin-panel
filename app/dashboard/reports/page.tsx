@@ -38,7 +38,7 @@ export default function ReportsPage() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
-  // 🟢 Auto-refresh polling (Every 5 seconds fetches fresh DB status)
+  // 🟢 Fetch live reports with dateRange, status, and channel filters
   useEffect(() => {
     const userId = localStorage.getItem("userId") || "admin";
     fetchLiveReports(userId);
@@ -48,23 +48,23 @@ export default function ReportsPage() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [activeTab, campaignStatus, selectedChannel]);
+  }, [activeTab, campaignStatus, selectedChannel, dateRange]);
 
   // Reset pagination on tab change or filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, campaignFilter, selectedChannel, templateSearch, campaignStatus, isJourney]);
+  }, [activeTab, campaignFilter, selectedChannel, templateSearch, campaignStatus, isJourney, dateRange]);
 
   const fetchLiveReports = async (userId: string) => {
     try {
       const queryParams = new URLSearchParams({
         userId,
         tab: activeTab,
+        dateRange,
         ...(campaignStatus && { status: campaignStatus }),
         ...(selectedChannel && { channel: selectedChannel }),
       });
 
-      // 🟢 Disabled caching to ensure real-time live database updates
       const res = await fetch(`/api/reports?${queryParams.toString()}`, {
         cache: "no-store",
       });
@@ -281,7 +281,7 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* Date Picker Button (Default All) */}
+        {/* 🟢 Functional Date Picker Dropdown */}
         <div className="relative">
           <button
             onClick={() => setShowDatePicker(!showDatePicker)}
@@ -299,18 +299,18 @@ export default function ReportsPage() {
                 <button onClick={() => setShowDatePicker(false)} className="text-gray-400">✕</button>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => { setDateRange("All"); setShowDatePicker(false); }} className="p-2 border rounded-lg hover:bg-emerald-50 text-left font-bold cursor-pointer bg-emerald-50 text-emerald-800">All (Default)</button>
-                <button onClick={() => { setDateRange("Today"); setShowDatePicker(false); }} className="p-2 border rounded-lg hover:bg-emerald-50 text-left font-medium cursor-pointer">Today</button>
-                <button onClick={() => { setDateRange("Yesterday"); setShowDatePicker(false); }} className="p-2 border rounded-lg hover:bg-emerald-50 text-left font-medium cursor-pointer">Yesterday</button>
-                <button onClick={() => { setDateRange("Last 7 Days"); setShowDatePicker(false); }} className="p-2 border rounded-lg hover:bg-emerald-50 text-left font-medium cursor-pointer">Last 7 Days</button>
-                <button onClick={() => { setDateRange("Last 30 Days"); setShowDatePicker(false); }} className="p-2 border rounded-lg hover:bg-emerald-50 text-left font-medium cursor-pointer">Last 30 Days</button>
+                <button onClick={() => { setDateRange("All"); setShowDatePicker(false); }} className={`p-2 border rounded-lg text-left font-bold cursor-pointer ${dateRange === "All" ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "hover:bg-gray-50"}`}>All (Default)</button>
+                <button onClick={() => { setDateRange("Today"); setShowDatePicker(false); }} className={`p-2 border rounded-lg text-left font-medium cursor-pointer ${dateRange === "Today" ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "hover:bg-gray-50"}`}>Today</button>
+                <button onClick={() => { setDateRange("Yesterday"); setShowDatePicker(false); }} className={`p-2 border rounded-lg text-left font-medium cursor-pointer ${dateRange === "Yesterday" ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "hover:bg-gray-50"}`}>Yesterday</button>
+                <button onClick={() => { setDateRange("Last 7 Days"); setShowDatePicker(false); }} className={`p-2 border rounded-lg text-left font-medium cursor-pointer ${dateRange === "Last 7 Days" ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "hover:bg-gray-50"}`}>Last 7 Days</button>
+                <button onClick={() => { setDateRange("Last 30 Days"); setShowDatePicker(false); }} className={`p-2 border rounded-lg text-left font-medium cursor-pointer ${dateRange === "Last 30 Days" ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "hover:bg-gray-50"}`}>Last 30 Days</button>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* METRIC SUMMARY CARDS (Dynamic Campaign / Filter Wise Exact Counts) */}
+      {/* METRIC SUMMARY CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
           <div className="text-gray-400 font-semibold text-[10px]">TOTAL</div>
@@ -540,7 +540,7 @@ export default function ReportsPage() {
                 </table>
               )}
 
-              {/* OTHER TABS (SCHEDULE, FALLBACK, API, SERVICE) */}
+              {/* OTHER TABS */}
               {["schedule", "fallback", "api", "service"].includes(activeTab) && (
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>

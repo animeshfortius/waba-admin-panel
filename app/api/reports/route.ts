@@ -24,6 +24,7 @@ export async function GET(req: Request) {
     const userId = searchParams.get("userId") || "admin";
     const statusFilter = searchParams.get("status");
     const channelFilter = searchParams.get("channel");
+    const dateRange = searchParams.get("dateRange") || "All";
 
     let wabaAccounts = await prisma.wabaAccount.findMany({
       select: { wabaId: true, displayPhone: true, displayName: true, userId: true }
@@ -40,6 +41,28 @@ export async function GET(req: Request) {
       // Clean numbers for flexible matching
       const cleanChannel = channelFilter.replace(/\D/g, "");
       whereClause.channel = { contains: cleanChannel };
+    }
+
+    // 🟢 Date Range filter logic implementation
+    if (dateRange === "Today") {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      whereClause.createdAt = { gte: startOfDay };
+    } else if (dateRange === "Yesterday") {
+      const startOfYesterday = new Date();
+      startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+      startOfYesterday.setHours(0, 0, 0, 0);
+      const endOfYesterday = new Date();
+      endOfYesterday.setHours(0, 0, 0, 0);
+      whereClause.createdAt = { gte: startOfYesterday, lt: endOfYesterday };
+    } else if (dateRange === "Last 7 Days") {
+      const last7Days = new Date();
+      last7Days.setDate(last7Days.getDate() - 7);
+      whereClause.createdAt = { gte: last7Days };
+    } else if (dateRange === "Last 30 Days") {
+      const last30Days = new Date();
+      last30Days.setDate(last30Days.getDate() - 30);
+      whereClause.createdAt = { gte: last30Days };
     }
 
     const messageLogs = await prisma.campaignLog.findMany({
@@ -112,7 +135,7 @@ export async function GET(req: Request) {
       success: true,
       campaigns: campaignReports,
       deliveries: deliveryLogs,
-     wabaAccounts,
+      wabaAccounts,
       stats: {
         total: messageLogs.length,
         sent: messageLogs.filter(l => l.status?.toUpperCase() === "SENT").length,

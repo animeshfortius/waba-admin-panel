@@ -81,8 +81,8 @@ export default function ReportsPage() {
   const handleDownloadCSV = (item: any) => {
     const csvContent = "data:text/csv;charset=utf-8," + 
       [
-        "ID,Info/Name,Template,Status,Error,Cost",
-        `"${item.id || 1}","${item.campaignInfo || item.number || "N/A"}","${item.templateName || item.templateInfo || "N/A"}","${item.status || "READ"}","${item.errorDetails || item.error || "N/A"}","${item.cost || "0.00"}"`
+        "ID,Info/Name,Template,Status,Timestamp,Cost",
+        `"${item.id || 1}","${item.campaignInfo || item.number || "N/A"}","${item.templateName || item.templateInfo || "N/A"}","${item.status || "READ"}","${item.createdAt || item.date || "N/A"}","${item.cost || "0.00"}"`
       ].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -317,7 +317,7 @@ export default function ReportsPage() {
                       <th className="p-4">Interface / Channel</th>
                       <th className="p-4">Cost</th>
                       <th className="p-4">Total Count</th>
-                      <th className="p-4 w-[230px]">Error Details</th>
+                      <th className="p-4 w-[230px]">TIMESTAMP</th>
                       <th className="p-4">Status</th>
                       <th className="p-4 text-center">Action</th>
                     </tr>
@@ -334,15 +334,19 @@ export default function ReportsPage() {
                           <td className="p-4 font-mono">+{item.channel}</td>
                           <td className="p-4 font-mono font-bold text-gray-800">₹{item.cost}</td>
                           <td className="p-4 font-bold">{item.totalCount}</td>
-                          <td className="p-4 font-mono text-[10px] text-red-600 w-[230px]">
-                            {item.error && item.error !== "N/A" && item.error !== "-" ? (
-                              <span className="bg-red-50 p-1.5 rounded border border-red-200 block break-words">
-                                {item.error}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">N/A</span>
-                            )}
+                          
+                          {/* Replaced Error Details with Professional Timestamp */}
+                          <td className="p-4 font-mono text-[11px] text-gray-700 w-[230px]">
+                            {item.createdAt ? new Date(item.createdAt).toLocaleString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true
+                            }) : (item.date || "N/A")}
                           </td>
+
                           <td className="p-4">
                             <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full text-[10px]">
                               {item.status}
@@ -381,7 +385,7 @@ export default function ReportsPage() {
                       <th className="p-3">Message ID</th>
                       <th className="p-3 w-[170px]">Acknowledgement</th>
                       <th className="p-3">Cost</th>
-                      <th className="p-3 w-[230px]">Error Details</th>
+                      <th className="p-3 w-[230px]">TIMESTAMP</th>
                       <th className="p-3 text-center">Action</th>
                     </tr>
                   </thead>
@@ -408,14 +412,16 @@ export default function ReportsPage() {
 
                           <td className="p-3 font-bold text-emerald-600">₹{item.cost}</td>
 
-                          <td className="p-3 font-mono text-[10px] text-red-600 w-[230px]">
-                            {item.errorDetails !== "N/A" && item.errorDetails ? (
-                              <span className="bg-red-50 p-1.5 rounded border border-red-200 block break-words">
-                                {item.errorDetails}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">N/A</span>
-                            )}
+                          {/* Replaced Error Details with Professional Timestamp */}
+                          <td className="p-3 font-mono text-[11px] text-gray-700 w-[230px]">
+                            {item.createdAt ? new Date(item.createdAt).toLocaleString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true
+                            }) : (item.date || "N/A")}
                           </td>
 
                           <td className="p-3 text-center">
@@ -459,7 +465,7 @@ export default function ReportsPage() {
             <div className="mt-4 pt-3 border-t text-[11px] space-y-1 font-mono text-gray-600">
               <div><strong>Recipient:</strong> {selectedItem.number || "+917518900801"}</div>
               <div><strong>Status:</strong> <span className="text-indigo-700 font-bold">{selectedItem.status}</span></div>
-              <div><strong>Error Info:</strong> <span className="text-red-600">{selectedItem.errorDetails || "None"}</span></div>
+              <div><strong>Timestamp:</strong> <span className="text-gray-800">{selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleString('en-IN') : "N/A"}</span></div>
               <div><strong>Cost:</strong> ₹{selectedItem.cost}</div>
             </div>
           </div>

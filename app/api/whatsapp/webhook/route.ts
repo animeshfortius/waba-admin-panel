@@ -52,7 +52,7 @@ export async function POST(req: Request) {
                 try {
                   const cleanRecip = recipientId ? recipientId.replace(/\D/g, "").slice(-10) : "";
 
-                  // 1️⃣ Try finding existing log by WAMID or recipient
+                  // 1️⃣ Try finding existing log by WAMID (Message ID)
                   let matchMsg = null;
                   if (messageId) {
                     matchMsg = await prisma.campaignLog.findFirst({
@@ -60,20 +60,22 @@ export async function POST(req: Request) {
                     });
                   }
 
+                  // 2️⃣ If WAMID not found, match by recipient number (picks the latest log for this number)
                   if (!matchMsg && cleanRecip) {
                     matchMsg = await prisma.campaignLog.findFirst({
                       where: {
-                        recipient: { contains: cleanRecip },
-                        status: { not: "READ" }
+                        recipient: { contains: cleanRecip }
                       },
                       orderBy: { sentAt: "desc" }
                     });
                   }
 
                   if (matchMsg) {
-                    // Update existing log
+                    // Update existing log & bind wamid if it was missing or N/A
                     let updateData: any = { status };
-                    if (messageId && !matchMsg.messageId) updateData.messageId = messageId;
+                    if (messageId && (!matchMsg.messageId || matchMsg.messageId === "N/A")) {
+                      updateData.messageId = messageId;
+                    }
                     if (status === "DELIVERED") updateData.deliveredAt = timestamp;
                     if (status === "READ") {
                       if (!matchMsg.deliveredAt) updateData.deliveredAt = timestamp;
@@ -88,12 +90,12 @@ export async function POST(req: Request) {
                       where: { id: matchMsg.id },
                       data: updateData,
                     });
-                    console.log(`✅ WEBHOOK UPDATED -> ID: ${matchMsg.id} to ${status}`);
+                    console.log(`✅ WEBHOOK UPDATED -> ID: ${matchMsg.id} to ${status} (Matched Recipient/WAMID)`);
                   } else {
-                    // 2️⃣ Race Condition Fix: If log not found yet, auto-create it!
+                    // 3️⃣ Fallback only if no record exists at all
                     await prisma.campaignLog.create({
                       data: {
-                        userId: "admin", // Fallback system user
+                        userId: "admin",
                         campaignName: "Auto_Webhook_Campaign",
                         templateName: "Direct_Message",
                         channel: channelNumber,

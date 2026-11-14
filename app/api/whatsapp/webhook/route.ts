@@ -45,9 +45,36 @@ export async function POST(req: Request) {
                 if (rawStatus === "FAILED") status = "FAILED";
 
                 try {
-                  const cleanRecip = recipientId ? recipientId.replace(/\D/g, "").slice(-10) : "";
+                  // Webhook wale number ke aakhri 10 digits nikaalo
+                  const cleanWebhook = recipientId ? recipientId.replace(/\D/g, "").slice(-10) : "";
 
-                  if (cleanRecip) {
+                  let matchedLogs: any[] = [];
+
+                  // 1️⃣ STEP 1: Exact wamid (messageId) se match karo
+                  if (messageId) {
+                    const byWamid = await prisma.campaignLog.findMany({
+                      where: { messageId: messageId }
+                    });
+                    if (byWamid.length > 0) {
+                      matchedLogs = byWamid;
+                    }
+                  }
+
+                  // 2️⃣ STEP 2: JS Normalization Match (DB ke saare unread/sent logs laakar last 10 digits compare karo)
+                  if (matchedLogs.length === 0 && cleanWebhook.length >= 10) {
+                    const recentLogs = await prisma.campaignLog.findMany({
+                      where: { status: { not: "READ" } },
+                      orderBy: { createdAt: "desc" },
+                      take: 300 // Last 300 active logs check honge
+                    });
+
+                    matchedLogs = recentLogs.filter(log => {
+                      const cleanDb = log.recipient ? log.recipient.replace(/\D/g, "").slice(-10) : "";
+                      return cleanDb === cleanWebhook;
+                    });
+                  }
+
+                  if (matchedLogs.length > 0) {
                     let updateData: any = { status };
                     if (messageId) updateData.messageId = messageId;
                     if (status === "DELIVERED") updateData.deliveredAt = timestamp;
@@ -60,36 +87,32 @@ export async function POST(req: Request) {
                       updateData.errorDetails = statusObj.errors[0].message;
                     }
 
-                    // 🟢 MASS UPDATE: Update ALL campaign rows for this phone number at once
-                    const updateResult = await prisma.campaignLog.updateMany({
-                      where: {
-                        recipient: { contains: cleanRecip },
-                        status: { not: "READ" }
-                      },
+                    const logIds = matchedLogs.map(l => l.id);
+                    await prisma.campaignLog.updateMany({
+                      where: { id: { in: logIds } },
                       data: updateData,
                     });
 
-                    console.log(`🔥 MASS UPDATED -> Phone: ${cleanRecip} | Count: ${updateResult.count} rows to ${status}`);
-
-                    if (updateResult.count === 0) {
-                      await prisma.campaignLog.create({
-                        data: {
-                          userId: "admin",
-                          campaignName: "Direct_Chat_Campaign",
-                          templateName: "Direct_Message",
-                          channel: channelNumber,
-                          recipient: recipientId || "Unknown",
-                          status: status,
-                          messageId: messageId || null,
-                          cost: 0.155,
-                          sentAt: timestamp,
-                          deliveredAt: status === "DELIVERED" || status === "READ" ? timestamp : null,
-                          readAt: status === "READ" ? timestamp : null,
-                          errorDetails: status === "FAILED" ? statusObj.errors?.[0]?.message || "Failed" : "N/A"
-                        }
-                      });
-                      console.log(`🚀 FALLBACK CREATED -> Recipient: ${recipientId} | Status: ${status}`);
-                    }
+                    console.log(`🔥 JS NORMALIZED MATCH -> Phone: ${cleanWebhook} | Updated ${logIds.length} rows to ${status}`);
+                  } else {
+                    // 3️⃣ STEP 3: Agar sach mein kahin match na ho, tabhi fallback create karo
+                    await prisma.campaignLog.create({
+                      data: {
+                        userId: "admin",
+                        campaignName: "Direct_Chat_Campaign",
+                        templateName: "Direct_Message",
+                        channel: channelNumber,
+                        recipient: recipientId || "Unknown",
+                        status: status,
+                        messageId: messageId || null,
+                        cost: 0.155,
+                        sentAt: timestamp,
+                        deliveredAt: status === "DELIVERED" || status === "READ" ? timestamp : null,
+                        readAt: status === "READ" ? timestamp : null,
+                        errorDetails: status === "FAILED" ? statusObj.errors?.[0]?.message || "Failed" : "N/A"
+                      }
+                    });
+                    console.log(`🚀 FALLBACK CREATED -> Recipient: ${recipientId} | Status: ${status}`);
                   }
 
                 } catch (dbErr: any) {

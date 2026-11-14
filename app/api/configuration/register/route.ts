@@ -74,9 +74,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. AUTOMATED APIS: Phone Registration & Smartping Credit Line Attach
+    // 2. AUTOMATED APIS: Phone Registration, Webhook Auto-Subscribe & Smartping Credit Line Attach
     if (cleanPhoneId && accessToken) {
       try {
+        // A. Phone Register API
         const registerUrl = `https://graph.facebook.com/v26.0/${cleanPhoneId}/register`;
         await fetch(registerUrl, {
           method: "POST",
@@ -90,6 +91,19 @@ export async function POST(request: Request) {
           })
         });
 
+        // B. AUTO-SUBSCRIBE WABA FOR WEBHOOKS (Yeh naya add karna hai!)
+        const subscribeUrl = `https://graph.facebook.com/v26.0/${cleanWabaId}/subscribed_apps`;
+        const subRes = await fetch(subscribeUrl, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          }
+        });
+        const subData = await subRes.json();
+        console.log("Auto-Subscribe Webhook Response:", subData);
+
+        // C. Smartping Attach API
         const cleanPhone = displayPhone ? displayPhone.replace(/[^0-9]/g, "") : cleanPhoneId;
         const smartpingUrl = `https://wabalens.smartping.io/MetaAPI/metapp/api/v1/wabas/attach?wabaId=${cleanWabaId}&wabaNumber=${cleanPhone}`;
         

@@ -29,6 +29,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    console.log("🔥 Incoming Meta Webhook Payload:", JSON.stringify(body, null, 2));
 
     if (body.object === "whatsapp_business_account") {
       for (const entry of body.entry || []) {
@@ -41,6 +42,8 @@ export async function POST(req: Request) {
                 const status = statusObj.status?.toUpperCase();
                 const timestamp = statusObj.timestamp ? new Date(Number(statusObj.timestamp) * 1000) : new Date();
 
+                console.log(`📌 Processing status update: Message ID ${messageId} -> ${status}`);
+
                 if (!messageId) continue;
 
                 let updateData: any = { status };
@@ -51,10 +54,12 @@ export async function POST(req: Request) {
                   updateData.status = "READ";
                 }
 
-                await prisma.campaignLog.updateMany({
+                const updateResult = await prisma.campaignLog.updateMany({
                   where: { messageId },
                   data: updateData,
                 });
+
+                console.log(`✅ DB Update Result for Message ID ${messageId}:`, updateResult);
               }
             }
           }
@@ -64,7 +69,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: any) {
-    console.error("Webhook Error:", error);
+    console.error("❌ Webhook Error:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

@@ -22,22 +22,29 @@ export async function GET(req: Request) {
     headers();
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId") || "admin";
+    const statusFilter = searchParams.get("status");
+    const channelFilter = searchParams.get("channel");
 
     let wabaAccounts = await prisma.wabaAccount.findMany({
       select: { wabaId: true, displayPhone: true, displayName: true, userId: true }
     });
 
-    const whereClause = (userId === "admin" || userId === "emergency_admin_id") ? {} : { userId };
+    // 🟢 Build dynamic Prisma where clause for server-side filtering
+    const whereClause: any = (userId === "admin" || userId === "emergency_admin_id") ? {} : { userId };
+    
+    if (statusFilter) {
+      whereClause.status = statusFilter;
+    }
+    
+    if (channelFilter) {
+      // Clean numbers for flexible matching
+      const cleanChannel = channelFilter.replace(/\D/g, "");
+      whereClause.channel = { contains: cleanChannel };
+    }
 
     const messageLogs = await prisma.campaignLog.findMany({
       where: whereClause,
       orderBy: { createdAt: "desc" },
-    });
-
-    // 🔍 DEBUG LOG: Yeh Render logs mein batayega ki database ke andar asli status kya pada hai!
-    console.log("📊 FETCHING REPORTS FROM DB -> Total Logs:", messageLogs.length);
-    messageLogs.slice(0, 5).forEach(l => {
-      console.log(`Log ID: ${l.id} | Recipient: ${l.recipient} | Status in DB: ${l.status}`);
     });
 
     if (messageLogs.length === 0) {
@@ -71,7 +78,8 @@ export async function GET(req: Request) {
         templateName: log.templateName,
         bodyText: `Campaign: ${log.campaignName}`,
         cost: typeof log.cost === 'number' ? log.cost.toFixed(3) : log.cost,
-        errorDetails: log.errorDetails || "N/A"
+        errorDetails: log.errorDetails || "N/A",
+        createdAt: log.createdAt
       };
     });
 
@@ -87,7 +95,8 @@ export async function GET(req: Request) {
           cost: 0,
           totalCount: 0,
           status: "COMPLETED",
-          error: log.errorDetails
+          error: log.errorDetails,
+          createdAt: log.createdAt
         };
       }
       campaignMap[log.campaignName].totalCount += 1;
@@ -103,7 +112,7 @@ export async function GET(req: Request) {
       success: true,
       campaigns: campaignReports,
       deliveries: deliveryLogs,
-      wabaAccounts,
+     wabaAccounts,
       stats: {
         total: messageLogs.length,
         sent: messageLogs.filter(l => l.status?.toUpperCase() === "SENT").length,

@@ -150,4 +150,5 @@ model CampaignLog {
   deliveredAt  DateTime?
   readAt       DateTime?
   createdAt    DateTime  @default(now())
+  @@index([messageId])
 }

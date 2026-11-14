@@ -136,7 +136,7 @@ export async function POST(req: Request) {
         },
       };
 
-      let messageStatus = "SENT";
+      let messageStatus = "SENT"; // 🟢 Start as SENT so webhook can update it live
       let metaMessageId = null;
       let errorMsg = "N/A";
       const now = new Date();
@@ -158,7 +158,7 @@ export async function POST(req: Request) {
 
         if (metaRes.ok && metaData.messages?.[0]?.id) {
           sentCount++;
-          messageStatus = "DELIVERED"; // 🟢 Accurate real status: Delivered (Not forced to READ)
+          messageStatus = "SENT"; // 🟢 Keep as SENT initially
           metaMessageId = metaData.messages[0].id;
         } else {
           failedCount++;
@@ -179,7 +179,7 @@ export async function POST(req: Request) {
         });
       }
 
-      // Save record with accurate DELIVERED status and null readAt
+      // Save record with SENT status and null deliveredAt/readAt (Webhook will update them)
       try {
         await prisma.campaignLog.create({
           data: {
@@ -188,13 +188,13 @@ export async function POST(req: Request) {
             templateName: templateName,
             channel: channelNumber,
             recipient: `+${formattedNumber}`,
-            status: messageStatus, // DELIVERED or FAILED
+            status: messageStatus, // SENT or FAILED
             messageId: metaMessageId,
             cost: dbTemplate?.category === "MARKETING" ? 0.804 : 0.155,
             errorDetails: errorMsg,
             sentAt: now,
-            deliveredAt: messageStatus !== "FAILED" ? new Date(now.getTime() + 3000) : null,
-            readAt: null, // 🟢 Kept null until actual user reads the message
+            deliveredAt: null, // 🟢 Will be filled by Webhook when delivered
+            readAt: null,      // 🟢 Will be filled by Webhook when read
           },
         });
       } catch (logErr) {

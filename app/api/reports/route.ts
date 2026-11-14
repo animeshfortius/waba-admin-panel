@@ -25,6 +25,8 @@ export async function GET(req: Request) {
     const statusFilter = searchParams.get("status");
     const channelFilter = searchParams.get("channel");
     const dateRange = searchParams.get("dateRange") || "All";
+    const startDateParam = searchParams.get("startDate");
+    const endDateParam = searchParams.get("endDate");
 
     let wabaAccounts = await prisma.wabaAccount.findMany({
       select: { wabaId: true, displayPhone: true, displayName: true, userId: true }
@@ -43,7 +45,7 @@ export async function GET(req: Request) {
       whereClause.channel = { contains: cleanChannel };
     }
 
-    // 🟢 Date Range filter logic implementation
+    // 🟢 Date Range filter logic implementation including Custom Dates
     if (dateRange === "Today") {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
@@ -63,6 +65,12 @@ export async function GET(req: Request) {
       const last30Days = new Date();
       last30Days.setDate(last30Days.getDate() - 30);
       whereClause.createdAt = { gte: last30Days };
+    } else if (dateRange === "Custom" && startDateParam && endDateParam) {
+      const start = new Date(startDateParam);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDateParam);
+      end.setHours(23, 59, 59, 999);
+      whereClause.createdAt = { gte: start, lte: end };
     }
 
     const messageLogs = await prisma.campaignLog.findMany({

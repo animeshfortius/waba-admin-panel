@@ -5,7 +5,12 @@ import { useState, useEffect, useMemo } from "react";
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<"campaign" | "delivery" | "schedule" | "fallback" | "api" | "service">("campaign");
   const [dateRange, setDateRange] = useState("All");
+  
+  // 🟢 Custom Date Range States (From Date & To Date)
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
+
   const [showDownloadNotification, setShowDownloadNotification] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -13,11 +18,19 @@ export default function ReportsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(20);
 
-  // Filter states & Waba Channels
-  const [selectedChannel, setSelectedChannel] = useState("");
-  const [templateSearch, setTemplateSearch] = useState("");
-  const [campaignStatus, setCampaignStatus] = useState("");
-  const [isJourney, setIsJourney] = useState("");
+  // Input filter states (Temporary until Apply Filter is clicked)
+  const [inputChannel, setInputChannel] = useState("");
+  const [inputTemplateSearch, setInputTemplateSearch] = useState("");
+  const [inputCampaignStatus, setInputCampaignStatus] = useState("");
+  const [inputIsJourney, setInputIsJourney] = useState("");
+
+  // 🟢 Active applied filter states (Triggered only on "Apply Filter" click)
+  const [appliedChannel, setAppliedChannel] = useState("");
+  const [appliedTemplateSearch, setAppliedTemplateSearch] = useState("");
+  const [appliedCampaignStatus, setAppliedCampaignStatus] = useState("");
+  const [appliedIsJourney, setAppliedIsJourney] = useState("");
+  const [appliedDateRange, setAppliedDateRange] = useState("All");
+
   const [wabaChannels, setWabaChannels] = useState<any[]>([]);
 
   // Specific Campaign Drill-down filter state
@@ -38,6 +51,7 @@ export default function ReportsPage() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
+  // Fetch reports when tab or applied filters change
   useEffect(() => {
     const userId = localStorage.getItem("userId") || "admin";
     fetchLiveReports(userId);
@@ -47,22 +61,23 @@ export default function ReportsPage() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [activeTab, dateRange]);
+  }, [activeTab, appliedDateRange, appliedCampaignStatus, appliedChannel]);
 
   // Reset pagination on tab change or filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, campaignFilter, selectedChannel, templateSearch, campaignStatus, isJourney, dateRange]);
+  }, [activeTab, campaignFilter, appliedChannel, appliedTemplateSearch, appliedCampaignStatus, appliedIsJourney, appliedDateRange]);
 
   const fetchLiveReports = async (userId: string) => {
     try {
       const queryParams = new URLSearchParams({
         userId,
         tab: activeTab,
-        dateRange,
-        // Only send status to backend if we are on delivery tab, otherwise handle campaign filters gracefully
-        ...(activeTab === "delivery" && campaignStatus && { status: campaignStatus }),
-        ...(selectedChannel && { channel: selectedChannel }),
+        dateRange: appliedDateRange,
+        ...(appliedDateRange === "Custom" && customStartDate && { startDate: customStartDate }),
+        ...(appliedDateRange === "Custom" && customEndDate && { endDate: customEndDate }),
+        ...(activeTab === "delivery" && appliedCampaignStatus && { status: appliedCampaignStatus }),
+        ...(appliedChannel && { channel: appliedChannel }),
       });
 
       const res = await fetch(`/api/reports?${queryParams.toString()}`, {
@@ -86,6 +101,35 @@ export default function ReportsPage() {
     }
   };
 
+  // 🟢 Handle Apply Filter click
+  const handleApplyFilters = () => {
+    setAppliedChannel(inputChannel);
+    setAppliedTemplateSearch(inputTemplateSearch);
+    setAppliedCampaignStatus(inputCampaignStatus);
+    setAppliedIsJourney(inputIsJourney);
+    setAppliedDateRange(dateRange);
+    setCurrentPage(1);
+  };
+
+  // 🟢 Handle Reset Filters click
+  const handleResetFilters = () => {
+    setInputChannel("");
+    setInputTemplateSearch("");
+    setInputCampaignStatus("");
+    setInputIsJourney("");
+    setDateRange("All");
+    setCustomStartDate("");
+    setCustomEndDate("");
+
+    setAppliedChannel("");
+    setAppliedTemplateSearch("");
+    setAppliedCampaignStatus("");
+    setAppliedIsJourney("");
+    setAppliedDateRange("All");
+    setCampaignFilter("");
+    setCurrentPage(1);
+  };
+
   const handleDownloadReport = () => {
     setShowDownloadNotification(true);
     setTimeout(() => setShowDownloadNotification(false), 5000);
@@ -106,53 +150,53 @@ export default function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  // 🟢 Filter datasets properly based on tab logic
+  // Filter datasets based on applied filters
   const filteredCampaigns = useMemo(() => {
     return campaignData.filter((item) => {
       if (campaignFilter && item.campaignInfo !== campaignFilter) return false;
-      if (selectedChannel && !String(item.channel).includes(selectedChannel)) return false;
-      if (templateSearch && !item.templateInfo?.toLowerCase().includes(templateSearch.toLowerCase())) return false;
+      if (appliedChannel && !String(item.channel).includes(appliedChannel)) return false;
+      if (appliedTemplateSearch && !item.templateInfo?.toLowerCase().includes(appliedTemplateSearch.toLowerCase())) return false;
       return true;
     });
-  }, [campaignData, campaignFilter, selectedChannel, templateSearch]);
+  }, [campaignData, campaignFilter, appliedChannel, appliedTemplateSearch]);
 
   const filteredDeliveries = useMemo(() => {
     return deliveryData.filter((item) => {
       if (campaignFilter && item.campaignName !== campaignFilter) return false;
-      if (selectedChannel && !String(item.channel).includes(selectedChannel)) return false;
-      if (campaignStatus && item.status !== campaignStatus) return false;
-      if (templateSearch && !item.templateName?.toLowerCase().includes(templateSearch.toLowerCase())) return false;
+      if (appliedChannel && !String(item.channel).includes(appliedChannel)) return false;
+      if (appliedCampaignStatus && item.status !== appliedCampaignStatus) return false;
+      if (appliedTemplateSearch && !item.templateName?.toLowerCase().includes(appliedTemplateSearch.toLowerCase())) return false;
       return true;
     });
-  }, [deliveryData, campaignFilter, selectedChannel, campaignStatus, templateSearch]);
+  }, [deliveryData, campaignFilter, appliedChannel, appliedCampaignStatus, appliedTemplateSearch]);
 
   const filteredSchedules = useMemo(() => {
     return scheduleData.filter((item) => {
-      if (templateSearch && !item.templateName?.toLowerCase().includes(templateSearch.toLowerCase())) return false;
+      if (appliedTemplateSearch && !item.templateName?.toLowerCase().includes(appliedTemplateSearch.toLowerCase())) return false;
       return true;
     });
-  }, [scheduleData, templateSearch]);
+  }, [scheduleData, appliedTemplateSearch]);
 
   const filteredFallbacks = useMemo(() => {
     return fallbackData.filter((item) => {
-      if (campaignStatus && item.status !== campaignStatus) return false;
+      if (appliedCampaignStatus && item.status !== appliedCampaignStatus) return false;
       return true;
     });
-  }, [fallbackData, campaignStatus]);
+  }, [fallbackData, appliedCampaignStatus]);
 
   const filteredApis = useMemo(() => {
     return apiData.filter((item) => {
-      if (campaignStatus && item.status !== campaignStatus) return false;
+      if (appliedCampaignStatus && item.status !== appliedCampaignStatus) return false;
       return true;
     });
-  }, [apiData, campaignStatus]);
+  }, [apiData, appliedCampaignStatus]);
 
   const filteredServices = useMemo(() => {
     return serviceData.filter((item) => {
-      if (campaignStatus && item.status !== campaignStatus) return false;
+      if (appliedCampaignStatus && item.status !== appliedCampaignStatus) return false;
       return true;
     });
-  }, [serviceData, campaignStatus]);
+  }, [serviceData, appliedCampaignStatus]);
 
   // Active Tab Dataset selection
   const activeDataset = useMemo(() => {
@@ -174,7 +218,7 @@ export default function ReportsPage() {
     return activeDataset.slice(start, start + rowsPerPage);
   }, [activeDataset, currentPage, rowsPerPage]);
 
-  // 🟢 Dynamic Stats Calculation for Campaign / Delivery / Particular Campaign
+  // Dynamic Stats Calculation
   const stats = useMemo(() => {
     let targetList = activeTab === "campaign" ? filteredCampaigns : filteredDeliveries;
     if (activeTab !== "campaign" && activeTab !== "delivery") {
@@ -185,14 +229,12 @@ export default function ReportsPage() {
     let sent = 0, delivered = 0, read = 0, failed = 0;
 
     if (activeTab === "campaign" && !campaignFilter) {
-      // For general campaign overview, use total count sum
       total = filteredCampaigns.reduce((acc, curr) => acc + (Number(curr.totalCount) || 1), 0);
       sent = apiStats.sent;
       delivered = apiStats.delivered;
       read = apiStats.read;
       failed = apiStats.failed;
     } else {
-      // For delivery report or specific campaign drill-down, calculate exact status counts from deliveryData
       targetList.forEach((item) => {
         const s = (item.status || "").toUpperCase();
         if (s === "SENT") sent++;
@@ -278,14 +320,14 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* Date Picker Dropdown */}
+        {/* 🟢 Date Picker with Custom Range Support */}
         <div className="relative">
           <button
             onClick={() => setShowDatePicker(!showDatePicker)}
             className="border bg-gray-50 hover:bg-gray-100 px-3.5 py-2 rounded-xl text-xs font-bold text-gray-700 flex items-center space-x-2 transition cursor-pointer"
           >
             <span>📅</span>
-            <span>{dateRange}</span>
+            <span>{dateRange === "Custom" && customStartDate && customEndDate ? `${customStartDate} to ${customEndDate}` : dateRange}</span>
             <span>▼</span>
           </button>
 
@@ -301,6 +343,42 @@ export default function ReportsPage() {
                 <button onClick={() => { setDateRange("Yesterday"); setShowDatePicker(false); }} className={`p-2 border rounded-lg text-left font-medium cursor-pointer ${dateRange === "Yesterday" ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "hover:bg-gray-50"}`}>Yesterday</button>
                 <button onClick={() => { setDateRange("Last 7 Days"); setShowDatePicker(false); }} className={`p-2 border rounded-lg text-left font-medium cursor-pointer ${dateRange === "Last 7 Days" ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "hover:bg-gray-50"}`}>Last 7 Days</button>
                 <button onClick={() => { setDateRange("Last 30 Days"); setShowDatePicker(false); }} className={`p-2 border rounded-lg text-left font-medium cursor-pointer ${dateRange === "Last 30 Days" ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "hover:bg-gray-50"}`}>Last 30 Days</button>
+              </div>
+
+              {/* Custom Date Inputs */}
+              <div className="border-t pt-2 space-y-2">
+                <span className="font-bold text-gray-600 block">Custom Range:</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-500">From:</label>
+                    <input 
+                      type="date" 
+                      value={customStartDate} 
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="w-full border rounded-lg p-1.5 text-xs bg-gray-50 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500">To:</label>
+                    <input 
+                      type="date" 
+                      value={customEndDate} 
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="w-full border rounded-lg p-1.5 text-xs bg-gray-50 font-mono"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (customStartDate && customEndDate) {
+                      setDateRange("Custom");
+                      setShowDatePicker(false);
+                    }
+                  }}
+                  className="w-full bg-emerald-600 text-white font-bold py-1.5 rounded-lg hover:bg-emerald-700 transition cursor-pointer"
+                >
+                  Apply Custom Range
+                </button>
               </div>
             </div>
           )}
@@ -339,8 +417,8 @@ export default function ReportsPage() {
             <span>Filter Records ({activeTab.toUpperCase()}) {campaignFilter && `for "${campaignFilter}"`}</span>
           </h3>
           <div className="space-x-2">
-            <button onClick={() => { setSelectedChannel(""); setTemplateSearch(""); setCampaignStatus(""); setCampaignFilter(""); setDateRange("All"); }} className="text-xs text-gray-500 font-semibold hover:text-gray-800 px-3 py-1.5 cursor-pointer">Reset</button>
-            <button onClick={() => fetchLiveReports(localStorage.getItem("userId") || "admin")} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow transition cursor-pointer">
+            <button onClick={handleResetFilters} className="text-xs text-gray-500 font-semibold hover:text-gray-800 px-3 py-1.5 cursor-pointer">Reset</button>
+            <button onClick={handleApplyFilters} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow transition cursor-pointer">
               Apply Filter
             </button>
           </div>
@@ -350,8 +428,8 @@ export default function ReportsPage() {
           <div>
             <label className="block font-semibold text-gray-600 mb-1">Select Channel</label>
             <select
-              value={selectedChannel}
-              onChange={(e) => setSelectedChannel(e.target.value)}
+              value={inputChannel}
+              onChange={(e) => setInputChannel(e.target.value)}
               className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-bold"
             >
               <option value="">All Channels ({wabaChannels.length} Connected)</option>
@@ -368,8 +446,8 @@ export default function ReportsPage() {
             <input
               type="text"
               placeholder="Search template..."
-              value={templateSearch}
-              onChange={(e) => setTemplateSearch(e.target.value)}
+              value={inputTemplateSearch}
+              onChange={(e) => setInputTemplateSearch(e.target.value)}
               className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none"
             />
           </div>
@@ -377,8 +455,8 @@ export default function ReportsPage() {
           <div>
             <label className="block font-semibold text-gray-600 mb-1">Status</label>
             <select
-              value={campaignStatus}
-              onChange={(e) => setCampaignStatus(e.target.value)}
+              value={inputCampaignStatus}
+              onChange={(e) => setInputCampaignStatus(e.target.value)}
               className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none"
             >
               <option value="">All Status</option>
@@ -392,8 +470,8 @@ export default function ReportsPage() {
           <div>
             <label className="block font-semibold text-gray-600 mb-1">Journey Campaign</label>
             <select
-              value={isJourney}
-              onChange={(e) => setIsJourney(e.target.value)}
+              value={inputIsJourney}
+              onChange={(e) => setInputIsJourney(e.target.value)}
               className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none"
             >
               <option value="">All</option>

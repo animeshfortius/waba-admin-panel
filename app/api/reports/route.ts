@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { headers } from "next/headers"; // 👈 Next.js 16 compatible dynamic trigger
+import { headers } from "next/headers";
 
-// Helper function to get exact IST (Indian Standard Time) format
 function formatIST(dateInput: Date | string | null) {
   if (!dateInput) return "N/A";
   const date = new Date(dateInput);
@@ -20,9 +19,7 @@ function formatIST(dateInput: Date | string | null) {
 
 export async function GET(req: Request) {
   try {
-    // Calling headers() forces dynamic execution in Next.js 16 (compatible with cacheComponents)
     headers();
-
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId") || "admin";
 
@@ -37,6 +34,12 @@ export async function GET(req: Request) {
       orderBy: { createdAt: "desc" },
     });
 
+    // 🔍 DEBUG LOG: Yeh Render logs mein batayega ki database ke andar asli status kya pada hai!
+    console.log("📊 FETCHING REPORTS FROM DB -> Total Logs:", messageLogs.length);
+    messageLogs.slice(0, 5).forEach(l => {
+      console.log(`Log ID: ${l.id} | Recipient: ${l.recipient} | Status in DB: ${l.status}`);
+    });
+
     if (messageLogs.length === 0) {
       return NextResponse.json({
         success: true,
@@ -45,13 +48,10 @@ export async function GET(req: Request) {
         wabaAccounts,
         stats: { total: 0, sent: 0, delivered: 0, read: 0, failed: 0 }
       }, {
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        }
+        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' }
       });
     }
 
-    // Map delivery logs
     const deliveryLogs = messageLogs.map((log) => {
       const sentStr = formatIST(log.sentAt);
       const deliveredStr = log.deliveredAt ? formatIST(log.deliveredAt) : "Pending";
@@ -75,7 +75,6 @@ export async function GET(req: Request) {
       };
     });
 
-    // Map campaign reports
     const campaignMap: { [key: string]: any } = {};
     messageLogs.forEach((log) => {
       if (!campaignMap[log.campaignName]) {
@@ -113,9 +112,7 @@ export async function GET(req: Request) {
         failed: messageLogs.filter(l => l.status?.toUpperCase() === "FAILED").length,
       }
     }, {
-      headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-      }
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' }
     });
   } catch (error: any) {
     console.error("Reports API Error:", error);

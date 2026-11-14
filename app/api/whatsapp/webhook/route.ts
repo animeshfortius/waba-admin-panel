@@ -48,19 +48,19 @@ export async function POST(req: Request) {
                 if (rawStatus === "FAILED") status = "FAILED";
 
                 try {
-                  let updatedLog = null;
+                  let updated = false;
 
-                  // 1. Try finding and updating by exact messageId first
+                  // 1. Match by exact Message ID
                   if (messageId) {
-                    updatedLog = await prisma.campaignLog.findFirst({
+                    const matchMsg = await prisma.campaignLog.findFirst({
                       where: { messageId: messageId }
                     });
 
-                    if (updatedLog) {
+                    if (matchMsg) {
                       let updateData: any = { status };
                       if (status === "DELIVERED") updateData.deliveredAt = timestamp;
                       if (status === "READ") {
-                        if (!updatedLog.deliveredAt) updateData.deliveredAt = timestamp;
+                        if (!matchMsg.deliveredAt) updateData.deliveredAt = timestamp;
                         updateData.readAt = timestamp;
                         updateData.status = "READ";
                       }
@@ -69,21 +69,23 @@ export async function POST(req: Request) {
                       }
 
                       await prisma.campaignLog.update({
-                        where: { id: updatedLog.id },
+                        where: { id: matchMsg.id },
                         data: updateData,
                       });
-                      console.log(`✅ Updated via MessageID [${messageId}] to Status: ${status}`);
+                      console.log(`✅ WEBHOOK UPDATED BY WAMID -> ID: ${matchMsg.id} to ${status}`);
                       continue;
                     }
                   }
 
-                  // 2. Fallback: Find latest log by recipient phone number if messageId not found
+                  // 2. Match by Recipient Phone (Flexible lookup)
                   if (recipientId) {
+                    const cleanRecip = recipientId.replace(/\D/g, "");
                     const candidateLogs = await prisma.campaignLog.findMany({
                       where: {
                         OR: [
-                          { recipient: recipientId },
-                          { recipient: `+${recipientId}` }
+                          { recipient: cleanRecip },
+                          { recipient: `+${cleanRecip}` },
+                          { recipient: { endsWith: cleanRecip } }
                         ],
                         status: { not: "READ" }
                       },
@@ -96,7 +98,7 @@ export async function POST(req: Request) {
                       let updateData: any = { status };
 
                       if (messageId && !logToUpdate.messageId) {
-                        updateData.messageId = messageId; // Bind wamid retroactively
+                        updateData.messageId = messageId;
                       }
                       if (status === "DELIVERED") updateData.deliveredAt = timestamp;
                       if (status === "READ") {
@@ -112,13 +114,16 @@ export async function POST(req: Request) {
                         where: { id: logToUpdate.id },
                         data: updateData,
                       });
-                      console.log(`✅ Updated via Recipient Phone [${recipientId}] to Status: ${status}`);
-                    } else {
-                      console.log(`ℹ️ No pending campaign log found for recipient: ${recipientId}`);
+                      console.log(`✅ WEBHOOK UPDATED BY PHONE -> ID: ${logToUpdate.id} to ${status}`);
+                      updated = true;
                     }
                   }
+
+                  if (!updated) {
+                    console.log(`ℹ️ No matching log found for wamid [${messageId}] / recipient [${recipientId}]`);
+                  }
                 } catch (dbErr: any) {
-                  console.error(`❌ Webhook DB Update Error:`, dbErr.message);
+                  console.error(`❌ Webhook DB Error:`, dbErr.message);
                 }
               }
             }

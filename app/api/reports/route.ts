@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-// 👇 1. Prevent Next.js Caching so data is always fresh from database
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+import { headers } from "next/headers"; // 👈 Next.js 16 compatible dynamic trigger
 
 // Helper function to get exact IST (Indian Standard Time) format
 function formatIST(dateInput: Date | string | null) {
@@ -23,6 +20,9 @@ function formatIST(dateInput: Date | string | null) {
 
 export async function GET(req: Request) {
   try {
+    // Calling headers() forces dynamic execution in Next.js 16 (compatible with cacheComponents)
+    headers();
+
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId") || "admin";
 

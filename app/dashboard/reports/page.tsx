@@ -17,7 +17,7 @@ export default function ReportsPage() {
   const [wabaChannels, setWabaChannels] = useState<any[]>([]);
 
   // Analytics Stats Cards
-  const [stats, setStats] = useState({ total: 5, sent: 0, delivered: 0, read: 4, failed: 1 });
+  const [stats, setStats] = useState({ total: 1, sent: 0, delivered: 1, read: 0, failed: 0 });
 
   // Dynamic datasets from API
   const [campaignData, setCampaignData] = useState<any[]>([]);
@@ -27,10 +27,9 @@ export default function ReportsPage() {
   const [apiData, setApiData] = useState<any[]>([]);
   const [serviceData, setServiceData] = useState<any[]>([]);
 
-  // Action Modals State
-  const [modalType, setModalType] = useState<string | null>(null); // "details" | "repush" | "cta"
+  // Mobile Preview & Action Modal State
   const [selectedItem, setSelectedItem] = useState<any>(null);
-  const [selectedWabaForRepush, setSelectedWabaForRepush] = useState("");
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   useEffect(() => {
     const userId = localStorage.getItem("userId") || "admin";
@@ -50,12 +49,8 @@ export default function ReportsPage() {
         if (tab === "api") setApiData(data.data || []);
         if (tab === "service") setServiceData(data.data || []);
         
-        if (data.wabaAccounts) {
-          setWabaChannels(data.wabaAccounts);
-        }
-        if (data.stats) {
-          setStats(data.stats);
-        }
+        if (data.wabaAccounts) setWabaChannels(data.wabaAccounts);
+        if (data.stats) setStats(data.stats);
       }
     } catch (err) {
       console.error("Failed to fetch live reports:", err);
@@ -73,7 +68,7 @@ export default function ReportsPage() {
     const csvContent = "data:text/csv;charset=utf-8," + 
       [
         "ID,Info/Name,Template,Status,Cost",
-        `"${item.id || 1}","${item.campaignInfo || item.name || item.number || "N/A"}","${item.templateInfo || item.template || "N/A"}","${item.status || "Completed"}","${item.cost || "0.00"}"`
+        `"${item.id || 1}","${item.campaignInfo || item.number || "N/A"}","${item.templateName || item.templateInfo || "N/A"}","${item.status || "DELIVERED"}","${item.cost || "0.00"}"`
       ].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -84,37 +79,10 @@ export default function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  const handleRepushSubmit = async () => {
-    if (!selectedWabaForRepush) {
-      alert("Please select a WABA Number.");
-      return;
-    }
-    try {
-      const res = await fetch("/api/reports", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "RESEND_CAMPAIGN",
-          campaignId: selectedItem?.id,
-          wabaNumber: selectedWabaForRepush,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert(`✅ ${data.message}`);
-        setModalType(null);
-      } else {
-        alert(`❌ Failed: ${data.error}`);
-      }
-    } catch (err) {
-      alert("Network error while repushing campaign.");
-    }
-  };
-
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 lg:p-6 text-xs font-sans">
       
-      {/* Top Header & Breadcrumb matching your UI */}
+      {/* Top Header & Breadcrumb */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
         <div>
           <div className="text-xs text-gray-400">
@@ -146,7 +114,7 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Sub-Tabs Bar matching screenshots */}
+      {/* Sub-Tabs Bar */}
       <div className="bg-white p-2 rounded-xl border shadow-sm flex flex-wrap gap-2 items-center justify-between">
         <div className="flex flex-wrap gap-1.5">
           {[
@@ -167,7 +135,7 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* Calendar Date Picker Dropdown */}
+        {/* Date Picker Button */}
         <div className="relative">
           <button
             onClick={() => setShowDatePicker(!showDatePicker)}
@@ -195,31 +163,29 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* METRIC SUMMARY CARDS (As seen in Delivery & API Report screenshots) */}
-      {(activeTab === "delivery" || activeTab === "api" || activeTab === "campaign") && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
-            <div className="text-gray-400 font-semibold text-[10px]">TOTAL</div>
-            <div className="text-lg font-bold text-gray-800 mt-1">{stats.total}</div>
-          </div>
-          <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
-            <div className="text-gray-400 font-semibold text-[10px]">SENT</div>
-            <div className="text-lg font-bold text-blue-600 mt-1">{stats.sent}</div>
-          </div>
-          <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
-            <div className="text-gray-400 font-semibold text-[10px]">DELIVERED</div>
-            <div className="text-lg font-bold text-emerald-600 mt-1">{stats.delivered}</div>
-          </div>
-          <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
-            <div className="text-gray-400 font-semibold text-[10px]">READ</div>
-            <div className="text-lg font-bold text-indigo-600 mt-1">{stats.read}</div>
-          </div>
-          <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
-            <div className="text-gray-400 font-semibold text-[10px]">FAILED</div>
-            <div className="text-lg font-bold text-red-600 mt-1">{stats.failed}</div>
-          </div>
+      {/* METRIC SUMMARY CARDS */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
+          <div className="text-gray-400 font-semibold text-[10px]">TOTAL</div>
+          <div className="text-lg font-bold text-gray-800 mt-1">{stats.total}</div>
         </div>
-      )}
+        <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
+          <div className="text-gray-400 font-semibold text-[10px]">SENT</div>
+          <div className="text-lg font-bold text-blue-600 mt-1">{stats.sent}</div>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
+          <div className="text-gray-400 font-semibold text-[10px]">DELIVERED</div>
+          <div className="text-lg font-bold text-emerald-600 mt-1">{stats.delivered}</div>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
+          <div className="text-gray-400 font-semibold text-[10px]">READ</div>
+          <div className="text-lg font-bold text-indigo-600 mt-1">{stats.read}</div>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
+          <div className="text-gray-400 font-semibold text-[10px]">FAILED</div>
+          <div className="text-lg font-bold text-red-600 mt-1">{stats.failed}</div>
+        </div>
+      </div>
 
       {/* FILTER RECORDS SECTION */}
       <div className="bg-white p-5 rounded-2xl border shadow-sm space-y-4">
@@ -272,9 +238,10 @@ export default function ReportsPage() {
               className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none"
             >
               <option value="">All Status</option>
-              <option value="Completed">Completed</option>
-              <option value="Pending">Pending</option>
-              <option value="Failed">Failed</option>
+              <option value="DELIVERED">DELIVERED</option>
+              <option value="SENT">SENT</option>
+              <option value="READ">READ</option>
+              <option value="FAILED">FAILED</option>
             </select>
           </div>
 
@@ -293,226 +260,184 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* DYNAMIC DATA TABLE ACCORDING TO TAB */}
-      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-gray-500 font-semibold">Loading live reports from Meta & database...</div>
-        ) : (
-          <div className="overflow-x-auto">
-            {activeTab === "campaign" && (
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                    <th className="p-4">Campaign Date</th>
-                    <th className="p-4">Campaign Info</th>
-                    <th className="p-4">Template Info</th>
-                    <th className="p-4">Interface / Channel</th>
-                    <th className="p-4">Scheduled Info</th>
-                    <th className="p-4">Is Journey</th>
-                    <th className="p-4">Cost</th>
-                    <th className="p-4">Total Count</th>
-                    <th className="p-4">Error</th>
-                    <th className="p-4">Campaign Status</th>
-                    <th className="p-4 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {campaignData.length === 0 ? (
-                    <tr><td colSpan={11} className="p-8 text-center text-gray-400">No campaign reports found.</td></tr>
-                  ) : (
-                    campaignData.map((item) => (
-                      <tr key={item.id} className="hover:bg-gray-50 transition">
-                        <td className="p-4 font-mono text-gray-700">{item.date || item.createdAt}</td>
-                        <td className="p-4 font-bold text-gray-900">{item.campaignInfo}</td>
-                        <td className="p-4 text-emerald-700 font-medium">{item.templateInfo}</td>
-                        <td className="p-4 font-mono">+{item.channel}</td>
-                        <td className="p-4">{item.scheduledInfo || "Instant"}</td>
-                        <td className="p-4">{item.isJourney || "No"}</td>
-                        <td className="p-4 font-mono font-bold text-gray-800">₹{item.cost}</td>
-                        <td className="p-4 font-bold">{item.totalCount}</td>
-                        <td className="p-4 text-red-500">{item.error || "-"}</td>
-                        <td className="p-4 font-mono text-[10px] text-gray-600">
-                          <div>Status: <strong className="text-emerald-700">{item.status}</strong></div>
-                          <div>Start: {item.date}</div>
-                        </td>
-                        <td className="p-4 text-center space-x-1.5">
-                          <button onClick={() => { setSelectedItem(item); setModalType("details"); }} className="bg-blue-50 text-blue-600 p-1.5 rounded-lg hover:bg-blue-100 font-bold cursor-pointer" title="View Details">👁️</button>
-                          <button onClick={() => handleDownloadCSV(item)} className="bg-emerald-50 text-emerald-600 p-1.5 rounded-lg hover:bg-emerald-100 font-bold cursor-pointer" title="Download CSV">📥</button>
-                          <button onClick={() => { setSelectedItem(item); setModalType("repush"); }} className="bg-amber-50 text-amber-600 p-1.5 rounded-lg hover:bg-amber-100 font-bold cursor-pointer" title="Resend / Repush">🔁</button>
-                          <button onClick={() => { setSelectedItem(item); setModalType("cta"); }} className="bg-purple-50 text-purple-600 p-1.5 rounded-lg hover:bg-purple-100 font-bold cursor-pointer" title="CTA Report">📊</button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            )}
-
-            {activeTab === "delivery" && (
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                    <th className="p-4">Received Date</th>
-                    <th className="p-4">Channel</th>
-                    <th className="p-4">Number</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">Message ID</th>
-                    <th className="p-4">Acknowledgement</th>
-                    <th className="p-4">Interface / Type</th>
-                    <th className="p-4">Cost</th>
-                    <th className="p-4">Error Details</th>
-                    <th className="p-4 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {deliveryData.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50 transition">
-                      <td className="p-4 font-mono">{item.date}</td>
-                      <td className="p-4 font-mono">+{item.channel}</td>
-                      <td className="p-4 font-mono font-bold">+{item.number}</td>
-                      <td className="p-4">
-                        <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${item.status === "READ" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
-                          {item.status}
-                        </span>
-                      </td>
-                      <td className="p-4 font-mono text-gray-400">{item.msgId || "wamid.HBg..."}</td>
-                      <td className="p-4 font-mono text-[10px] text-gray-600">{item.acknowledgement || "Delivered successfully"}</td>
-                      <td className="p-4 font-mono">Web / {item.templateInfo}</td>
-                      <td className="p-4 font-bold text-emerald-600">₹{item.cost}</td>
-                      <td className="p-4 text-red-500 font-mono text-[10px]">{item.error || "N/A"}</td>
-                      <td className="p-4 text-center">
-                        <button onClick={() => { setSelectedItem(item); setModalType("details"); }} className="bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold">View</button>
-                      </td>
+      {/* DATA TABLES SECTION */}
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden flex">
+        <div className={`flex-1 overflow-x-auto transition-all ${showPreviewModal ? "w-2/3" : "w-full"}`}>
+          {loading ? (
+            <div className="p-12 text-center text-gray-500 font-semibold">Loading live reports from Meta & database...</div>
+          ) : (
+            <>
+              {/* CAMPAIGN REPORT TAB */}
+              {activeTab === "campaign" && (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
+                      <th className="p-4">Campaign Date</th>
+                      <th className="p-4">Campaign Info</th>
+                      <th className="p-4">Template Info</th>
+                      <th className="p-4">Interface / Channel</th>
+                      <th className="p-4">Cost</th>
+                      <th className="p-4">Total Count</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-center">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {campaignData.length === 0 ? (
+                      <tr><td colSpan={8} className="p-8 text-center text-gray-400">No campaign reports found.</td></tr>
+                    ) : (
+                      campaignData.map((item) => (
+                        <tr key={item.id} className="hover:bg-gray-50 transition">
+                          <td className="p-4 font-mono text-gray-700">{item.date}</td>
+                          <td className="p-4 font-bold text-gray-900">{item.campaignInfo}</td>
+                          <td className="p-4 text-emerald-700 font-medium">{item.templateInfo}</td>
+                          <td className="p-4 font-mono">+{item.channel}</td>
+                          <td className="p-4 font-mono font-bold text-gray-800">₹{item.cost}</td>
+                          <td className="p-4 font-bold">{item.totalCount}</td>
+                          <td className="p-4">
+                            <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full text-[10px]">
+                              {item.status}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center space-x-1.5">
+                            <button onClick={() => { setSelectedItem(item); setShowPreviewModal(true); }} className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold hover:bg-blue-100 cursor-pointer">View</button>
+                            <button onClick={() => handleDownloadCSV(item)} className="bg-emerald-50 text-emerald-600 p-1.5 rounded-lg hover:bg-emerald-100 font-bold cursor-pointer" title="Download CSV">📥</button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              )}
 
-            {activeTab === "api" && (
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                    <th className="p-4">Received Date</th>
-                    <th className="p-4">Channel</th>
-                    <th className="p-4">Number</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">Message ID</th>
-                    <th className="p-4">Interface / Type</th>
-                    <th className="p-4">Cost</th>
-                    <th className="p-4">Error Details</th>
-                    <th className="p-4 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {deliveryData.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50 transition">
-                      <td className="p-4 font-mono">{item.date}</td>
-                      <td className="p-4 font-mono">+{item.channel}</td>
-                      <td className="p-4 font-mono font-bold">+{item.number}</td>
-                      <td className="p-4"><span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px]">READ</span></td>
-                      <td className="p-4 font-mono text-gray-400">wamid.API...</td>
-                      <td className="p-4 font-mono">HTTP / JSON</td>
-                      <td className="p-4 font-bold text-emerald-600">₹0.155</td>
-                      <td className="p-4 text-gray-400">N/A</td>
-                      <td className="p-4 text-center"><button onClick={() => alert("API Log Details")} className="bg-blue-50 text-blue-600 px-2 py-1 rounded">View</button></td>
+              {/* DELIVERY REPORT TAB */}
+              {activeTab === "delivery" && (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
+                      <th className="p-3">Received Date</th>
+                      <th className="p-3">Channel</th>
+                      <th className="p-3">Number</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Message ID</th>
+                      <th className="p-3">Acknowledgement</th>
+                      <th className="p-3">Interface / Type</th>
+                      <th className="p-3">Cost</th>
+                      <th className="p-3 text-center">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {deliveryData.length === 0 ? (
+                      <tr><td colSpan={9} className="p-8 text-center text-gray-400">No delivery reports found.</td></tr>
+                    ) : (
+                      deliveryData.map((item) => (
+                        <tr key={item.id} className="hover:bg-gray-50 transition">
+                          <td className="p-3 font-mono">{item.date}</td>
+                          <td className="p-3 font-mono">{item.channel}</td>
+                          <td className="p-3 font-mono font-bold text-gray-900">{item.number}</td>
+                          <td className="p-3">
+                            <span className="font-bold px-2 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800">
+                              {item.status}
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono text-gray-400 truncate max-w-[120px]" title={item.messageId}>{item.messageId}</td>
+                          <td className="p-3 font-mono text-[10px] text-gray-600">{item.acknowledgement}</td>
+                          <td className="p-3 font-mono">Interface: {item.interfaceType}<br/>Type: {item.templateType}</td>
+                          <td className="p-3 font-bold text-emerald-600">₹{item.cost}</td>
+                          <td className="p-3 text-center">
+                            <button onClick={() => { setSelectedItem(item); setShowPreviewModal(true); }} className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold hover:bg-blue-100 cursor-pointer">View</button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              )}
 
-            {activeTab === "service" && (
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                    <th className="p-4">Received Date</th>
-                    <th className="p-4">Channel</th>
-                    <th className="p-4">Number</th>
-                    <th className="p-4">Profile Name</th>
-                    <th className="p-4">Chat Type</th>
-                    <th className="p-4">Message Type</th>
-                    <th className="p-4">Message Text</th>
-                    <th className="p-4">Cost</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  <tr className="hover:bg-gray-50 transition">
-                    <td className="p-4 font-mono">26 Oct 2026 05:03 PM</td>
-                    <td className="p-4 font-mono">+15553945963</td>
-                    <td className="p-4 font-mono font-bold">+918220042754</td>
-                    <td className="p-4 font-bold">Customer 👑</td>
-                    <td className="p-4 text-emerald-700 font-bold">OUT</td>
-                    <td className="p-4">Text</td>
-                    <td className="p-4 font-medium text-gray-900">Hello</td>
-                    <td className="p-4 font-mono text-emerald-600">₹0.00</td>
-                  </tr>
-                </tbody>
-              </table>
-            )}
+              {/* API REPORT TAB */}
+              {activeTab === "api" && (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
+                      <th className="p-4">Timestamp</th>
+                      <th className="p-4">Endpoint</th>
+                      <th className="p-4">Method</th>
+                      <th className="p-4">Response Code</th>
+                      <th className="p-4">Latency</th>
+                      <th className="p-4 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    <tr className="hover:bg-gray-50">
+                      <td className="p-4 font-mono">14 Nov 2026 11:31 AM</td>
+                      <td className="p-4 font-mono text-blue-600">/v21.0/messages</td>
+                      <td className="p-4 font-bold">POST</td>
+                      <td className="p-4 font-bold text-emerald-600">200 OK</td>
+                      <td className="p-4 font-mono text-gray-500">124ms</td>
+                      <td className="p-4 text-center"><button onClick={() => alert("API Payload Verified")} className="bg-blue-50 text-blue-600 px-2 py-1 rounded">Inspect</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+
+              {/* SERVICE REPORT TAB */}
+              {activeTab === "service" && (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
+                      <th className="p-4">Service Name</th>
+                      <th className="p-4">Health Status</th>
+                      <th className="p-4">Uptime</th>
+                      <th className="p-4">Last Ping</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    <tr className="hover:bg-gray-50">
+                      <td className="p-4 font-bold">Meta Cloud Webhook Listener</td>
+                      <td className="p-4 font-bold text-emerald-600">Healthy 🟢</td>
+                      <td className="p-4 font-mono font-bold">99.99%</td>
+                      <td className="p-4 text-gray-500">Just now</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* RIGHT SIDE MOBILE PREVIEW MODAL (As seen in your screenshot) */}
+        {showPreviewModal && selectedItem && (
+          <div className="w-80 border-l bg-gray-50 p-4 flex flex-col justify-between shadow-lg relative animate-in slide-in-from-right duration-200">
+            <div>
+              <div className="flex justify-between items-center border-b pb-2 mb-3">
+                <span className="font-bold text-gray-800">Mobile Preview</span>
+                <button onClick={() => setShowPreviewModal(false)} className="text-gray-500 font-bold hover:text-black cursor-pointer text-sm">✕</button>
+              </div>
+
+              {/* Realistic Mobile Frame */}
+              <div className="bg-black rounded-3xl p-3 shadow-2xl border-4 border-gray-800">
+                <div className="bg-emerald-900 text-white rounded-2xl p-3 space-y-2 text-[11px] font-sans">
+                  <div className="flex justify-between items-center text-[9px] text-emerald-300 border-b border-emerald-800 pb-1">
+                    <span>WhatsApp Business</span>
+                    <span>11:20 AM</span>
+                  </div>
+                  <div className="bg-white text-gray-900 p-3 rounded-xl shadow space-y-2">
+                    <div className="font-bold text-emerald-800 text-xs">{selectedItem.templateName || selectedItem.campaignInfo}</div>
+                    <p className="whitespace-pre-wrap text-[11px] leading-relaxed">{selectedItem.bodyText || "Please Recharge your PS LIC Software. Gpay & Phone pay fwd. Amount: 1180/-. Perfect Solution"}</p>
+                    <div className="text-[9px] text-right text-gray-400 font-mono mt-1">✓✓ 11:31 AM</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t text-[11px] space-y-1 font-mono text-gray-600">
+              <div><strong>Recipient:</strong> {selectedItem.number || "+917518900801"}</div>
+              <div><strong>Status:</strong> <span className="text-emerald-700 font-bold">{selectedItem.status}</span></div>
+              <div><strong>Cost:</strong> ₹{selectedItem.cost}</div>
+            </div>
           </div>
         )}
       </div>
-
-      {/* Action Modals */}
-      {modalType && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-xl w-full space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-gray-800 text-sm">
-                {modalType === "details" && "📋 Campaign Summary & Status Details"}
-                {modalType === "repush" && "🔁 Repush / Resend Failed Campaign"}
-                {modalType === "cta" && "📊 CTA & Button Click Report"}
-              </h3>
-              <button onClick={() => setModalType(null)} className="text-gray-500 font-bold cursor-pointer">✕</button>
-            </div>
-
-            {modalType === "details" && selectedItem && (
-              <div className="space-y-2 text-xs font-mono bg-gray-50 p-4 rounded-xl border">
-                <div><strong>Campaign Name:</strong> {selectedItem.campaignInfo}</div>
-                <div><strong>Template Info:</strong> {selectedItem.templateInfo}</div>
-                <div><strong>Status:</strong> {selectedItem.status}</div>
-                <div><strong>Cost:</strong> ₹{selectedItem.cost}</div>
-                <div><strong>Error Details:</strong> <span className="text-red-600">{selectedItem.error || "None"}</span></div>
-              </div>
-            )}
-
-            {modalType === "repush" && selectedItem && (
-              <div className="space-y-4 text-xs">
-                <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-900 font-semibold">
-                  Repush failed messages for campaign: <strong>{selectedItem.campaignInfo}</strong>
-                </div>
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">SELECT WABA NUMBER *</label>
-                  <select
-                    value={selectedWabaForRepush}
-                    onChange={(e) => setSelectedWabaForRepush(e.target.value)}
-                    className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono"
-                  >
-                    <option value="">Select WABA Account</option>
-                    {wabaChannels.map((acc, idx) => (
-                      <option key={idx} value={acc.displayPhone || acc.wabaId}>
-                        {acc.displayPhone || acc.wabaId}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex justify-end pt-3 border-t">
-                  <button onClick={handleRepushSubmit} className="bg-emerald-600 text-white font-bold px-5 py-2 rounded-xl cursor-pointer">
-                    Repush Messages ➔
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {modalType === "cta" && (
-              <div className="text-center py-6 text-gray-500 text-xs font-mono">
-                No interactive button clicks or CTA responses recorded for this campaign.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

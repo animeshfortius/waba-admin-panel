@@ -16,6 +16,9 @@ export default function ReportsPage() {
   const [isJourney, setIsJourney] = useState("");
   const [wabaChannels, setWabaChannels] = useState<any[]>([]);
 
+  // 🟢 Specific Campaign Drill-down filter state
+  const [campaignFilter, setCampaignFilter] = useState("");
+
   // Analytics Stats Cards
   const [stats, setStats] = useState({ total: 1, sent: 0, delivered: 1, read: 1, failed: 0 });
 
@@ -33,22 +36,17 @@ export default function ReportsPage() {
 
   useEffect(() => {
     const userId = localStorage.getItem("userId") || "admin";
-    fetchLiveReports(userId, activeTab);
+    fetchLiveReports(userId);
   }, [activeTab]);
 
-  const fetchLiveReports = async (userId: string, tab: string) => {
+  const fetchLiveReports = async (userId: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/reports?userId=${userId}&tab=${tab}`);
+      const res = await fetch(`/api/reports?userId=${userId}&tab=all`);
       const data = await res.json();
       if (data.success) {
-        if (tab === "campaign") setCampaignData(data.data || []);
-        if (tab === "delivery") setDeliveryData(data.data || []);
-        if (tab === "schedule") setScheduleData(data.data || []);
-        if (tab === "fallback") setFallbackData(data.data || []);
-        if (tab === "api") setApiData(data.data || []);
-        if (tab === "service") setServiceData(data.data || []);
-        
+        setCampaignData(data.campaigns || []);
+        setDeliveryData(data.deliveries || []);
         if (data.wabaAccounts) setWabaChannels(data.wabaAccounts);
         if (data.stats) setStats(data.stats);
       }
@@ -79,6 +77,15 @@ export default function ReportsPage() {
     document.body.removeChild(link);
   };
 
+  // 🟢 Filter deliveries based on selected campaign drill-down or search filters
+  const filteredDeliveries = deliveryData.filter((item) => {
+    if (campaignFilter && item.campaignName !== campaignFilter) return false;
+    if (selectedChannel && item.channel !== selectedChannel) return false;
+    if (campaignStatus && item.status !== campaignStatus) return false;
+    if (templateSearch && !item.templateName?.toLowerCase().includes(templateSearch.toLowerCase())) return false;
+    return true;
+  });
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 lg:p-6 text-xs font-sans">
       
@@ -87,17 +94,30 @@ export default function ReportsPage() {
         <div>
           <div className="text-xs text-gray-400">
             Home › WhatsApp › Campaign Activity › {activeTab.toUpperCase()} REPORT
+            {campaignFilter && <span className="text-emerald-600 font-bold"> › Campaign: {campaignFilter}</span>}
           </div>
-          <h1 className="text-xl font-bold text-gray-800 capitalize">{activeTab} Activity Report</h1>
+          <h1 className="text-xl font-bold text-gray-800 capitalize">
+            {campaignFilter ? `Delivery Report for "${campaignFilter}"` : `${activeTab} Activity Report`}
+          </h1>
         </div>
 
-        <button
-          onClick={handleDownloadReport}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs shadow flex items-center space-x-1.5 transition cursor-pointer"
-        >
-          <span>📥</span>
-          <span>Download Report</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          {campaignFilter && (
+            <button
+              onClick={() => setCampaignFilter("")}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-3 py-2 rounded-xl text-xs transition cursor-pointer"
+            >
+              ← Back to All Campaigns
+            </button>
+          )}
+          <button
+            onClick={handleDownloadReport}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs shadow flex items-center space-x-1.5 transition cursor-pointer"
+          >
+            <span>📥</span>
+            <span>Download Report</span>
+          </button>
+        </div>
       </div>
 
       {/* Notification Banner */}
@@ -127,7 +147,10 @@ export default function ReportsPage() {
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => {
+                setActiveTab(tab.id as any);
+                if (tab !== "delivery") setCampaignFilter(""); // Reset drill-down when switching to other tabs
+              }}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${activeTab === tab.id ? "bg-emerald-600 text-white shadow" : "text-gray-600 hover:bg-gray-100"}`}
             >
               {tab.label}
@@ -195,8 +218,8 @@ export default function ReportsPage() {
             <span>Filter Records ({activeTab.toUpperCase()})</span>
           </h3>
           <div className="space-x-2">
-            <button onClick={() => { setSelectedChannel(""); setTemplateSearch(""); setCampaignStatus(""); }} className="text-xs text-gray-500 font-semibold hover:text-gray-800 px-3 py-1.5 cursor-pointer">Reset</button>
-            <button onClick={() => fetchLiveReports(localStorage.getItem("userId") || "admin", activeTab)} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow transition cursor-pointer">
+            <button onClick={() => { setSelectedChannel(""); setTemplateSearch(""); setCampaignStatus(""); setCampaignFilter(""); }} className="text-xs text-gray-500 font-semibold hover:text-gray-800 px-3 py-1.5 cursor-pointer">Reset</button>
+            <button onClick={() => fetchLiveReports(localStorage.getItem("userId") || "admin")} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow transition cursor-pointer">
               Apply Filter
             </button>
           </div>
@@ -310,7 +333,17 @@ export default function ReportsPage() {
                             </span>
                           </td>
                           <td className="p-4 text-center space-x-1.5">
-                            <button onClick={() => { setSelectedItem(item); setShowPreviewModal(true); }} className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold hover:bg-blue-100 cursor-pointer">View</button>
+                            {/* 🟢 VIEW BUTTON: Switches to Delivery Report filtered by this campaign */}
+                            <button
+                              onClick={() => {
+                                setCampaignFilter(item.campaignInfo);
+                                setActiveTab("delivery");
+                              }}
+                              className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold hover:bg-blue-100 cursor-pointer"
+                              title="View Particular Campaign Delivery Report"
+                            >
+                              View
+                            </button>
                             <button onClick={() => handleDownloadCSV(item)} className="bg-emerald-50 text-emerald-600 p-1.5 rounded-lg hover:bg-emerald-100 font-bold cursor-pointer" title="Download CSV">📥</button>
                           </td>
                         </tr>
@@ -320,30 +353,31 @@ export default function ReportsPage() {
                 </table>
               )}
 
-              {/* DELIVERY REPORT TAB WITH COMPACT ACKNOWLEDGEMENT & WIDE ERROR DETAILS */}
+              {/* DELIVERY REPORT TAB */}
               {activeTab === "delivery" && (
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
                       <th className="p-3">Received Date</th>
+                      <th className="p-3">Campaign</th>
                       <th className="p-3">Channel</th>
                       <th className="p-3">Number</th>
                       <th className="p-3">Status</th>
                       <th className="p-3">Message ID</th>
                       <th className="p-3 w-[170px]">Acknowledgement</th>
-                      <th className="p-3">Interface / Type</th>
                       <th className="p-3">Cost</th>
                       <th className="p-3 w-[230px]">Error Details</th>
                       <th className="p-3 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {deliveryData.length === 0 ? (
-                      <tr><td colSpan={10} className="p-8 text-center text-gray-400">No delivery reports found.</td></tr>
+                    {filteredDeliveries.length === 0 ? (
+                      <tr><td colSpan={10} className="p-8 text-center text-gray-400">No delivery reports found for this campaign.</td></tr>
                     ) : (
-                      deliveryData.map((item) => (
+                      filteredDeliveries.map((item) => (
                         <tr key={item.id} className="hover:bg-gray-50 transition">
                           <td className="p-3 font-mono">{item.date}</td>
+                          <td className="p-3 font-bold text-gray-800">{item.campaignName}</td>
                           <td className="p-3 font-mono">{item.channel}</td>
                           <td className="p-3 font-mono font-bold text-gray-900">{item.number}</td>
                           <td className="p-3">
@@ -353,15 +387,12 @@ export default function ReportsPage() {
                           </td>
                           <td className="p-3 font-mono text-gray-400 truncate max-w-[100px]" title={item.messageId}>{item.messageId}</td>
                           
-                          {/* 🟢 Compact Acknowledgement Column (~170px) */}
                           <td className="p-3 font-mono text-[10px] text-gray-600 w-[170px] break-words leading-tight">
                             {item.acknowledgement}
                           </td>
 
-                          <td className="p-3 font-mono">Interface: {item.interfaceType}<br/>Type: {item.templateType}</td>
                           <td className="p-3 font-bold text-emerald-600">₹{item.cost}</td>
 
-                          {/* 🟢 Expanded Error Details Column (~230px) */}
                           <td className="p-3 font-mono text-[10px] text-red-600 w-[230px]">
                             {item.errorDetails !== "N/A" && item.errorDetails ? (
                               <span className="bg-red-50 p-1.5 rounded border border-red-200 block break-words">

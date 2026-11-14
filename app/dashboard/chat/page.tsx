@@ -29,19 +29,29 @@ export default function UltimateLiveChatPage() {
   const [aiLoading, setAiLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const activeSessionRef = useRef(activeSession);
+
+  // Keep ref updated to avoid stale closures inside intervals
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
 
   useEffect(() => {
-    fetchSessions();
+    fetchSessions(true);
     fetchTemplates();
-    const interval = setInterval(fetchSessions, 4000);
+    const interval = setInterval(() => fetchSessions(false), 4000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    if (activeSession) {
+    if (activeSession?.id) {
       fetchMessagesAndNotes(activeSession.id);
       setAiSummary("");
-      const interval = setInterval(() => fetchMessagesAndNotes(activeSession.id), 3000);
+      const interval = setInterval(() => {
+        if (activeSessionRef.current?.id) {
+          fetchMessagesAndNotes(activeSessionRef.current.id);
+        }
+      }, 3000);
       return () => clearInterval(interval);
     }
   }, [activeSession?.id]);
@@ -50,18 +60,29 @@ export default function UltimateLiveChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const fetchSessions = async () => {
+  const fetchSessions = async (isInitial = false) => {
     try {
       const userId = localStorage.getItem("userId") || "admin";
       const res = await fetch(`/api/chat/sessions?userId=${userId}`);
       const data = await res.json();
       if (data.success) {
-        setSessions(data.sessions || []);
-        if (!activeSession && data.sessions.length > 0) {
-          setActiveSession(data.sessions[0]);
-        } else if (activeSession) {
-          const updatedCurrent = data.sessions.find((s: any) => s.id === activeSession.id);
-          if (updatedCurrent) setActiveSession(updatedCurrent);
+        const newSessions = data.sessions || [];
+        setSessions(newSessions);
+
+        if (isInitial && !activeSession && newSessions.length > 0) {
+          setActiveSession(newSessions[0]);
+        } else if (activeSessionRef.current) {
+          const currentId = activeSessionRef.current.id;
+          const updatedCurrent = newSessions.find((s: any) => s.id === currentId);
+          // Only update if metadata actually changed to prevent infinite loops
+          if (
+            updatedCurrent &&
+            (updatedCurrent.lastMessageAt !== activeSessionRef.current.lastMessageAt ||
+              updatedCurrent.status !== activeSessionRef.current.status ||
+              updatedCurrent.isBotActive !== activeSessionRef.current.isBotActive)
+          ) {
+            setActiveSession(updatedCurrent);
+          }
         }
       }
     } catch (err) {
@@ -154,7 +175,7 @@ export default function UltimateLiveChatPage() {
           setNotes((prev) => [data.note, ...prev]);
         } else {
           setMessages((prev) => [...prev, data.message]);
-          fetchSessions();
+          fetchSessions(false);
         }
       }
     } catch (err) {
@@ -173,7 +194,7 @@ export default function UltimateLiveChatPage() {
       const data = await res.json();
       if (data.success) {
         setActiveSession(data.session);
-        fetchSessions();
+        fetchSessions(false);
       }
     } catch (err) {
       console.error("Update error:", err);
@@ -309,7 +330,7 @@ export default function UltimateLiveChatPage() {
                     </span>
                   </div>
                   <p className="text-gray-400 text-[10px] font-mono">
-                    Customer: +{activeSession.customerPhone} • WABA Channel: +{activeSession.channel}
+                    Customer: +{activeSession.customerPhone} | Channel: +{activeSession.channel}
                   </p>
                 </div>
               </div>
@@ -562,7 +583,7 @@ export default function UltimateLiveChatPage() {
                   <div key={idx} className="py-2.5 flex justify-between items-center">
                     <div>
                       <div className="font-bold text-gray-900">{tpl.name}</div>
-                      <div className="text-[10px] text-gray-400">{tpl.category} • {tpl.language}</div>
+                      <div className="text-[10px] text-gray-400">{tpl.category} | {tpl.language}</div>
                     </div>
                     <button
                       onClick={(e) => {

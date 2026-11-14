@@ -39,7 +39,7 @@ export async function POST(req: Request) {
             if (value.statuses) {
               for (const statusObj of value.statuses) {
                 const messageId = statusObj.id;
-                const status = statusObj.status?.toUpperCase();
+                const status = statusObj.status?.toUpperCase(); // SENT, DELIVERED, READ, FAILED
                 const timestamp = statusObj.timestamp ? new Date(Number(statusObj.timestamp) * 1000) : new Date();
 
                 console.log(`📌 Processing status update: Message ID ${messageId} -> ${status}`);
@@ -47,11 +47,16 @@ export async function POST(req: Request) {
                 if (!messageId) continue;
 
                 let updateData: any = { status };
+                
                 if (status === "DELIVERED") {
                   updateData.deliveredAt = timestamp;
                 } else if (status === "READ") {
                   updateData.readAt = timestamp;
                   updateData.status = "READ";
+                } else if (status === "FAILED") {
+                  if (statusObj.errors && statusObj.errors[0]) {
+                    updateData.errorDetails = statusObj.errors[0].message || "Failed";
+                  }
                 }
 
                 const updateResult = await prisma.campaignLog.updateMany({

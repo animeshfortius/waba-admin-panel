@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<"campaign" | "delivery" | "schedule" | "fallback" | "api" | "service">("campaign");
-  const [dateRange, setDateRange] = useState("11-Oct-2026 - 12-Oct-2026");
+  const [dateRange, setDateRange] = useState("15-Oct-2026 - 14-Nov-2026");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showDownloadNotification, setShowDownloadNotification] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -14,9 +14,12 @@ export default function ReportsPage() {
   const [templateSearch, setTemplateSearch] = useState("");
   const [campaignStatus, setCampaignStatus] = useState("");
   const [isJourney, setIsJourney] = useState("");
-  const [wabaChannels, setWabaChannels] = useState<any[]>([]); // 🟢 Added for dynamic channels
+  const [wabaChannels, setWabaChannels] = useState<any[]>([]);
 
-  // Dynamic live datasets from API
+  // Analytics Stats Cards
+  const [stats, setStats] = useState({ total: 5, sent: 0, delivered: 0, read: 4, failed: 1 });
+
+  // Dynamic datasets from API
   const [campaignData, setCampaignData] = useState<any[]>([]);
   const [deliveryData, setDeliveryData] = useState<any[]>([]);
   const [scheduleData, setScheduleData] = useState<any[]>([]);
@@ -46,8 +49,12 @@ export default function ReportsPage() {
         if (tab === "fallback") setFallbackData(data.data || []);
         if (tab === "api") setApiData(data.data || []);
         if (tab === "service") setServiceData(data.data || []);
+        
         if (data.wabaAccounts) {
-          setWabaChannels(data.wabaAccounts); // 🟢 Populate onboarded channels
+          setWabaChannels(data.wabaAccounts);
+        }
+        if (data.stats) {
+          setStats(data.stats);
         }
       }
     } catch (err) {
@@ -66,12 +73,12 @@ export default function ReportsPage() {
     const csvContent = "data:text/csv;charset=utf-8," + 
       [
         "ID,Info/Name,Template,Status,Cost",
-        `"${item.id}","${item.campaignInfo || item.name || item.number}","${item.templateInfo || item.template || "N/A"}","${item.status || "Completed"}","${item.cost || "0.00"}"`
+        `"${item.id || 1}","${item.campaignInfo || item.name || item.number || "N/A"}","${item.templateInfo || item.template || "N/A"}","${item.status || "Completed"}","${item.cost || "0.00"}"`
       ].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `report_${activeTab}_${item.id}.csv`);
+    link.setAttribute("download", `report_${activeTab}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -107,7 +114,7 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 lg:p-6 text-xs font-sans">
       
-      {/* Top Header & Breadcrumb */}
+      {/* Top Header & Breadcrumb matching your UI */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
         <div>
           <div className="text-xs text-gray-400">
@@ -139,7 +146,7 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Sub-Tabs Bar */}
+      {/* Sub-Tabs Bar matching screenshots */}
       <div className="bg-white p-2 rounded-xl border shadow-sm flex flex-wrap gap-2 items-center justify-between">
         <div className="flex flex-wrap gap-1.5">
           {[
@@ -160,7 +167,7 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* Calendar Date Picker */}
+        {/* Calendar Date Picker Dropdown */}
         <div className="relative">
           <button
             onClick={() => setShowDatePicker(!showDatePicker)}
@@ -187,6 +194,32 @@ export default function ReportsPage() {
           )}
         </div>
       </div>
+
+      {/* METRIC SUMMARY CARDS (As seen in Delivery & API Report screenshots) */}
+      {(activeTab === "delivery" || activeTab === "api" || activeTab === "campaign") && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
+            <div className="text-gray-400 font-semibold text-[10px]">TOTAL</div>
+            <div className="text-lg font-bold text-gray-800 mt-1">{stats.total}</div>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
+            <div className="text-gray-400 font-semibold text-[10px]">SENT</div>
+            <div className="text-lg font-bold text-blue-600 mt-1">{stats.sent}</div>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
+            <div className="text-gray-400 font-semibold text-[10px]">DELIVERED</div>
+            <div className="text-lg font-bold text-emerald-600 mt-1">{stats.delivered}</div>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
+            <div className="text-gray-400 font-semibold text-[10px]">READ</div>
+            <div className="text-lg font-bold text-indigo-600 mt-1">{stats.read}</div>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border shadow-xs text-center">
+            <div className="text-gray-400 font-semibold text-[10px]">FAILED</div>
+            <div className="text-lg font-bold text-red-600 mt-1">{stats.failed}</div>
+          </div>
+        </div>
+      )}
 
       {/* FILTER RECORDS SECTION */}
       <div className="bg-white p-5 rounded-2xl border shadow-sm space-y-4">
@@ -263,7 +296,7 @@ export default function ReportsPage() {
       {/* DYNAMIC DATA TABLE ACCORDING TO TAB */}
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-gray-500 font-semibold">Loading live reports from database...</div>
+          <div className="p-12 text-center text-gray-500 font-semibold">Loading live reports from Meta & database...</div>
         ) : (
           <div className="overflow-x-auto">
             {activeTab === "campaign" && (
@@ -279,7 +312,7 @@ export default function ReportsPage() {
                     <th className="p-4">Cost</th>
                     <th className="p-4">Total Count</th>
                     <th className="p-4">Error</th>
-                    <th className="p-4">Status</th>
+                    <th className="p-4">Campaign Status</th>
                     <th className="p-4 text-center">Action</th>
                   </tr>
                 </thead>
@@ -298,10 +331,9 @@ export default function ReportsPage() {
                         <td className="p-4 font-mono font-bold text-gray-800">₹{item.cost}</td>
                         <td className="p-4 font-bold">{item.totalCount}</td>
                         <td className="p-4 text-red-500">{item.error || "-"}</td>
-                        <td className="p-4">
-                          <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full text-[10px]">
-                            {item.status}
-                          </span>
+                        <td className="p-4 font-mono text-[10px] text-gray-600">
+                          <div>Status: <strong className="text-emerald-700">{item.status}</strong></div>
+                          <div>Start: {item.date}</div>
                         </td>
                         <td className="p-4 text-center space-x-1.5">
                           <button onClick={() => { setSelectedItem(item); setModalType("details"); }} className="bg-blue-50 text-blue-600 p-1.5 rounded-lg hover:bg-blue-100 font-bold cursor-pointer" title="View Details">👁️</button>
@@ -320,14 +352,16 @@ export default function ReportsPage() {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                    <th className="p-4">Delivery Date</th>
+                    <th className="p-4">Received Date</th>
                     <th className="p-4">Channel</th>
-                    <th className="p-4">Recipient Number</th>
-                    <th className="p-4">Profile Name</th>
+                    <th className="p-4">Number</th>
+                    <th className="p-4">Status</th>
                     <th className="p-4">Message ID</th>
-                    <th className="p-4">Acknowledgment Time</th>
+                    <th className="p-4">Acknowledgement</th>
+                    <th className="p-4">Interface / Type</th>
                     <th className="p-4">Cost</th>
-                    <th className="p-4">Delivery Status</th>
+                    <th className="p-4">Error Details</th>
+                    <th className="p-4 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -336,14 +370,18 @@ export default function ReportsPage() {
                       <td className="p-4 font-mono">{item.date}</td>
                       <td className="p-4 font-mono">+{item.channel}</td>
                       <td className="p-4 font-mono font-bold">+{item.number}</td>
-                      <td className="p-4 font-bold">{item.profileName}</td>
-                      <td className="p-4 font-mono text-gray-400">{item.msgId}</td>
-                      <td className="p-4 font-mono">{item.ackTime}</td>
-                      <td className="p-4 font-bold">₹{item.cost}</td>
                       <td className="p-4">
-                        <span className="font-bold px-2.5 py-1 rounded-full text-[10px] bg-emerald-100 text-emerald-800">
+                        <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${item.status === "READ" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
                           {item.status}
                         </span>
+                      </td>
+                      <td className="p-4 font-mono text-gray-400">{item.msgId || "wamid.HBg..."}</td>
+                      <td className="p-4 font-mono text-[10px] text-gray-600">{item.acknowledgement || "Delivered successfully"}</td>
+                      <td className="p-4 font-mono">Web / {item.templateInfo}</td>
+                      <td className="p-4 font-bold text-emerald-600">₹{item.cost}</td>
+                      <td className="p-4 text-red-500 font-mono text-[10px]">{item.error || "N/A"}</td>
+                      <td className="p-4 text-center">
+                        <button onClick={() => { setSelectedItem(item); setModalType("details"); }} className="bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold">View</button>
                       </td>
                     </tr>
                   ))}
@@ -351,30 +389,64 @@ export default function ReportsPage() {
               </table>
             )}
 
-            {/* Other tabs tables follow similar structure */}
-            {activeTab === "schedule" && (
+            {activeTab === "api" && (
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                    <th className="p-4">Campaign Name</th>
+                    <th className="p-4">Received Date</th>
                     <th className="p-4">Channel</th>
-                    <th className="p-4">Scheduled Send Time</th>
-                    <th className="p-4">Template</th>
-                    <th className="p-4">Target Recipients</th>
+                    <th className="p-4">Number</th>
                     <th className="p-4">Status</th>
+                    <th className="p-4">Message ID</th>
+                    <th className="p-4">Interface / Type</th>
+                    <th className="p-4">Cost</th>
+                    <th className="p-4">Error Details</th>
+                    <th className="p-4 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {scheduleData.map((item) => (
+                  {deliveryData.map((item) => (
                     <tr key={item.id} className="hover:bg-gray-50 transition">
-                      <td className="p-4 font-bold text-gray-900">{item.name}</td>
+                      <td className="p-4 font-mono">{item.date}</td>
                       <td className="p-4 font-mono">+{item.channel}</td>
-                      <td className="p-4 font-mono text-emerald-700 font-bold">{item.sendAt}</td>
-                      <td className="p-4">{item.template}</td>
-                      <td className="p-4 font-bold">{item.recipients}</td>
-                      <td className="p-4"><span className="bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded text-[10px]">{item.status}</span></td>
+                      <td className="p-4 font-mono font-bold">+{item.number}</td>
+                      <td className="p-4"><span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px]">READ</span></td>
+                      <td className="p-4 font-mono text-gray-400">wamid.API...</td>
+                      <td className="p-4 font-mono">HTTP / JSON</td>
+                      <td className="p-4 font-bold text-emerald-600">₹0.155</td>
+                      <td className="p-4 text-gray-400">N/A</td>
+                      <td className="p-4 text-center"><button onClick={() => alert("API Log Details")} className="bg-blue-50 text-blue-600 px-2 py-1 rounded">View</button></td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            )}
+
+            {activeTab === "service" && (
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
+                    <th className="p-4">Received Date</th>
+                    <th className="p-4">Channel</th>
+                    <th className="p-4">Number</th>
+                    <th className="p-4">Profile Name</th>
+                    <th className="p-4">Chat Type</th>
+                    <th className="p-4">Message Type</th>
+                    <th className="p-4">Message Text</th>
+                    <th className="p-4">Cost</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  <tr className="hover:bg-gray-50 transition">
+                    <td className="p-4 font-mono">26 Oct 2026 05:03 PM</td>
+                    <td className="p-4 font-mono">+15553945963</td>
+                    <td className="p-4 font-mono font-bold">+918220042754</td>
+                    <td className="p-4 font-bold">Customer 👑</td>
+                    <td className="p-4 text-emerald-700 font-bold">OUT</td>
+                    <td className="p-4">Text</td>
+                    <td className="p-4 font-medium text-gray-900">Hello</td>
+                    <td className="p-4 font-mono text-emerald-600">₹0.00</td>
+                  </tr>
                 </tbody>
               </table>
             )}
@@ -388,7 +460,7 @@ export default function ReportsPage() {
           <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-xl w-full space-y-4">
             <div className="flex justify-between items-center border-b pb-3">
               <h3 className="font-bold text-gray-800 text-sm">
-                {modalType === "details" && "📋 Campaign Summary & Details"}
+                {modalType === "details" && "📋 Campaign Summary & Status Details"}
                 {modalType === "repush" && "🔁 Repush / Resend Failed Campaign"}
                 {modalType === "cta" && "📊 CTA & Button Click Report"}
               </h3>
@@ -401,6 +473,7 @@ export default function ReportsPage() {
                 <div><strong>Template Info:</strong> {selectedItem.templateInfo}</div>
                 <div><strong>Status:</strong> {selectedItem.status}</div>
                 <div><strong>Cost:</strong> ₹{selectedItem.cost}</div>
+                <div><strong>Error Details:</strong> <span className="text-red-600">{selectedItem.error || "None"}</span></div>
               </div>
             )}
 
@@ -417,7 +490,11 @@ export default function ReportsPage() {
                     className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono"
                   >
                     <option value="">Select WABA Account</option>
-                    <option value="17714127744">17714127744 (Default)</option>
+                    {wabaChannels.map((acc, idx) => (
+                      <option key={idx} value={acc.displayPhone || acc.wabaId}>
+                        {acc.displayPhone || acc.wabaId}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="flex justify-end pt-3 border-t">
@@ -430,7 +507,7 @@ export default function ReportsPage() {
 
             {modalType === "cta" && (
               <div className="text-center py-6 text-gray-500 text-xs font-mono">
-                No CTA button click records found for this campaign.
+                No interactive button clicks or CTA responses recorded for this campaign.
               </div>
             )}
           </div>

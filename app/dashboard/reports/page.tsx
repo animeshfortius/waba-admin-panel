@@ -9,11 +9,12 @@ export default function ReportsPage() {
   const [showDownloadNotification, setShowDownloadNotification] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Filter states
+  // Filter states & Waba Channels
   const [selectedChannel, setSelectedChannel] = useState("");
   const [templateSearch, setTemplateSearch] = useState("");
   const [campaignStatus, setCampaignStatus] = useState("");
   const [isJourney, setIsJourney] = useState("");
+  const [wabaChannels, setWabaChannels] = useState<any[]>([]); // 🟢 Added for dynamic channels
 
   // Dynamic live datasets from API
   const [campaignData, setCampaignData] = useState<any[]>([]);
@@ -45,6 +46,9 @@ export default function ReportsPage() {
         if (tab === "fallback") setFallbackData(data.data || []);
         if (tab === "api") setApiData(data.data || []);
         if (tab === "service") setServiceData(data.data || []);
+        if (data.wabaAccounts) {
+          setWabaChannels(data.wabaAccounts); // 🟢 Populate onboarded channels
+        }
       }
     } catch (err) {
       console.error("Failed to fetch live reports:", err);
@@ -207,8 +211,12 @@ export default function ReportsPage() {
               onChange={(e) => setSelectedChannel(e.target.value)}
               className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-bold"
             >
-              <option value="">All Channels</option>
-              <option value="17714127744">17714127744</option>
+              <option value="">All Channels ({wabaChannels.length} Connected)</option>
+              {wabaChannels.map((acc, idx) => (
+                <option key={idx} value={acc.displayPhone || acc.wabaId}>
+                  {acc.displayName ? `${acc.displayName} (${acc.displayPhone || acc.wabaId})` : (acc.displayPhone || acc.wabaId)}
+                </option>
+              ))}
             </select>
           </div>
 

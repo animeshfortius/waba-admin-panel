@@ -74,6 +74,7 @@ export async function POST(req: Request) {
     let wabaMessageId = null;
     let displayBody = messageBody;
     let finalMsgType = messageType;
+    let savedMediaUrl: string | null = null;
 
     if (wabaAccount && wabaAccount.accessToken && wabaAccount.phoneNumberId) {
       const recipientPhone = session.customerPhone.replace(/\D/g, "");
@@ -112,6 +113,9 @@ export async function POST(req: Request) {
           const isVideo = mime.startsWith("video/");
           const waMediaType = isImage ? "image" : isVideo ? "video" : "document";
           finalMsgType = waMediaType;
+
+          // Save Media ID reference or Graph API media retrieval link
+          savedMediaUrl = `https://graph.facebook.com/v21.0/${uploadData.id}`;
 
           metaPayload = {
             messaging_product: "whatsapp",
@@ -169,6 +173,7 @@ export async function POST(req: Request) {
       }
     }
 
+    // Save message with mediaUrl populated in Database
     const newMessage = await prisma.chatMessage.create({
       data: {
         chatSessionId: sessionId,
@@ -176,6 +181,7 @@ export async function POST(req: Request) {
         senderName: agentName,
         messageBody: displayBody,
         messageType: finalMsgType,
+        mediaUrl: savedMediaUrl,
         status: wabaMessageId ? "SENT" : "FAILED",
         wabaMessageId,
       },

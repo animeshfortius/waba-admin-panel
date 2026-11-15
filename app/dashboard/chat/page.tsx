@@ -154,19 +154,38 @@ export default function LiveChatPage() {
     const finalBody = customText || inputText;
     if ((!finalBody.trim() && !selectedMedia) || !activeSession || sending) return;
 
+    const localMedia = selectedMedia;
+    const isImage = localMedia?.type.startsWith("image/");
+    const isVideo = localMedia?.type.startsWith("video/");
+    const localPreviewUrl = localMedia ? URL.createObjectURL(localMedia) : null;
+
     setSending(true);
     setShowSlashMenu(false);
+
+    // Instant Optimistic UI Update
+    const optimisticMsg = {
+      id: "temp-" + Date.now(),
+      senderType: "AGENT",
+      senderName: "Admin Agent",
+      messageBody: localMedia ? `📎 [${isImage ? "IMAGE" : isVideo ? "VIDEO" : "DOCUMENT"}: ${localMedia.name}]${finalBody ? " - " + finalBody : ""}` : finalBody,
+      messageType: localMedia ? (isImage ? "image" : isVideo ? "video" : "document") : customType,
+      mediaUrl: localPreviewUrl,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setInputText("");
+    setSelectedMedia(null);
 
     try {
       const formData = new FormData();
       formData.append("action", inputMode === "NOTE" ? "NOTE" : "SEND");
       formData.append("sessionId", activeSession.id);
       formData.append("messageBody", finalBody);
-      formData.append("messageType", selectedMedia ? "media" : customType);
+      formData.append("messageType", localMedia ? "media" : customType);
       formData.append("agentName", "Admin Agent");
 
-      if (selectedMedia) {
-        formData.append("mediaFile", selectedMedia);
+      if (localMedia) {
+        formData.append("mediaFile", localMedia);
       }
 
       const res = await fetch("/api/chat/messages", {
@@ -176,12 +195,10 @@ export default function LiveChatPage() {
       const data = await res.json();
 
       if (data.success) {
-        setInputText("");
-        setSelectedMedia(null);
         if (inputMode === "NOTE") {
           setNotes((prev) => [data.note, ...prev]);
         } else {
-          setMessages((prev) => [...prev, data.message]);
+          setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? data.message : m)));
           fetchSessions(false);
         }
       } else {
@@ -319,10 +336,14 @@ export default function LiveChatPage() {
             <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#efeae2]/40">
               {messages.map((msg) => {
                 const isCustomer = msg.senderType === "CUSTOMER";
+                const isImg = msg.messageType === "image" || msg.messageBody?.includes("[IMAGE:");
+                const isVid = msg.messageType === "video" || msg.messageBody?.includes("[VIDEO:");
+                const isDoc = msg.messageType === "document" || msg.messageBody?.includes("[DOCUMENT:");
+
                 return (
                   <div key={msg.id} className={`flex ${isCustomer ? "justify-start" : "justify-end"}`}>
                     <div
-                      className={`max-w-md rounded-2xl px-4 py-2.5 shadow-xs text-xs space-y-1 ${
+                      className={`max-w-md rounded-2xl px-4 py-2.5 shadow-xs text-xs space-y-1.5 ${
                         isCustomer
                           ? "bg-white text-gray-900 border rounded-bl-none"
                           : "bg-emerald-600 text-white rounded-br-none"
@@ -331,7 +352,33 @@ export default function LiveChatPage() {
                       <div className={`text-[10px] font-bold ${isCustomer ? "text-emerald-700" : "text-white/80"}`}>
                         {isCustomer ? (activeSession.customerName || "Customer") : `👤 ${msg.senderName || "Agent"}`}
                       </div>
+
+                      {/* Image Preview */}
+                      {msg.mediaUrl && isImg && (
+                        <img src={msg.mediaUrl} alt="uploaded image" className="rounded-xl max-h-48 object-cover mt-1 border" />
+                      )}
+
+                      {/* Video Player Preview */}
+                      {msg.mediaUrl && isVid && (
+                        <video controls className="rounded-xl max-h-48 w-full object-cover mt-1 border">
+                          <source src={msg.mediaUrl} type="video/mp4" />
+                          Your browser does not support the video tag.
+                        </video>
+                      )}
+
+                      {/* Document File Card */}
+                      {(isDoc || msg.messageBody?.includes("📎")) && !isImg && !isVid && (
+                        <div className={`flex items-center gap-3 p-2.5 rounded-xl border ${isCustomer ? "bg-gray-50 border-gray-200 text-gray-800" : "bg-emerald-700/60 border-emerald-500 text-white"}`}>
+                          <span className="text-2xl">📄</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold truncate">{msg.messageBody}</p>
+                            <span className="text-[9px] opacity-80">Document File</span>
+                          </div>
+                        </div>
+                      )}
+
                       <p className="whitespace-pre-wrap leading-relaxed">{msg.messageBody}</p>
+
                       <div className={`text-[9px] text-right font-mono ${isCustomer ? "text-gray-400" : "text-white/80"}`}>
                         {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         {!isCustomer && " ✓✓"}
@@ -406,7 +453,7 @@ export default function LiveChatPage() {
                     onClick={() => fileInputRef.current?.click()}
                     className="text-[11px] font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-2.5 py-1 rounded-lg cursor-pointer"
                   >
-                    📎 Attach Media
+                    📎 Attach Media / Video / Doc
                   </button>
                   <button
                     type="button"

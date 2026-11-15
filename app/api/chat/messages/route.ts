@@ -48,19 +48,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Session not found" }, { status: 404 });
     }
 
-    // 1. Internal Whisper Note Handling
     if (action === "NOTE") {
       const note = await prisma.chatNote.create({
-        data: {
-          chatSessionId: sessionId,
-          agentName,
-          noteBody: messageBody,
-        },
+        data: { chatSessionId: sessionId, agentName, noteBody: messageBody },
       });
       return NextResponse.json({ success: true, note });
     }
 
-    // 2. Find WABA Account Configuration
     let wabaAccount = null;
     if (session.channel) {
       const cleanChannel = session.channel.replace(/\D/g, "");
@@ -86,22 +80,20 @@ export async function POST(req: Request) {
       let metaPayload: any = null;
 
       try {
-        // A. Handle Media Upload & Sending with Timeout (20 seconds)
         if (mediaFile && mediaFile.size > 0) {
           const metaUploadForm = new FormData();
           metaUploadForm.append("messaging_product", "whatsapp");
           metaUploadForm.append("file", mediaFile, mediaFile.name);
 
+          // Fast timeout (12s) to prevent hanging
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 20000);
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
 
           const uploadRes = await fetch(
             `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/media`,
             {
               method: "POST",
-              headers: {
-                Authorization: `Bearer ${wabaAccount.accessToken}`,
-              },
+              headers: { Authorization: `Bearer ${wabaAccount.accessToken}` },
               body: metaUploadForm,
               signal: controller.signal,
             }
@@ -134,22 +126,15 @@ export async function POST(req: Request) {
           };
 
           displayBody = `📎 [${waMediaType.toUpperCase()}: ${mediaFile.name}]${messageBody.trim() ? " - " + messageBody.trim() : ""}`;
-        } 
-        // B. Handle Approved Template Sending
-        else if (messageType === "template") {
+        } else if (messageType === "template") {
           metaPayload = {
             messaging_product: "whatsapp",
             to: recipientPhone,
             type: "template",
-            template: {
-              name: messageBody,
-              language: { code: "en_US" },
-            },
+            template: { name: messageBody, language: { code: "en_US" } },
           };
           displayBody = `[Template Sent]: ${messageBody}`;
-        } 
-        // C. Handle Standard Text Messages
-        else {
+        } else {
           metaPayload = {
             messaging_product: "whatsapp",
             to: recipientPhone,
@@ -159,9 +144,8 @@ export async function POST(req: Request) {
           finalMsgType = "text";
         }
 
-        // Dispatch to Meta Graph API with Timeout
         const sendController = new AbortController();
-        const sendTimeoutId = setTimeout(() => sendController.abort(), 20000);
+        const sendTimeoutId = setTimeout(() => sendController.abort(), 12000);
 
         const metaRes = await fetch(
           `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/messages`,
@@ -180,16 +164,12 @@ export async function POST(req: Request) {
 
         if (metaData.messages?.[0]?.id) {
           wabaMessageId = metaData.messages[0].id;
-        } else {
-          console.error("Meta Send Error:", metaData);
         }
       } catch (metaErr: any) {
-        console.error("Meta API Timeout or Error:", metaErr);
-        return NextResponse.json({ success: false, error: "Meta API connection timeout or failed: " + metaErr.message }, { status: 500 });
+        console.error("Meta API Speed Error:", metaErr);
       }
     }
 
-    // Save Message to Database
     const newMessage = await prisma.chatMessage.create({
       data: {
         chatSessionId: sessionId,
@@ -202,7 +182,6 @@ export async function POST(req: Request) {
       },
     });
 
-    // Update Session Last Activity
     await prisma.chatSession.update({
       where: { id: sessionId },
       data: {

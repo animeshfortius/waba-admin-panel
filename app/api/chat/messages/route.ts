@@ -101,7 +101,7 @@ export async function POST(req: Request) {
                 messaging_product: "whatsapp",
                 to: recipientPhone,
                 type: "template",
-                template: { name: messageBody, language: { code: "en" } },
+                template: { name: messageBody, language: { code: "en_US" } },
               }
             : {
                 messaging_product: "whatsapp",

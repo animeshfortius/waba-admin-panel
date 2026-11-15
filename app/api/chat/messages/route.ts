@@ -85,92 +85,107 @@ export async function POST(req: Request) {
       const recipientPhone = session.customerPhone.replace(/\D/g, "");
       let metaPayload: any = null;
 
-      // A. Handle Media Upload & Sending (Image, Video, Document/PDF)
-      if (mediaFile && mediaFile.size > 0) {
-        const metaUploadForm = new FormData();
-        metaUploadForm.append("messaging_product", "whatsapp");
-        metaUploadForm.append("file", mediaFile, mediaFile.name);
+      try {
+        // A. Handle Media Upload & Sending with Timeout (20 seconds)
+        if (mediaFile && mediaFile.size > 0) {
+          const metaUploadForm = new FormData();
+          metaUploadForm.append("messaging_product", "whatsapp");
+          metaUploadForm.append("file", mediaFile, mediaFile.name);
 
-        const uploadRes = await fetch(
-          `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/media`,
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+          const uploadRes = await fetch(
+            `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/media`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${wabaAccount.accessToken}`,
+              },
+              body: metaUploadForm,
+              signal: controller.signal,
+            }
+          );
+          clearTimeout(timeoutId);
+          const uploadData = await uploadRes.json();
+
+          if (!uploadData.id) {
+            return NextResponse.json({
+              success: false,
+              error: "Meta Media Upload Failed: " + JSON.stringify(uploadData.error || uploadData),
+            }, { status: 500 });
+          }
+
+          const mime = mediaFile.type;
+          const isImage = mime.startsWith("image/");
+          const isVideo = mime.startsWith("video/");
+          const waMediaType = isImage ? "image" : isVideo ? "video" : "document";
+          finalMsgType = waMediaType;
+
+          metaPayload = {
+            messaging_product: "whatsapp",
+            to: recipientPhone,
+            type: waMediaType,
+            [waMediaType]: {
+              id: uploadData.id,
+              ...(messageBody.trim() ? { caption: messageBody.trim() } : {}),
+              ...(waMediaType === "document" ? { filename: mediaFile.name } : {}),
+            },
+          };
+
+          displayBody = `📎 [${waMediaType.toUpperCase()}: ${mediaFile.name}]${messageBody.trim() ? " - " + messageBody.trim() : ""}`;
+        } 
+        // B. Handle Approved Template Sending
+        else if (messageType === "template") {
+          metaPayload = {
+            messaging_product: "whatsapp",
+            to: recipientPhone,
+            type: "template",
+            template: {
+              name: messageBody,
+              language: { code: "en_US" },
+            },
+          };
+          displayBody = `[Template Sent]: ${messageBody}`;
+        } 
+        // C. Handle Standard Text Messages
+        else {
+          metaPayload = {
+            messaging_product: "whatsapp",
+            to: recipientPhone,
+            type: "text",
+            text: { body: messageBody },
+          };
+          finalMsgType = "text";
+        }
+
+        // Dispatch to Meta Graph API with Timeout
+        const sendController = new AbortController();
+        const sendTimeoutId = setTimeout(() => sendController.abort(), 20000);
+
+        const metaRes = await fetch(
+          `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/messages`,
           {
             method: "POST",
             headers: {
               Authorization: `Bearer ${wabaAccount.accessToken}`,
+              "Content-Type": "application/json",
             },
-            body: metaUploadForm,
+            body: JSON.stringify(metaPayload),
+            signal: sendController.signal,
           }
         );
-        const uploadData = await uploadRes.json();
+        clearTimeout(sendTimeoutId);
+        const metaData = await metaRes.json();
 
-        if (!uploadData.id) {
-          return NextResponse.json({
-            success: false,
-            error: "Meta Media Upload Failed: " + JSON.stringify(uploadData.error || uploadData),
-          }, { status: 500 });
+        if (metaData.messages?.[0]?.id) {
+          wabaMessageId = metaData.messages[0].id;
+        } else {
+          console.error("Meta Send Error:", metaData);
         }
-
-        const mime = mediaFile.type;
-        const isImage = mime.startsWith("image/");
-        const isVideo = mime.startsWith("video/");
-        const waMediaType = isImage ? "image" : isVideo ? "video" : "document";
-        finalMsgType = waMediaType;
-
-        metaPayload = {
-          messaging_product: "whatsapp",
-          to: recipientPhone,
-          type: waMediaType,
-          [waMediaType]: {
-            id: uploadData.id,
-            ...(messageBody.trim() ? { caption: messageBody.trim() } : {}),
-            ...(waMediaType === "document" ? { filename: mediaFile.name } : {}),
-          },
-        };
-
-        displayBody = `📎 [${waMediaType.toUpperCase()}: ${mediaFile.name}]${messageBody.trim() ? " - " + messageBody.trim() : ""}`;
-      } 
-      // B. Handle Approved Template Sending
-      else if (messageType === "template") {
-        metaPayload = {
-          messaging_product: "whatsapp",
-          to: recipientPhone,
-          type: "template",
-          template: {
-            name: messageBody,
-            language: { code: "en_US" },
-          },
-        };
-        displayBody = `[Template Sent]: ${messageBody}`;
-      } 
-      // C. Handle Standard Text Messages
-      else {
-        metaPayload = {
-          messaging_product: "whatsapp",
-          to: recipientPhone,
-          type: "text",
-          text: { body: messageBody },
-        };
-        finalMsgType = "text";
-      }
-
-      // Dispatch to Meta Graph API
-      const metaRes = await fetch(
-        `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/messages`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${wabaAccount.accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(metaPayload),
-        }
-      );
-      const metaData = await metaRes.json();
-
-      if (metaData.messages?.[0]?.id) {
-        wabaMessageId = metaData.messages[0].id;
-      } else {
-        console.error("Meta Send Error:", metaData);
+      } catch (metaErr: any) {
+        console.error("Meta API Timeout or Error:", metaErr);
+        return NextResponse.json({ success: false, error: "Meta API connection timeout or failed: " + metaErr.message }, { status: 500 });
       }
     }
 

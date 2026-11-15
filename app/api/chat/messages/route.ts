@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Session not found" }, { status: 404 });
     }
 
-    // 1. Save Internal Whisper Note (Respond.io Style)
+    // 1. Save Internal Whisper Note
     if (action === "NOTE") {
       const note = await prisma.chatNote.create({
         data: {
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, note });
     }
 
-    // 2. AI Copilot: Summarize or Suggest Reply
+    // 2. AI Copilot
     if (action === "AI_ASSIST") {
       const recentMsgs = await prisma.chatMessage.findMany({
         where: { chatSessionId: sessionId },
@@ -63,12 +63,6 @@ export async function POST(req: Request) {
         take: 10,
       });
 
-      const conversationText = recentMsgs
-        .reverse()
-        .map((m) => `${m.senderType}: ${m.messageBody}`)
-        .join("\n");
-
-      // Smart rule-based + LLM ready response
       const aiOutput =
         body.assistType === "SUMMARY"
           ? `📋 **Chat Summary:** Customer (${session.customerName || session.customerPhone}) ne "${recentMsgs[0]?.messageBody || "inquiry"}" ke baare mein baat ki hai. Total ${recentMsgs.length} messages exchanged.`
@@ -80,30 +74,43 @@ export async function POST(req: Request) {
     // 3. Send Actual WhatsApp Message via Meta Cloud API
     let wabaMessageId = null;
     try {
-      const wabaAccount = await prisma.wabaAccount.findFirst({
-        where: {
-          OR: [
-            { displayPhone: { contains: session.channel.replace(/\D/g, "").slice(-10) } },
-            { phoneNumberId: session.channel },
-          ],
-        },
-      });
+      // Try finding by session channel first
+      let wabaAccount = null;
+      if (session.channel) {
+        const cleanChannel = session.channel.replace(/\D/g, "");
+        wabaAccount = await prisma.wabaAccount.findFirst({
+          where: {
+            OR: [
+              { phoneNumberId: session.channel },
+              { displayPhone: { contains: cleanChannel.slice(-10) } },
+            ],
+          },
+        });
+      }
+
+      // Fallback: If not found by channel, pick the first configured WABA account in DB
+      if (!wabaAccount) {
+        wabaAccount = await prisma.wabaAccount.findFirst();
+      }
 
       if (wabaAccount && wabaAccount.accessToken && wabaAccount.phoneNumberId) {
+        const recipientPhone = session.customerPhone.replace(/\D/g, "");
         const metaPayload =
           messageType === "template"
             ? {
                 messaging_product: "whatsapp",
-                to: session.customerPhone.replace(/\D/g, ""),
+                to: recipientPhone,
                 type: "template",
                 template: { name: messageBody, language: { code: "en" } },
               }
             : {
                 messaging_product: "whatsapp",
-                to: session.customerPhone.replace(/\D/g, ""),
+                to: recipientPhone,
                 type: "text",
                 text: { body: messageBody },
               };
+
+        console.log(`Sending WhatsApp message to ${recipientPhone} via Phone ID ${wabaAccount.phoneNumberId}`);
 
         const metaRes = await fetch(
           `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/messages`,
@@ -117,15 +124,21 @@ export async function POST(req: Request) {
           }
         );
         const metaData = await metaRes.json();
+        console.log("Meta API Response:", JSON.stringify(metaData));
+
         if (metaData.messages?.[0]?.id) {
           wabaMessageId = metaData.messages[0].id;
+        } else {
+          console.error("Meta API Error Details:", metaData);
         }
+      } else {
+        console.error("No valid WabaAccount found with access token for sending message!");
       }
     } catch (metaErr) {
-      console.error("Meta Cloud API Send Warning:", metaErr);
+      console.error("Meta Cloud API Send Exception:", metaErr);
     }
 
-    // Save outgoing message & auto-pause bot when human agent replies
+    // Save outgoing message
     const newMessage = await prisma.chatMessage.create({
       data: {
         chatSessionId: sessionId,
@@ -133,7 +146,7 @@ export async function POST(req: Request) {
         senderName: agentName || "Support Agent",
         messageBody: messageType === "template" ? `[Template Sent]: ${messageBody}` : messageBody,
         messageType,
-        status: "SENT",
+        status: wabaMessageId ? "SENT" : "FAILED", // Mark failed if meta id missing so we know
         wabaMessageId,
       },
     });
@@ -143,7 +156,7 @@ export async function POST(req: Request) {
       data: {
         lastMessage: messageBody,
         lastMessageAt: new Date(),
-        isBotActive: false, // Auto handover to human on reply
+        isBotActive: false,
       },
     });
 

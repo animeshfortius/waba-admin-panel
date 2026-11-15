@@ -60,7 +60,7 @@ export async function POST(req: Request) {
                           customerName: value.contacts?.[0]?.profile?.name || null,
                           channel: channelNumber,
                           status: "OPEN",
-                          isBotActive: true, // Default bot active on new inbound lead
+                          isBotActive: false, // Default bot inactive for live agent handling
                           lastMessage: messageText,
                           lastMessageAt: timestamp,
                         },
@@ -89,30 +89,6 @@ export async function POST(req: Request) {
                         createdAt: timestamp,
                       },
                     });
-
-                    // 🤖 AI Auto-Responder: If bot mode is active, trigger automated response
-                    if (session.isBotActive) {
-                      const botReplyText = `Namaste! 🙏 Fortius Infocom AI Assistant mein aapka swagat hai. Aapka message mil gaya hai, hamari team jald hi aapse sampark karegi.`;
-
-                      await prisma.chatMessage.create({
-                        data: {
-                          chatSessionId: session.id,
-                          senderType: "BOT",
-                          senderName: "Fortius AI Bot",
-                          messageBody: botReplyText,
-                          messageType: "text",
-                          status: "SENT",
-                        },
-                      });
-
-                      await prisma.chatSession.update({
-                        where: { id: session.id },
-                        data: {
-                          lastMessage: botReplyText,
-                          lastMessageAt: new Date(),
-                        },
-                      });
-                    }
 
                     console.log(`💬 LIVE CHAT INBOUND -> From: ${customerPhone} | Msg: ${messageText}`);
                   } catch (chatErr: any) {

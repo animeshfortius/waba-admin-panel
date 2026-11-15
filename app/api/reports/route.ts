@@ -32,7 +32,7 @@ export async function GET(req: Request) {
     });
 
     // 🟢 Build dynamic Prisma where clause for server-side filtering
-    const whereClause: any = (userId === "admin" || userId === "emergency_admin_id") ? {} : { userId };
+    const whereClause: any = {}; // Yeh bina kisi userId ke check kiye saare 773 logs utha lega!
     
     if (statusFilter) {
       whereClause.status = statusFilter;

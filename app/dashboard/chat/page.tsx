@@ -106,12 +106,17 @@ export default function LiveChatPage() {
     } catch (e) {}
   };
 
+  // Meta 24h Window Status with Auto-Reset on last customer message
   const getSessionWindowStatus = (session: any) => {
     if (!session) return { isOpen: false, hoursLeft: 0 };
-    const lastCustomerMsg = [...messages].reverse().find((m) => m.senderType === "CUSTOMER");
+    
+    const customerMessages = messages.filter((m) => m.senderType === "CUSTOMER");
+    const lastCustomerMsg = customerMessages.length > 0 ? customerMessages[customerMessages.length - 1] : null;
+
     const refTime = lastCustomerMsg ? new Date(lastCustomerMsg.createdAt).getTime() : new Date(session.lastMessageAt).getTime();
     const diffHours = (Date.now() - refTime) / (1000 * 60 * 60);
     const remaining = Math.max(0, 24 - diffHours);
+
     return {
       isOpen: remaining > 0,
       hoursLeft: remaining.toFixed(1),
@@ -198,7 +203,11 @@ export default function LiveChatPage() {
         if (inputMode === "NOTE") {
           setNotes((prev) => [data.note, ...prev]);
         } else {
-          setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? data.message : m)));
+          const serverMsg = {
+            ...data.message,
+            mediaUrl: data.message.mediaUrl || (localMedia ? localPreviewUrl : null)
+          };
+          setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? serverMsg : m)));
           fetchSessions(false);
         }
       } else {
@@ -336,9 +345,10 @@ export default function LiveChatPage() {
             <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#efeae2]/40">
               {messages.map((msg) => {
                 const isCustomer = msg.senderType === "CUSTOMER";
-                const isImg = msg.messageType === "image" || msg.messageBody?.includes("[IMAGE:");
-                const isVid = msg.messageType === "video" || msg.messageBody?.includes("[VIDEO:");
-                const isDoc = msg.messageType === "document" || msg.messageBody?.includes("[DOCUMENT:");
+                const bodyStr = msg.messageBody || "";
+                const isImg = msg.messageType === "image" || bodyStr.includes("[IMAGE:") || bodyStr.match(/\.(jpg|jpeg|png|webp|gif)/i);
+                const isVid = msg.messageType === "video" || bodyStr.includes("[VIDEO:") || bodyStr.match(/\.(mp4|mov|webm)/i);
+                const isDoc = msg.messageType === "document" || bodyStr.includes("[DOCUMENT:") || bodyStr.match(/\.(pdf|docx|xlsx|txt)/i);
 
                 return (
                   <div key={msg.id} className={`flex ${isCustomer ? "justify-start" : "justify-end"}`}>
@@ -355,10 +365,10 @@ export default function LiveChatPage() {
 
                       {/* Image Preview */}
                       {msg.mediaUrl && isImg && (
-                        <img src={msg.mediaUrl} alt="uploaded image" className="rounded-xl max-h-48 object-cover mt-1 border" />
+                        <img src={msg.mediaUrl} alt="media" className="rounded-xl max-h-48 object-cover mt-1 border" />
                       )}
 
-                      {/* Video Player Preview */}
+                      {/* Video Player */}
                       {msg.mediaUrl && isVid && (
                         <video controls className="rounded-xl max-h-48 w-full object-cover mt-1 border">
                           <source src={msg.mediaUrl} type="video/mp4" />
@@ -367,12 +377,12 @@ export default function LiveChatPage() {
                       )}
 
                       {/* Document File Card */}
-                      {(isDoc || msg.messageBody?.includes("📎")) && !isImg && !isVid && (
+                      {(isDoc || bodyStr.includes("📎")) && !isImg && !isVid && (
                         <div className={`flex items-center gap-3 p-2.5 rounded-xl border ${isCustomer ? "bg-gray-50 border-gray-200 text-gray-800" : "bg-emerald-700/60 border-emerald-500 text-white"}`}>
                           <span className="text-2xl">📄</span>
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold truncate">{msg.messageBody}</p>
-                            <span className="text-[9px] opacity-80">Document File</span>
+                            <p className="font-bold truncate">{bodyStr}</p>
+                            <span className="text-[9px] opacity-80">Document File Attachment</span>
                           </div>
                         </div>
                       )}
@@ -453,7 +463,7 @@ export default function LiveChatPage() {
                     onClick={() => fileInputRef.current?.click()}
                     className="text-[11px] font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-2.5 py-1 rounded-lg cursor-pointer"
                   >
-                    📎 Attach Media / Video / Doc
+                    📎 Attach Media / File
                   </button>
                   <button
                     type="button"
@@ -471,7 +481,7 @@ export default function LiveChatPage() {
                   placeholder={
                     inputMode === "NOTE"
                       ? "Write a private internal note for team members..."
-                      : selectedMedia ? "Add a caption for media (optional)..." : "Type a message or '/' for canned responses..."
+                      : selectedMedia ? "Add a caption for file (optional)..." : "Type a message or '/' for canned responses..."
                   }
                   value={inputText}
                   onChange={(e) => handleInputChange(e.target.value)}

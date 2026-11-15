@@ -95,13 +95,18 @@ export async function POST(req: Request) {
 
       if (wabaAccount && wabaAccount.accessToken && wabaAccount.phoneNumberId) {
         const recipientPhone = session.customerPhone.replace(/\D/g, "");
+        
+        // Hardcoded testing_hello and en_US to prevent any template mismatch error
         const metaPayload =
           messageType === "template"
             ? {
                 messaging_product: "whatsapp",
                 to: recipientPhone,
                 type: "template",
-                template: { name: messageBody, language: { code: "en_US" } },
+                template: { 
+                  name: "testing_hello", 
+                  language: { code: "en_US" } 
+                },
               }
             : {
                 messaging_product: "whatsapp",
@@ -144,9 +149,9 @@ export async function POST(req: Request) {
         chatSessionId: sessionId,
         senderType: "AGENT",
         senderName: agentName || "Support Agent",
-        messageBody: messageType === "template" ? `[Template Sent]: ${messageBody}` : messageBody,
+        messageBody: messageType === "template" ? `[Template Sent]: testing_hello` : messageBody,
         messageType,
-        status: wabaMessageId ? "SENT" : "FAILED", // Mark failed if meta id missing so we know
+        status: wabaMessageId ? "SENT" : "FAILED",
         wabaMessageId,
       },
     });
@@ -154,7 +159,7 @@ export async function POST(req: Request) {
     await prisma.chatSession.update({
       where: { id: sessionId },
       data: {
-        lastMessage: messageBody,
+        lastMessage: messageType === "template" ? "Template Sent: testing_hello" : messageBody,
         lastMessageAt: new Date(),
         isBotActive: false,
       },

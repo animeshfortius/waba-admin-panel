@@ -31,8 +31,12 @@ export async function GET(req: Request) {
       select: { wabaId: true, displayPhone: true, displayName: true, userId: true }
     });
 
-    // 🟢 Build dynamic Prisma where clause for server-side filtering
-    const whereClause: any = {}; // Yeh bina kisi userId ke check kiye saare 773 logs utha lega!
+    // 🟢 Build dynamic Prisma where clause EXCLUDING Direct Chats
+    const whereClause: any = {
+      campaignName: {
+        not: "Direct_Chat_Campaign" // Direct chat logs ko campaign reports se hata diya hai
+      }
+    };
     
     if (statusFilter) {
       whereClause.status = statusFilter;

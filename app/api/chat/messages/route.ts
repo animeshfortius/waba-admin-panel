@@ -55,26 +55,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, note });
     }
 
-    // 2. AI Copilot
-    if (action === "AI_ASSIST") {
-      const recentMsgs = await prisma.chatMessage.findMany({
-        where: { chatSessionId: sessionId },
-        orderBy: { createdAt: "desc" },
-        take: 10,
-      });
-
-      const aiOutput =
-        body.assistType === "SUMMARY"
-          ? `📋 **Chat Summary:** Customer (${session.customerName || session.customerPhone}) ne "${recentMsgs[0]?.messageBody || "inquiry"}" ke baare mein baat ki hai. Total ${recentMsgs.length} messages exchanged.`
-          : `Namaste ${session.customerName || "Sir/Ma'am"}! Fortius Infocom mein aapka swagat hai. Hum aapki is query par abhi kaam kar rahe hain, kripya thoda samay dein.`;
-
-      return NextResponse.json({ success: true, aiOutput });
-    }
-
-    // 3. Send Actual WhatsApp Message via Meta Cloud API
+    // 2. Send Actual WhatsApp Message via Meta Cloud API
     let wabaMessageId = null;
     try {
-      // Try finding by session channel first
       let wabaAccount = null;
       if (session.channel) {
         const cleanChannel = session.channel.replace(/\D/g, "");
@@ -88,7 +71,6 @@ export async function POST(req: Request) {
         });
       }
 
-      // Fallback: If not found by channel, pick the first configured WABA account in DB
       if (!wabaAccount) {
         wabaAccount = await prisma.wabaAccount.findFirst();
       }
@@ -96,7 +78,6 @@ export async function POST(req: Request) {
       if (wabaAccount && wabaAccount.accessToken && wabaAccount.phoneNumberId) {
         const recipientPhone = session.customerPhone.replace(/\D/g, "");
         
-        // Hardcoded testing_hello and en_US to prevent any template mismatch error
         const metaPayload =
           messageType === "template"
             ? {
@@ -104,7 +85,7 @@ export async function POST(req: Request) {
                 to: recipientPhone,
                 type: "template",
                 template: { 
-                  name: "testing_hello", 
+                  name: messageBody, // Dynamic selected template name
                   language: { code: "en_US" } 
                 },
               }
@@ -114,8 +95,6 @@ export async function POST(req: Request) {
                 type: "text",
                 text: { body: messageBody },
               };
-
-        console.log(`Sending WhatsApp message to ${recipientPhone} via Phone ID ${wabaAccount.phoneNumberId}`);
 
         const metaRes = await fetch(
           `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/messages`,
@@ -129,15 +108,12 @@ export async function POST(req: Request) {
           }
         );
         const metaData = await metaRes.json();
-        console.log("Meta API Response:", JSON.stringify(metaData));
 
         if (metaData.messages?.[0]?.id) {
           wabaMessageId = metaData.messages[0].id;
         } else {
           console.error("Meta API Error Details:", metaData);
         }
-      } else {
-        console.error("No valid WabaAccount found with access token for sending message!");
       }
     } catch (metaErr) {
       console.error("Meta Cloud API Send Exception:", metaErr);
@@ -149,7 +125,7 @@ export async function POST(req: Request) {
         chatSessionId: sessionId,
         senderType: "AGENT",
         senderName: agentName || "Support Agent",
-        messageBody: messageType === "template" ? `[Template Sent]: testing_hello` : messageBody,
+        messageBody: messageType === "template" ? `[Template Sent]: ${messageBody}` : messageBody,
         messageType,
         status: wabaMessageId ? "SENT" : "FAILED",
         wabaMessageId,
@@ -159,7 +135,7 @@ export async function POST(req: Request) {
     await prisma.chatSession.update({
       where: { id: sessionId },
       data: {
-        lastMessage: messageType === "template" ? "Template Sent: testing_hello" : messageBody,
+        lastMessage: messageType === "template" ? `Template Sent: ${messageBody}` : messageBody,
         lastMessageAt: new Date(),
         isBotActive: false,
       },

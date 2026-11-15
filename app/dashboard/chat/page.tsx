@@ -9,15 +9,15 @@ const CANNED_RESPONSES = [
   { shortcut: "/bank", text: "Account Name: Fortius Infocom Private Limited | A/C: 50200012345678 | IFSC: HDFC0001234" },
 ];
 
-export default function UltimateLiveChatPage() {
+export default function LiveChatPage() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [activeSession, setActiveSession] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
 
-  // Filters & Search
-  const [tabFilter, setTabFilter] = useState<"ALL" | "OPEN" | "BOT" | "RESOLVED">("ALL");
+  // Clean Tabs: ACTIVE, INACTIVE, HISTORY
+  const [tabFilter, setTabFilter] = useState<"ACTIVE" | "INACTIVE" | "HISTORY">("ACTIVE");
   const [searchQuery, setSearchQuery] = useState("");
 
   // Input & Modes
@@ -25,13 +25,12 @@ export default function UltimateLiveChatPage() {
   const [inputText, setInputText] = useState("");
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [aiSummary, setAiSummary] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<File | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const activeSessionRef = useRef(activeSession);
 
-  // Keep ref updated to avoid stale closures inside intervals
   useEffect(() => {
     activeSessionRef.current = activeSession;
   }, [activeSession]);
@@ -46,7 +45,6 @@ export default function UltimateLiveChatPage() {
   useEffect(() => {
     if (activeSession?.id) {
       fetchMessagesAndNotes(activeSession.id);
-      setAiSummary("");
       const interval = setInterval(() => {
         if (activeSessionRef.current?.id) {
           fetchMessagesAndNotes(activeSessionRef.current.id);
@@ -74,12 +72,10 @@ export default function UltimateLiveChatPage() {
         } else if (activeSessionRef.current) {
           const currentId = activeSessionRef.current.id;
           const updatedCurrent = newSessions.find((s: any) => s.id === currentId);
-          // Only update if metadata actually changed to prevent infinite loops
           if (
             updatedCurrent &&
             (updatedCurrent.lastMessageAt !== activeSessionRef.current.lastMessageAt ||
-              updatedCurrent.status !== activeSessionRef.current.status ||
-              updatedCurrent.isBotActive !== activeSessionRef.current.isBotActive)
+              updatedCurrent.status !== activeSessionRef.current.status)
           ) {
             setActiveSession(updatedCurrent);
           }
@@ -127,9 +123,14 @@ export default function UltimateLiveChatPage() {
 
   const filteredSessions = useMemo(() => {
     return sessions.filter((s) => {
-      if (tabFilter === "OPEN" && s.status !== "OPEN") return false;
-      if (tabFilter === "BOT" && !s.isBotActive) return false;
-      if (tabFilter === "RESOLVED" && s.status !== "RESOLVED") return false;
+      const isResolved = s.status === "RESOLVED";
+      const isInactive = !isResolved && !getSessionWindowStatus(s).isOpen;
+      const isActive = !isResolved && getSessionWindowStatus(s).isOpen;
+
+      if (tabFilter === "ACTIVE" && !isActive) return false;
+      if (tabFilter === "INACTIVE" && !isInactive) return false;
+      if (tabFilter === "HISTORY" && !isResolved) return false;
+
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const matchName = s.customerName?.toLowerCase().includes(q);
@@ -138,7 +139,7 @@ export default function UltimateLiveChatPage() {
       }
       return true;
     });
-  }, [sessions, tabFilter, searchQuery]);
+  }, [sessions, tabFilter, searchQuery, messages]);
 
   const handleInputChange = (val: string) => {
     setInputText(val);
@@ -152,10 +153,11 @@ export default function UltimateLiveChatPage() {
   const handleSend = async (e: React.FormEvent, customType = "text", customText?: string) => {
     e.preventDefault();
     const finalBody = customText || inputText;
-    if (!finalBody.trim() || !activeSession) return;
+    if ((!finalBody.trim() && !selectedMedia) || !activeSession) return;
 
     setInputText("");
     setShowSlashMenu(false);
+    setSelectedMedia(null);
 
     try {
       const res = await fetch("/api/chat/messages", {
@@ -201,45 +203,18 @@ export default function UltimateLiveChatPage() {
     }
   };
 
-  const handleAiAssist = async (assistType: "SUMMARY" | "SUGGEST") => {
-    if (!activeSession) return;
-    setAiLoading(true);
-    try {
-      const res = await fetch("/api/chat/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "AI_ASSIST",
-          sessionId: activeSession.id,
-          assistType,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        if (assistType === "SUMMARY") {
-          setAiSummary(data.aiOutput);
-        } else {
-          setInputMode("REPLY");
-          setInputText(data.aiOutput);
-        }
-      }
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
   return (
     <div className="w-full h-[calc(100vh-60px)] flex bg-gray-100 font-sans text-xs overflow-hidden m-0 p-0">
       
-      {/* COLUMN 1: LEFT CONVERSATION INBOX */}
+      {/* COLUMN 1: CONVERSATION LIST */}
       <div className="w-80 bg-white border-r flex flex-col shrink-0 h-full">
         <div className="p-3.5 border-b space-y-3">
           <div className="flex justify-between items-center">
             <span className="font-bold text-sm text-gray-800 flex items-center gap-1.5">
-              <span>💬</span> Team Inbox
+              <span>💬</span> Live Chats
             </span>
             <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full text-[10px]">
-              {sessions.length} Chats
+              {sessions.length} Total
             </span>
           </div>
 
@@ -251,14 +226,14 @@ export default function UltimateLiveChatPage() {
             className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
           />
 
-          <div className="grid grid-cols-4 gap-1 bg-gray-100 p-1 rounded-xl font-bold text-[10px]">
-            {(["ALL", "OPEN", "BOT", "RESOLVED"] as const).map((t) => (
+          <div className="grid grid-cols-3 gap-1 bg-gray-100 p-1 rounded-xl font-bold text-[10px]">
+            {(["ACTIVE", "INACTIVE", "HISTORY"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTabFilter(t)}
-                className={`py-1.5 rounded-lg transition cursor-pointer ${tabFilter === t ? "bg-white text-emerald-700 shadow-xs" : "text-gray-500 hover:text-gray-800"}`}
+                className={`py-1.5 rounded-lg transition cursor-pointer text-center ${tabFilter === t ? "bg-white text-emerald-700 shadow-xs" : "text-gray-500 hover:text-gray-800"}`}
               >
-                {t}
+                {t === "ACTIVE" ? "🟢 Active" : t === "INACTIVE" ? "⏰ Inactive" : "📂 History"}
               </button>
             ))}
           </div>
@@ -266,7 +241,7 @@ export default function UltimateLiveChatPage() {
 
         <div className="overflow-y-auto flex-1 divide-y divide-gray-100">
           {filteredSessions.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">No conversations in this tab.</div>
+            <div className="p-8 text-center text-gray-400">No chats found in this view.</div>
           ) : (
             filteredSessions.map((session) => (
               <div
@@ -274,16 +249,8 @@ export default function UltimateLiveChatPage() {
                 onClick={() => setActiveSession(session)}
                 className={`p-3.5 cursor-pointer transition hover:bg-gray-50 flex items-start space-x-3 ${activeSession?.id === session.id ? "bg-emerald-50/80 border-l-4 border-emerald-600" : ""}`}
               >
-                <div className="relative">
-                  <div className="w-10 h-10 rounded-full bg-emerald-700 text-white font-bold flex items-center justify-center shrink-0 text-sm">
-                    {session.customerName ? session.customerName[0].toUpperCase() : "C"}
-                  </div>
-                  <span
-                    title={session.isBotActive ? "AI Bot Active" : "Human Agent Handling"}
-                    className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white flex items-center justify-center text-[8px] ${session.isBotActive ? "bg-indigo-600 text-white" : "bg-emerald-500"}`}
-                  >
-                    {session.isBotActive ? "🤖" : ""}
-                  </span>
+                <div className="w-10 h-10 rounded-full bg-emerald-700 text-white font-bold flex items-center justify-center shrink-0 text-sm">
+                  {session.customerName ? session.customerName[0].toUpperCase() : "C"}
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -297,14 +264,9 @@ export default function UltimateLiveChatPage() {
                   </div>
                   <p className="text-gray-500 truncate text-[11px]">{session.lastMessage || "No messages yet"}</p>
                   <div className="flex items-center gap-1.5 mt-1.5">
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${session.status === "RESOLVED" ? "bg-gray-200 text-gray-600" : "bg-emerald-100 text-emerald-800"}`}>
-                      {session.status}
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${session.status === "RESOLVED" ? "bg-gray-200 text-gray-650" : "bg-emerald-100 text-emerald-800"}`}>
+                      {session.status === "RESOLVED" ? "Resolved" : "Open"}
                     </span>
-                    {session.assignedTo && (
-                      <span className="text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-semibold">
-                        👤 {session.assignedTo}
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>
@@ -313,7 +275,7 @@ export default function UltimateLiveChatPage() {
         </div>
       </div>
 
-      {/* COLUMN 2: CENTER ACTIVE CHAT + AI COPILOT */}
+      {/* COLUMN 2: ACTIVE CHAT WINDOW */}
       <div className="flex-1 flex flex-col bg-white min-w-0 relative h-full">
         {activeSession ? (
           <>
@@ -337,53 +299,28 @@ export default function UltimateLiveChatPage() {
 
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => handleAiAssist("SUMMARY")}
-                  disabled={aiLoading}
-                  className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold px-3 py-1.5 rounded-xl text-[11px] transition cursor-pointer"
-                >
-                  ✨ AI Summary
-                </button>
-
-                <button
-                  onClick={() => handleSessionUpdate({ isBotActive: !activeSession.isBotActive })}
-                  className={`font-bold px-3 py-1.5 rounded-xl text-[11px] transition cursor-pointer ${activeSession.isBotActive ? "bg-indigo-600 text-white hover:bg-indigo-700" : "bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100"}`}
-                >
-                  {activeSession.isBotActive ? "🤖 Bot Active (Click to Intervene)" : "👤 Human Mode (Resume Bot)"}
-                </button>
-
-                <button
                   onClick={() => handleSessionUpdate({ status: activeSession.status === "RESOLVED" ? "OPEN" : "RESOLVED" })}
                   className={`font-bold px-3 py-1.5 rounded-xl text-[11px] transition cursor-pointer ${activeSession.status === "RESOLVED" ? "bg-gray-200 text-gray-800" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}
                 >
-                  {activeSession.status === "RESOLVED" ? "↺ Reopen" : "✓ Resolve"}
+                  {activeSession.status === "RESOLVED" ? "↺ Reopen Chat" : "✓ Mark Resolved"}
                 </button>
               </div>
             </div>
 
-            {aiSummary && (
-              <div className="bg-purple-50 border-b border-purple-200 px-4 py-2.5 flex justify-between items-center text-purple-900 text-xs">
-                <span>{aiSummary}</span>
-                <button onClick={() => setAiSummary("")} className="font-bold text-purple-500 hover:text-purple-800 cursor-pointer">✕</button>
-              </div>
-            )}
-
             <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#efeae2]/40">
               {messages.map((msg) => {
                 const isCustomer = msg.senderType === "CUSTOMER";
-                const isBot = msg.senderType === "BOT" || msg.senderType === "AI";
                 return (
                   <div key={msg.id} className={`flex ${isCustomer ? "justify-start" : "justify-end"}`}>
                     <div
                       className={`max-w-md rounded-2xl px-4 py-2.5 shadow-xs text-xs space-y-1 ${
                         isCustomer
                           ? "bg-white text-gray-900 border rounded-bl-none"
-                          : isBot
-                          ? "bg-indigo-600 text-white rounded-br-none"
                           : "bg-emerald-600 text-white rounded-br-none"
                       }`}
                     >
                       <div className={`text-[10px] font-bold ${isCustomer ? "text-emerald-700" : "text-white/80"}`}>
-                        {isCustomer ? (activeSession.customerName || "Customer") : isBot ? "🤖 AI Auto-Responder" : `👤 ${msg.senderName || "Agent"}`}
+                        {isCustomer ? (activeSession.customerName || "Customer") : `👤 ${msg.senderName || "Agent"}`}
                       </div>
                       <p className="whitespace-pre-wrap leading-relaxed">{msg.messageBody}</p>
                       <div className={`text-[9px] text-right font-mono ${isCustomer ? "text-gray-400" : "text-white/80"}`}>
@@ -438,13 +375,23 @@ export default function UltimateLiveChatPage() {
                 </div>
 
                 <div className="flex items-center space-x-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) {
+                        setSelectedMedia(e.target.files[0]);
+                        setInputText(`[Attached Media: ${e.target.files[0].name}]`);
+                      }
+                    }}
+                  />
                   <button
                     type="button"
-                    onClick={() => handleAiAssist("SUGGEST")}
-                    disabled={aiLoading}
-                    className="text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg cursor-pointer"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-[11px] font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-2.5 py-1 rounded-lg cursor-pointer"
                   >
-                    🪄 AI Suggest Reply
+                    📎 Attach Media
                   </button>
                   <button
                     type="button"
@@ -456,13 +403,13 @@ export default function UltimateLiveChatPage() {
                 </div>
               </div>
 
-              <form onSubmit={(e) => handleSend(e, "text")} className="flex items-center space-x-2">
+              <form onSubmit={(e) => handleSend(e, selectedMedia ? "media" : "text")} className="flex items-center space-x-2">
                 <input
                   type="text"
                   placeholder={
                     inputMode === "NOTE"
                       ? "Write a private internal note for team members..."
-                      : "Type a message or type '/' for quick canned responses..."
+                      : "Type a message or '/' for canned responses..."
                   }
                   value={inputText}
                   onChange={(e) => handleInputChange(e.target.value)}
@@ -480,12 +427,12 @@ export default function UltimateLiveChatPage() {
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-gray-400 space-y-2">
             <span className="text-4xl">💬</span>
-            <p className="font-bold text-sm">Select a conversation from the left sidebar to open Live Agent Workspace</p>
+            <p className="font-bold text-sm">Select a conversation from the left sidebar</p>
           </div>
         )}
       </div>
 
-      {/* COLUMN 3: RIGHT CUSTOMER CRM & INTERNAL NOTES */}
+      {/* COLUMN 3: CUSTOMER CRM & NOTES */}
       {activeSession && (
         <div className="w-80 bg-white border-l flex flex-col shrink-0 overflow-y-auto p-4 space-y-5 h-full">
           <div className="text-center border-b pb-4 space-y-1.5">
@@ -496,34 +443,14 @@ export default function UltimateLiveChatPage() {
             <p className="font-mono text-gray-500">+{activeSession.customerPhone}</p>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="font-bold text-gray-600 block">Assign Conversation To</label>
-            <select
-              value={activeSession.assignedTo || ""}
-              onChange={(e) => handleSessionUpdate({ assignedTo: e.target.value })}
-              className="w-full border rounded-xl p-2.5 bg-gray-50 font-bold text-gray-800 focus:outline-none"
-            >
-              <option value="">Unassigned (Queue)</option>
-              <option value="Admin">Admin (Fortius)</option>
-              <option value="Sales Team">Sales Team</option>
-              <option value="Support Desk">Support Desk</option>
-            </select>
-          </div>
-
           <div className="bg-gray-50 rounded-xl p-3 space-y-2 border">
-            <div className="font-bold text-gray-700 border-b pb-1">Session Metadata</div>
+            <div className="font-bold text-gray-700 border-b pb-1">Session Info</div>
             <div className="flex justify-between">
-              <span className="text-gray-500">WABA Channel:</span>
+              <span className="text-gray-500">Channel:</span>
               <span className="font-mono font-bold">+{activeSession.channel}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">AI Auto-Bot:</span>
-              <span className={`font-bold ${activeSession.isBotActive ? "text-indigo-600" : "text-gray-500"}`}>
-                {activeSession.isBotActive ? "ON" : "PAUSED"}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">24h Session:</span>
+              <span className="text-gray-500">24h Window:</span>
               <span className={`font-bold ${windowStatus.isOpen ? "text-emerald-600" : "text-red-600"}`}>
                 {windowStatus.isOpen ? "ACTIVE" : "EXPIRED"}
               </span>
@@ -531,12 +458,12 @@ export default function UltimateLiveChatPage() {
           </div>
 
           <div className="space-y-2 flex-1">
-            <div className="font-bold text-gray-800 flex items-center justify-between">
-              <span>📌 Internal Whisper Notes ({notes.length})</span>
+            <div className="font-bold text-gray-800">
+              <span>📌 Internal Notes ({notes.length})</span>
             </div>
             {notes.length === 0 ? (
               <p className="text-gray-400 text-[11px] bg-amber-50/50 p-3 rounded-xl border border-amber-100">
-                No internal notes yet. Switch to "Internal Whisper Note" below to add private team notes.
+                No internal notes yet.
               </p>
             ) : (
               <div className="space-y-2">
@@ -544,9 +471,6 @@ export default function UltimateLiveChatPage() {
                   <div key={n.id} className="bg-amber-50 border border-amber-200 p-2.5 rounded-xl space-y-1">
                     <div className="flex justify-between text-[10px] font-bold text-amber-900">
                       <span>{n.agentName}</span>
-                      <span className="font-mono font-normal">
-                        {new Date(n.createdAt).toLocaleDateString("en-IN")}
-                      </span>
                     </div>
                     <p className="text-gray-800 leading-snug">{n.noteBody}</p>
                   </div>
@@ -566,14 +490,13 @@ export default function UltimateLiveChatPage() {
             </div>
             <div className="max-h-64 overflow-y-auto divide-y">
               {templates.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">
-                  No synced templates found. Default template: <strong>hello_world</strong>
+                <div className="p-4 text-center">
                   <button
                     onClick={(e) => {
                       handleSend(e, "template", "hello_world");
                       setShowTemplateModal(false);
                     }}
-                    className="mt-3 w-full bg-emerald-600 text-white font-bold py-2 rounded-xl cursor-pointer"
+                    className="w-full bg-emerald-600 text-white font-bold py-2 rounded-xl cursor-pointer"
                   >
                     Send "hello_world" Template
                   </button>

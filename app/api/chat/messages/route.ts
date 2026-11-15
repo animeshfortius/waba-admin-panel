@@ -28,8 +28,13 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { action, sessionId, messageBody, agentName, messageType = "text" } = body;
+    const formData = await req.formData();
+    const action = (formData.get("action") as string) || "SEND";
+    const sessionId = formData.get("sessionId") as string;
+    const messageBody = (formData.get("messageBody") as string) || "";
+    const agentName = (formData.get("agentName") as string) || "Admin Agent";
+    const messageType = (formData.get("messageType") as string) || "text";
+    const mediaFile = formData.get("mediaFile") as File | null;
 
     if (!sessionId) {
       return NextResponse.json({ success: false, error: "Session ID required" }, { status: 400 });
@@ -43,99 +48,150 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Session not found" }, { status: 404 });
     }
 
-    // 1. Save Internal Whisper Note
+    // 1. Internal Whisper Note Handling
     if (action === "NOTE") {
       const note = await prisma.chatNote.create({
         data: {
           chatSessionId: sessionId,
-          agentName: agentName || "Admin",
+          agentName,
           noteBody: messageBody,
         },
       });
       return NextResponse.json({ success: true, note });
     }
 
-    // 2. Send Actual WhatsApp Message via Meta Cloud API
+    // 2. Find WABA Account Configuration
+    let wabaAccount = null;
+    if (session.channel) {
+      const cleanChannel = session.channel.replace(/\D/g, "");
+      wabaAccount = await prisma.wabaAccount.findFirst({
+        where: {
+          OR: [
+            { phoneNumberId: session.channel },
+            { displayPhone: { contains: cleanChannel.slice(-10) } },
+          ],
+        },
+      });
+    }
+    if (!wabaAccount) {
+      wabaAccount = await prisma.wabaAccount.findFirst();
+    }
+
     let wabaMessageId = null;
-    try {
-      let wabaAccount = null;
-      if (session.channel) {
-        const cleanChannel = session.channel.replace(/\D/g, "");
-        wabaAccount = await prisma.wabaAccount.findFirst({
-          where: {
-            OR: [
-              { phoneNumberId: session.channel },
-              { displayPhone: { contains: cleanChannel.slice(-10) } },
-            ],
-          },
-        });
-      }
+    let displayBody = messageBody;
+    let finalMsgType = messageType;
 
-      if (!wabaAccount) {
-        wabaAccount = await prisma.wabaAccount.findFirst();
-      }
+    if (wabaAccount && wabaAccount.accessToken && wabaAccount.phoneNumberId) {
+      const recipientPhone = session.customerPhone.replace(/\D/g, "");
+      let metaPayload: any = null;
 
-      if (wabaAccount && wabaAccount.accessToken && wabaAccount.phoneNumberId) {
-        const recipientPhone = session.customerPhone.replace(/\D/g, "");
-        
-        const metaPayload =
-          messageType === "template"
-            ? {
-                messaging_product: "whatsapp",
-                to: recipientPhone,
-                type: "template",
-                template: { 
-                  name: messageBody, // Dynamic selected template name
-                  language: { code: "en_US" } 
-                },
-              }
-            : {
-                messaging_product: "whatsapp",
-                to: recipientPhone,
-                type: "text",
-                text: { body: messageBody },
-              };
+      // A. Handle Media Upload & Sending (Image, Video, Document/PDF)
+      if (mediaFile && mediaFile.size > 0) {
+        const metaUploadForm = new FormData();
+        metaUploadForm.append("messaging_product", "whatsapp");
+        metaUploadForm.append("file", mediaFile, mediaFile.name);
 
-        const metaRes = await fetch(
-          `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/messages`,
+        const uploadRes = await fetch(
+          `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/media`,
           {
             method: "POST",
             headers: {
               Authorization: `Bearer ${wabaAccount.accessToken}`,
-              "Content-Type": "application/json",
             },
-            body: JSON.stringify(metaPayload),
+            body: metaUploadForm,
           }
         );
-        const metaData = await metaRes.json();
+        const uploadData = await uploadRes.json();
 
-        if (metaData.messages?.[0]?.id) {
-          wabaMessageId = metaData.messages[0].id;
-        } else {
-          console.error("Meta API Error Details:", metaData);
+        if (!uploadData.id) {
+          return NextResponse.json({
+            success: false,
+            error: "Meta Media Upload Failed: " + JSON.stringify(uploadData.error || uploadData),
+          }, { status: 500 });
         }
+
+        const mime = mediaFile.type;
+        const isImage = mime.startsWith("image/");
+        const isVideo = mime.startsWith("video/");
+        const waMediaType = isImage ? "image" : isVideo ? "video" : "document";
+        finalMsgType = waMediaType;
+
+        metaPayload = {
+          messaging_product: "whatsapp",
+          to: recipientPhone,
+          type: waMediaType,
+          [waMediaType]: {
+            id: uploadData.id,
+            ...(messageBody.trim() ? { caption: messageBody.trim() } : {}),
+            ...(waMediaType === "document" ? { filename: mediaFile.name } : {}),
+          },
+        };
+
+        displayBody = `📎 [${waMediaType.toUpperCase()}: ${mediaFile.name}]${messageBody.trim() ? " - " + messageBody.trim() : ""}`;
+      } 
+      // B. Handle Approved Template Sending
+      else if (messageType === "template") {
+        metaPayload = {
+          messaging_product: "whatsapp",
+          to: recipientPhone,
+          type: "template",
+          template: {
+            name: messageBody,
+            language: { code: "en_US" },
+          },
+        };
+        displayBody = `[Template Sent]: ${messageBody}`;
+      } 
+      // C. Handle Standard Text Messages
+      else {
+        metaPayload = {
+          messaging_product: "whatsapp",
+          to: recipientPhone,
+          type: "text",
+          text: { body: messageBody },
+        };
+        finalMsgType = "text";
       }
-    } catch (metaErr) {
-      console.error("Meta Cloud API Send Exception:", metaErr);
+
+      // Dispatch to Meta Graph API
+      const metaRes = await fetch(
+        `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${wabaAccount.accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(metaPayload),
+        }
+      );
+      const metaData = await metaRes.json();
+
+      if (metaData.messages?.[0]?.id) {
+        wabaMessageId = metaData.messages[0].id;
+      } else {
+        console.error("Meta Send Error:", metaData);
+      }
     }
 
-    // Save outgoing message
+    // Save Message to Database
     const newMessage = await prisma.chatMessage.create({
       data: {
         chatSessionId: sessionId,
         senderType: "AGENT",
-        senderName: agentName || "Support Agent",
-        messageBody: messageType === "template" ? `[Template Sent]: ${messageBody}` : messageBody,
-        messageType,
+        senderName: agentName,
+        messageBody: displayBody,
+        messageType: finalMsgType,
         status: wabaMessageId ? "SENT" : "FAILED",
         wabaMessageId,
       },
     });
 
+    // Update Session Last Activity
     await prisma.chatSession.update({
       where: { id: sessionId },
       data: {
-        lastMessage: messageType === "template" ? `Template Sent: ${messageBody}` : messageBody,
+        lastMessage: displayBody,
         lastMessageAt: new Date(),
         isBotActive: false,
       },
@@ -143,6 +199,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, message: newMessage });
   } catch (error: any) {
+    console.log("Messages API Error:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

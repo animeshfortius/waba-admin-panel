@@ -16,16 +16,15 @@ export default function LiveChatPage() {
   const [notes, setNotes] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
 
-  // Clean Tabs: ACTIVE, INACTIVE, HISTORY
   const [tabFilter, setTabFilter] = useState<"ACTIVE" | "INACTIVE" | "HISTORY">("ACTIVE");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Input & Modes
   const [inputMode, setInputMode] = useState<"REPLY" | "NOTE">("REPLY");
   const [inputText, setInputText] = useState("");
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<File | null>(null);
+  const [sending, setSending] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -153,35 +152,45 @@ export default function LiveChatPage() {
   const handleSend = async (e: React.FormEvent, customType = "text", customText?: string) => {
     e.preventDefault();
     const finalBody = customText || inputText;
-    if ((!finalBody.trim() && !selectedMedia) || !activeSession) return;
+    if ((!finalBody.trim() && !selectedMedia) || !activeSession || sending) return;
 
-    setInputText("");
+    setSending(true);
     setShowSlashMenu(false);
-    setSelectedMedia(null);
 
     try {
+      const formData = new FormData();
+      formData.append("action", inputMode === "NOTE" ? "NOTE" : "SEND");
+      formData.append("sessionId", activeSession.id);
+      formData.append("messageBody", finalBody);
+      formData.append("messageType", selectedMedia ? "media" : customType);
+      formData.append("agentName", "Admin Agent");
+
+      if (selectedMedia) {
+        formData.append("mediaFile", selectedMedia);
+      }
+
       const res = await fetch("/api/chat/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: inputMode === "NOTE" ? "NOTE" : "SEND",
-          sessionId: activeSession.id,
-          messageBody: finalBody,
-          messageType: customType,
-          agentName: "Admin Agent",
-        }),
+        body: formData,
       });
       const data = await res.json();
+
       if (data.success) {
+        setInputText("");
+        setSelectedMedia(null);
         if (inputMode === "NOTE") {
           setNotes((prev) => [data.note, ...prev]);
         } else {
           setMessages((prev) => [...prev, data.message]);
           fetchSessions(false);
         }
+      } else {
+        alert("Failed to send: " + (data.error || "Unknown error"));
       }
     } catch (err) {
       console.error("Send error:", err);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -356,6 +365,13 @@ export default function LiveChatPage() {
             )}
 
             <div className={`border-t p-3 ${inputMode === "NOTE" ? "bg-amber-50/70" : "bg-white"}`}>
+              {selectedMedia && (
+                <div className="mb-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center justify-between text-emerald-900 text-xs">
+                  <span className="truncate">📎 Attached File: <strong>{selectedMedia.name}</strong></span>
+                  <button type="button" onClick={() => setSelectedMedia(null)} className="font-bold text-red-500 hover:text-red-700 ml-2 cursor-pointer">✕ Remove</button>
+                </div>
+              )}
+
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center space-x-2">
                   <button
@@ -382,7 +398,6 @@ export default function LiveChatPage() {
                     onChange={(e) => {
                       if (e.target.files?.[0]) {
                         setSelectedMedia(e.target.files[0]);
-                        setInputText(`[Attached Media: ${e.target.files[0].name}]`);
                       }
                     }}
                   />
@@ -403,13 +418,13 @@ export default function LiveChatPage() {
                 </div>
               </div>
 
-              <form onSubmit={(e) => handleSend(e, selectedMedia ? "media" : "text")} className="flex items-center space-x-2">
+              <form onSubmit={(e) => handleSend(e, "text")} className="flex items-center space-x-2">
                 <input
                   type="text"
                   placeholder={
                     inputMode === "NOTE"
                       ? "Write a private internal note for team members..."
-                      : "Type a message or '/' for canned responses..."
+                      : selectedMedia ? "Add a caption for media (optional)..." : "Type a message or '/' for canned responses..."
                   }
                   value={inputText}
                   onChange={(e) => handleInputChange(e.target.value)}
@@ -417,9 +432,10 @@ export default function LiveChatPage() {
                 />
                 <button
                   type="submit"
+                  disabled={sending}
                   className={`font-bold px-6 py-3 rounded-xl shadow transition cursor-pointer text-white ${inputMode === "NOTE" ? "bg-amber-500 hover:bg-amber-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
                 >
-                  {inputMode === "NOTE" ? "Save Note 📌" : "Send 🚀"}
+                  {sending ? "Sending..." : inputMode === "NOTE" ? "Save Note 📌" : "Send 🚀"}
                 </button>
               </form>
             </div>

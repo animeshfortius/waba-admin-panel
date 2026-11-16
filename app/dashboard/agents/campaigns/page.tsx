@@ -20,7 +20,7 @@ export default function AgentCampaignsPage() {
 
   useEffect(() => {
     fetchAgentsList();
-    fetchAgentCampaigns();
+    fetchAgentCampaigns(false);
   }, []);
 
   const fetchAgentsList = async () => {
@@ -35,12 +35,12 @@ export default function AgentCampaignsPage() {
     }
   };
 
-  const fetchAgentCampaigns = async () => {
+  const fetchAgentCampaigns = async (syncMeta = false) => {
     setLoading(true);
     try {
       const uid = localStorage.getItem("userId") || "";
       const res = await fetch(
-        `/api/reports?userId=${uid}&startDate=${startDate}&endDate=${endDate}&agentId=${selectedAgentFilter}`
+        `/api/agents/admin-campaigns?userId=${uid}&startDate=${startDate}&endDate=${endDate}&agentId=${selectedAgentFilter}&syncMeta=${syncMeta}`
       );
       const data = await res.json();
       if (data.success) {
@@ -56,13 +56,7 @@ export default function AgentCampaignsPage() {
   const handleSyncFromMeta = async () => {
     setSyncingMeta(true);
     try {
-      const uid = localStorage.getItem("userId") || "";
-      await fetch("/api/templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "RETRIEVE_ALL", userId: uid }),
-      });
-      await fetchAgentCampaigns();
+      await fetchAgentCampaigns(true);
       alert("✅ Synced latest campaign & delivery status from Meta!");
     } catch {
       alert("Network error syncing with Meta.");
@@ -84,6 +78,7 @@ export default function AgentCampaignsPage() {
         c.campaignName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.templateName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.userName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.wabaNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.channel?.includes(searchQuery);
 
       return matchesAgent && matchesSearch;
@@ -92,7 +87,10 @@ export default function AgentCampaignsPage() {
 
   // Total Count Summary across filtered campaigns
   const totalRecipientsCount = useMemo(() => {
-    return filteredRecords.reduce((sum, item) => sum + (Number(item.totalCount) || Number(item.recipientsCount) || 0), 0);
+    return filteredRecords.reduce(
+      (sum, item) => sum + (Number(item.totalCount) || Number(item.recipientsCount) || 0),
+      0
+    );
   }, [filteredRecords]);
 
   return (
@@ -101,7 +99,7 @@ export default function AgentCampaignsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-5 rounded-2xl border border-slate-200 shadow-xs gap-3">
         <div>
           <div className="text-slate-400 font-medium">Home › WhatsApp › Agent Campaigns</div>
-          <div className="flex items-center gap-2.5 mt-0.5">
+          <div className="flex items-center gap-2.5 mt-0.5 flex-wrap">
             <h1 className="text-xl font-extrabold text-slate-800">Agent Campaigns</h1>
             <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
               Campaigns: {filteredRecords.length} | Total Messages: {totalRecipientsCount}
@@ -175,7 +173,7 @@ export default function AgentCampaignsPage() {
 
         <button
           type="button"
-          onClick={fetchAgentCampaigns}
+          onClick={() => fetchAgentCampaigns(false)}
           className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-sm transition cursor-pointer"
         >
           Filter Records
@@ -226,7 +224,9 @@ export default function AgentCampaignsPage() {
                     <td className="p-4 text-slate-700 font-bold">{camp.campaignName || "Campaign"}</td>
                     <td className="p-4 text-emerald-700 font-bold">{camp.templateName || "N/A"}</td>
                     <td className="p-4 font-mono text-slate-600">{camp.wabaNumber || camp.channel || "WABA"}</td>
-                    <td className="p-4 text-slate-500">{camp.scheduledAt ? new Date(camp.scheduledAt).toLocaleString() : "Immediate"}</td>
+                    <td className="p-4 text-slate-500">
+                      {camp.scheduledAt ? new Date(camp.scheduledAt).toLocaleString() : "Immediate"}
+                    </td>
                     <td className="p-4 font-mono text-slate-700">₹{camp.cost || "0.00"}</td>
                     <td className="p-4 font-black text-slate-900">
                       {camp.totalCount ?? camp.recipientsCount ?? 0}

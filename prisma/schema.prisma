@@ -193,3 +193,20 @@ model ChatNote {
   noteBody      String      // Internal whisper note content
   createdAt     DateTime    @default(now())
 }
+model Agent {
+  id               String    @id @default(uuid())
+  userId           String    // Parent user/admin ID
+  name             String
+  email            String
+  phone            String?
+  password         String?
+  expiryDate       DateTime?
+  allChannelAccess Boolean   @default(true)
+  sendTemplate     Boolean   @default(false)
+  sendCampaign     Boolean   @default(false)
+  liveChat         Boolean   @default(true)
+  role             String    @default("AGENT")
+  status           String    @default("ACTIVE")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}

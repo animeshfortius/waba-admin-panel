@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-function CampaignsContent() {
+function CampaignPageContent() {
   const searchParams = useSearchParams();
   const [userId, setUserId] = useState("");
   const [step, setStep] = useState(1);
@@ -53,7 +53,6 @@ function CampaignsContent() {
     [key: string]: { type: string; value: string };
   }>({});
 
-  // 🟢 1. First Declare activeTemplate and filtered/derived values so they are accessible everywhere
   const activeTemplate = useMemo(() => {
     return allTemplates.find((t) => t.id === selectedTemplateId) || null;
   }, [allTemplates, selectedTemplateId]);
@@ -61,14 +60,13 @@ function CampaignsContent() {
   const filteredApprovedTemplates = useMemo(() => {
     return allTemplates.filter((tpl) => {
       const isApproved = tpl.status?.toUpperCase() === "APPROVED";
-      const matchesWaba = !selectedChannel || tpl.wabaId === selectedChannel;
+      const matchesWaba = !selectedChannel || tpl.wabaId === selectedChannel || tpl.phoneNumberId === selectedChannel;
       const matchesCat =
         !selectedCategory || tpl.category?.toUpperCase() === selectedCategory.toUpperCase();
       return isApproved && matchesWaba && matchesCat;
     });
   }, [allTemplates, selectedChannel, selectedCategory]);
 
-  // Auto-fetch default template media when template is selected
   useEffect(() => {
     if (activeTemplate) {
       if (activeTemplate.headerMediaUrl) {
@@ -149,20 +147,23 @@ function CampaignsContent() {
         setWabaAccounts(accounts);
         setAllTemplates(tpls);
 
-        // 🟢 Set dynamic user-specific rates from backend
         if (data.userRates) {
           setUserRates(data.userRates);
         }
 
-        const urlWaba = searchParams?.get("wabaNumber");
+        // 🟢 Dashboard selected channel fallback check
+        const urlChannelId = searchParams?.get("channelId");
         const urlTplId = searchParams?.get("templateId");
 
         if (accounts.length > 0) {
-          if (urlWaba) {
-            const matchedAcc = accounts.find((a: any) => a.displayPhone === urlWaba || a.wabaId === urlWaba);
-            setSelectedChannel(matchedAcc ? matchedAcc.wabaId : accounts[0].wabaId);
+          if (urlChannelId) {
+            const matchedAcc = accounts.find(
+              (a: any) => a.id === urlChannelId || a.phoneNumberId === urlChannelId || a.wabaId === urlChannelId
+            );
+            setSelectedChannel(matchedAcc ? (matchedAcc.phoneNumberId || matchedAcc.wabaId) : accounts[0].phoneNumberId || accounts[0].wabaId);
           } else {
-            setSelectedChannel(accounts[0].wabaId);
+            const defaultAcc = accounts.find((a: any) => a.isDefault) || accounts[0];
+            setSelectedChannel(defaultAcc.phoneNumberId || defaultAcc.wabaId);
           }
         }
 
@@ -195,7 +196,6 @@ function CampaignsContent() {
     return rawList;
   }, [numbersInput, removeDuplicates, removeBlacklist]);
 
-  // 🟢 Dynamic Cost Calculation based on template category & user-specific rates
   const { ratePerMessage, totalEstimatedCost } = useMemo(() => {
     const cat = activeTemplate?.category?.toUpperCase() || "UTILITY";
     let rate = userRates.utility;
@@ -302,7 +302,7 @@ function CampaignsContent() {
 
   return (
     <div className="w-full min-h-screen bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6">
-      {/* Top Header - Full Width */}
+      {/* Top Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-2xl border shadow-xs gap-3 w-full">
         <div>
           <div className="text-gray-400 font-medium">Dashboard › Campaigns & Broadcast</div>
@@ -349,9 +349,8 @@ function CampaignsContent() {
         </div>
       </div>
 
-      {/* Main Grid - Full Width */}
+      {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
-        {/* Left Form Content (8 Columns) */}
         <div className="lg:col-span-8 bg-white p-6 rounded-2xl border shadow-xs space-y-6">
           {step === 1 && (
             <div className="space-y-6">
@@ -369,7 +368,7 @@ function CampaignsContent() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-600 mb-1">WABA CHANNEL (ID - NUMBER) *</label>
+                  <label className="block font-bold text-gray-600 mb-1">WABA CHANNEL *</label>
                   <select
                     value={selectedChannel}
                     onChange={(e) => {
@@ -381,11 +380,14 @@ function CampaignsContent() {
                     {wabaAccounts.length === 0 ? (
                       <option value="">No Onboarded WABA Found</option>
                     ) : (
-                      wabaAccounts.map((acc) => (
-                        <option key={acc.id} value={acc.wabaId}>
-                          {acc.wabaId} - {acc.displayPhone} ({acc.displayName || "Active"})
-                        </option>
-                      ))
+                      wabaAccounts.map((acc) => {
+                        const accKey = acc.phoneNumberId || acc.wabaId;
+                        return (
+                          <option key={acc.id} value={accKey}>
+                            📱 {acc.displayPhone || acc.phoneNumberId} — {acc.displayName || "Active WABA"} {acc.isDefault ? "⭐ (Default)" : ""}
+                          </option>
+                        );
+                      })
                     )}
                   </select>
                 </div>
@@ -407,7 +409,6 @@ function CampaignsContent() {
                 />
               </div>
 
-              {/* Action Buttons for Contacts / File Upload */}
               <div className="flex flex-wrap gap-3 pt-1">
                 <button
                   type="button"
@@ -553,7 +554,6 @@ function CampaignsContent() {
                 </div>
               </div>
 
-              {/* Header Media Section (Auto-fetched default file with optional override / replace file option) */}
               {activeTemplate &&
                 activeTemplate.headerType &&
                 activeTemplate.headerType !== "TEXT" &&
@@ -588,7 +588,6 @@ function CampaignsContent() {
                       )}
                     </div>
 
-                    {/* Replace File / Browse Override Option */}
                     <div className="pt-1">
                       <label className="block font-semibold text-gray-600 text-[11px] mb-1">
                         Replace File / Choose a different {activeTemplate.headerType.toLowerCase()} for this campaign:
@@ -778,7 +777,7 @@ function CampaignsContent() {
           )}
         </div>
 
-        {/* Right Live WhatsApp Preview (4 Columns) */}
+        {/* Right Live WhatsApp Preview */}
         <div className="lg:col-span-4">
           <div className="sticky top-6 bg-slate-900 p-5 rounded-3xl border-4 border-slate-700 shadow-2xl w-full max-w-sm mx-auto text-white space-y-3">
             <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-[10px] text-slate-400 font-mono">
@@ -790,7 +789,6 @@ function CampaignsContent() {
             </div>
 
             <div className="bg-emerald-900/60 p-3.5 rounded-2xl space-y-2 shadow-inner border border-emerald-800/50">
-              {/* Header Preview */}
               {activeTemplate?.headerType && activeTemplate.headerType !== "NONE" && (
                 <div className="border-b border-emerald-800/60 pb-1.5 text-xs font-semibold text-slate-200">
                   {activeTemplate.headerType === "TEXT" ? (

@@ -104,15 +104,15 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* QUICK ACTION SHORTCUTS */}
+          {/* QUICK ACTION SHORTCUTS (Passing selectedChannel query param) */}
           <Link
-            href="/dashboard/campaigns"
+            href={`/dashboard/campaigns${selectedChannel ? `?channelId=${selectedChannel}` : ""}`}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2.5 rounded-xl shadow-xs transition flex items-center gap-1.5"
           >
             <span>🚀</span> Launch Broadcast
           </Link>
           <Link
-            href="/dashboard/templates/create"
+            href={`/dashboard/templates/create${selectedChannel ? `?channelId=${selectedChannel}` : ""}`}
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2.5 rounded-xl shadow-xs transition flex items-center gap-1.5"
           >
             <span>➕</span> Add Template

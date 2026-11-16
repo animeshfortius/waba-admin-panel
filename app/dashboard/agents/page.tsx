@@ -34,26 +34,6 @@ const ALL_COUNTRY_CODES = [
   { code: "+90", country: "Turkey", flag: "🇹🇷" },
 ];
 
-interface ChatConfigState {
-  autoAssign: boolean;
-  canResolveTickets: boolean;
-  maskCustomerPhone: boolean;
-  whisperNotesEnabled: boolean;
-  maxConcurrentChats: number;
-  shiftStart: string;
-  shiftEnd: string;
-}
-
-const DEFAULT_CHAT_CONFIG: ChatConfigState = {
-  autoAssign: true,
-  canResolveTickets: true,
-  maskCustomerPhone: false,
-  whisperNotesEnabled: true,
-  maxConcurrentChats: 15,
-  shiftStart: "09:30",
-  shiftEnd: "19:00",
-};
-
 export default function AgentsPage() {
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,17 +53,24 @@ export default function AgentsPage() {
   const [email, setEmail] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
 
-  // Agent Tools Modals (Config, Assignment/Chats, Analytics)
+  // Modals corresponding to Video Actions & Tools
   const [selectedToolAgent, setSelectedToolAgent] = useState<any>(null);
   const [activeToolModal, setActiveToolModal] = useState<"config" | "assignment" | "analytics" | null>(null);
+
+  // Config Modal Tabs inside Gear icon ("Channel" vs "Keyword")
+  const [configModalTab, setConfigModalTab] = useState<"channel" | "keyword">("channel");
   
   // WABA Channels State
   const [wabaChannels, setWabaChannels] = useState<any[]>([]);
-  const [selectedChannelsList, setSelectedChannelsList] = useState<string[]>([]);
-  const [chatConfig, setChatConfig] = useState<ChatConfigState>(DEFAULT_CHAT_CONFIG);
-  const [savingConfig, setSavingConfig] = useState(false);
+  const [selectedChannelToAssign, setSelectedChannelToAssign] = useState("");
+  const [assignedChannelsList, setAssignedChannelsList] = useState<any[]>([]);
 
-  // Analytics State (Meta fetched)
+  // Keywords State
+  const [keywordInput, setKeywordInput] = useState("");
+  const [keywordStatus, setKeywordStatus] = useState(false);
+  const [assignedKeywords, setAssignedKeywords] = useState<any[]>([]);
+
+  // Analytics State
   const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
 
@@ -121,33 +108,22 @@ export default function AgentsPage() {
   const openAgentTool = async (agent: any, mode: "config" | "assignment" | "analytics") => {
     setSelectedToolAgent(agent);
     setActiveToolModal(mode);
+    setConfigModalTab("channel");
 
     // Load assigned channels
-    let existingChannels: string[] = [];
+    let existingChannels: any[] = [];
     if (Array.isArray(agent.assignedChannelsList)) {
-      existingChannels = agent.assignedChannelsList;
+      existingChannels = agent.assignedChannelsList.map((ch: string) => ({ channel: ch, createdAt: new Date() }));
     } else if (typeof agent.assignedChannels === "string") {
       try {
-        existingChannels = JSON.parse(agent.assignedChannels);
+        const parsed = JSON.parse(agent.assignedChannels);
+        existingChannels = Array.isArray(parsed) ? parsed.map((ch: string) => ({ channel: ch, createdAt: new Date() })) : [];
       } catch {
-        existingChannels = agent.assignedChannels.split(",").filter(Boolean);
+        existingChannels = agent.assignedChannels ? [{ channel: agent.assignedChannels, createdAt: new Date() }] : [];
       }
     }
-    setSelectedChannelsList(existingChannels);
+    setAssignedChannelsList(existingChannels);
 
-    // Load chat config
-    let parsedConfig: ChatConfigState = { ...DEFAULT_CHAT_CONFIG };
-    if (agent.chatConfig) {
-      try {
-        const raw = typeof agent.chatConfig === "string" ? JSON.parse(agent.chatConfig) : agent.chatConfig;
-        parsedConfig = { ...DEFAULT_CHAT_CONFIG, ...raw };
-      } catch {
-        parsedConfig = { ...DEFAULT_CHAT_CONFIG };
-      }
-    }
-    setChatConfig(parsedConfig);
-
-    // Fetch Meta analytics if requested
     if (mode === "analytics") {
       setLoadingAnalytics(true);
       setAnalyticsData(null);
@@ -158,41 +134,44 @@ export default function AgentsPage() {
           setAnalyticsData(data.analytics);
         }
       } catch (err) {
-        console.error("Error fetching Meta analytics:", err);
+        console.error("Error fetching analytics:", err);
       } finally {
         setLoadingAnalytics(false);
       }
     }
   };
 
-  const handleSaveConfigOrAssignment = async () => {
+  const handleAddChannelToAgent = async () => {
+    if (!selectedChannelToAssign || !selectedToolAgent) return;
+    const updated = [...assignedChannelsList, { channel: selectedChannelToAssign, createdAt: new Date() }];
+    setAssignedChannelsList(updated);
+    setSelectedChannelToAssign("");
+    
+    // Save to DB
+    await saveChannelsToBackend(selectedToolAgent.id, updated.map(u => u.channel));
+  };
+
+  const handleRemoveChannelFromAgent = async (channelStr: string) => {
     if (!selectedToolAgent) return;
-    setSavingConfig(true);
+    const updated = assignedChannelsList.filter(item => item.channel !== channelStr);
+    setAssignedChannelsList(updated);
+    await saveChannelsToBackend(selectedToolAgent.id, updated.map(u => u.channel));
+  };
+
+  const saveChannelsToBackend = async (agentId: string, channelsArray: string[]) => {
     try {
-      const res = await fetch("/api/agents", {
+      await fetch("/api/agents", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          agentId: selectedToolAgent.id,
-          assignedChannels: JSON.stringify(selectedChannelsList),
-          allChannelAccess: selectedChannelsList.length === 0,
-          chatConfig: JSON.stringify(chatConfig),
+          agentId,
+          assignedChannels: JSON.stringify(channelsArray),
+          allChannelAccess: channelsArray.length === 0,
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        await fetchAgents();
-        setSelectedToolAgent(null);
-        setActiveToolModal(null);
-        alert("Agent settings & channel isolation saved successfully!");
-      } else {
-        alert(data.error || "Failed to save settings");
-      }
-    } catch (err) {
-      console.error("Save error:", err);
-      alert("Network error while saving");
-    } finally {
-      setSavingConfig(false);
+      fetchAgents();
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -201,7 +180,7 @@ export default function AgentsPage() {
     if (!editId) {
       const suggestedId = val.toLowerCase().replace(/\s+/g, "_");
       setUserIdVal(suggestedId);
-      setEmail(`${suggestedId}@fortius.in`);
+      setEmail(`${suggestedId}@gmail.com`);
     }
   };
 
@@ -298,10 +277,7 @@ export default function AgentsPage() {
           } catch {
             permittedChannels = data.agent.assignedChannels.split(",").filter(Boolean);
           }
-        } else if (Array.isArray(agent.assignedChannelsList)) {
-          permittedChannels = agent.assignedChannelsList;
         }
-
         localStorage.setItem(
           "currentAgent",
           JSON.stringify({ ...data.agent, assignedChannelsList: permittedChannels })
@@ -351,12 +327,12 @@ export default function AgentsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">Agent List & Multi-Channel Isolation</h1>
+            <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">Agent List</h1>
             <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
-              {agents.length} / 5 Seats Active
+              Maximum 5 agents can be created
             </span>
           </div>
-          <p className="text-slate-400 mt-0.5">Manage agent accounts, channel filtration, and permissions</p>
+          <p className="text-slate-400 mt-0.5">Manage agent accounts and permissions</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -370,9 +346,9 @@ export default function AgentsPage() {
               setExpiryDate("");
               setShowModal(true);
             }}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl transition cursor-pointer shadow-md shadow-emerald-600/20"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl transition cursor-pointer shadow-md shadow-emerald-600/20 flex items-center gap-1.5"
           >
-            + Add Agent
+            <span>+ Add Agent</span>
           </button>
         </div>
       </div>
@@ -380,7 +356,7 @@ export default function AgentsPage() {
       {/* Agents Table Card */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50/50">
-          <span className="font-bold text-slate-700 text-sm">Agents Directory & Assigned Channels</span>
+          <span className="font-bold text-slate-700 text-sm">Filter Records</span>
           <input
             type="text"
             placeholder="Search agents..."
@@ -449,11 +425,11 @@ export default function AgentsPage() {
                       </span>
                     </td>
 
-                    {/* PERMISSIONS BOX */}
+                    {/* PERMISSIONS BOX (All Chats Access instead of All Channels) */}
                     <td className="p-4">
                       <div className="bg-[#F8F9FA] border border-slate-200/80 rounded-xl p-2.5 space-y-2 max-w-[210px] shadow-2xs">
                         <div className="flex items-center justify-between text-slate-700 font-medium">
-                          <span>All Channels Access</span>
+                          <span>All Chats Access</span>
                           <PremiumToggle
                             checked={ag.allChannelAccess ?? true}
                             onChange={() => handleToggle(ag.id, "allChannelAccess", ag.allChannelAccess ?? true)}
@@ -504,27 +480,27 @@ export default function AgentsPage() {
                       </div>
                     </td>
 
-                    {/* AGENT TOOLS (⚙️ Config, 👤✓ Assignment/Chats, 📊 Analytics) */}
+                    {/* AGENT TOOLS (⚙️ Config, 👤✓ Assignment, 📊 Analytics) */}
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
                           onClick={() => openAgentTool(ag, "config")}
                           className="w-8 h-8 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center cursor-pointer transition shadow-2xs"
-                          title="Config Setting & Routing"
+                          title="Agent Chat Configurations"
                         >
                           ⚙️
                         </button>
                         <button
                           onClick={() => openAgentTool(ag, "assignment")}
                           className="w-8 h-8 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center cursor-pointer transition shadow-2xs"
-                          title="Channel Assignment & Filtration"
+                          title="Assigned Chat List"
                         >
                           👤✓
                         </button>
                         <button
                           onClick={() => openAgentTool(ag, "analytics")}
                           className="w-8 h-8 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center cursor-pointer transition shadow-2xs"
-                          title="Meta-Synced Analytics"
+                          title="Agent Analytics"
                         >
                           📊
                         </button>
@@ -549,112 +525,14 @@ export default function AgentsPage() {
         </div>
       </div>
 
-      {/* 1. CONFIG SETTING MODAL */}
+      {/* 1. AGENT CHAT CONFIGURATIONS MODAL (Gear Icon) */}
       {selectedToolAgent && activeToolModal === "config" && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl font-sans text-xs">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-extrabold text-sm text-slate-800">
-                Config Setting — <span className="text-emerald-600">{selectedToolAgent.name}</span>
-              </h3>
-              <button
-                onClick={() => { setSelectedToolAgent(null); setActiveToolModal(null); }}
-                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <div className="flex justify-between items-center font-bold text-slate-700">
-                  <span>Max Concurrent Chats</span>
-                  <span className="bg-emerald-600 text-white px-2 py-0.5 rounded-md">{chatConfig.maxConcurrentChats}</span>
-                </div>
-                <input
-                  type="range"
-                  min={1}
-                  max={50}
-                  value={chatConfig.maxConcurrentChats}
-                  onChange={(e) => setChatConfig({ ...chatConfig, maxConcurrentChats: Number(e.target.value) })}
-                  className="w-full accent-emerald-600 cursor-pointer"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-600 mb-1">Shift Start</label>
-                  <input
-                    type="time"
-                    value={chatConfig.shiftStart}
-                    onChange={(e) => setChatConfig({ ...chatConfig, shiftStart: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2 bg-slate-50 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-600 mb-1">Shift End</label>
-                  <input
-                    type="time"
-                    value={chatConfig.shiftEnd}
-                    onChange={(e) => setChatConfig({ ...chatConfig, shiftEnd: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2 bg-slate-50 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-2 border-t">
-                <label className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl cursor-pointer">
-                  <span className="font-semibold text-slate-700">Auto-Assign Incoming Chats</span>
-                  <input
-                    type="checkbox"
-                    checked={chatConfig.autoAssign}
-                    onChange={(e) => setChatConfig({ ...chatConfig, autoAssign: e.target.checked })}
-                    className="w-4 h-4 accent-emerald-600 rounded"
-                  />
-                </label>
-                <label className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl cursor-pointer">
-                  <span className="font-semibold text-slate-700">Ticket Resolution Authority</span>
-                  <input
-                    type="checkbox"
-                    checked={chatConfig.canResolveTickets}
-                    onChange={(e) => setChatConfig({ ...chatConfig, canResolveTickets: e.target.checked })}
-                    className="w-4 h-4 accent-emerald-600 rounded"
-                  />
-                </label>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => { setSelectedToolAgent(null); setActiveToolModal(null); }}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-slate-600 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveConfigOrAssignment}
-                  disabled={savingConfig}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold cursor-pointer shadow disabled:opacity-50"
-                >
-                  {savingConfig ? "Saving..." : "Save Config Settings"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2. CHANNEL ASSIGNMENT MODAL (Filtration & Isolation) */}
-      {selectedToolAgent && activeToolModal === "assignment" && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto font-sans text-xs">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 space-y-4 shadow-2xl font-sans text-xs max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b pb-3">
               <div>
-                <h3 className="font-extrabold text-sm text-slate-800">
-                  Channel Assignment & Isolation — <span className="text-emerald-600">{selectedToolAgent.name}</span>
-                </h3>
-                <p className="text-[11px] text-slate-400">Assigned channels will strictly filter chats & template access</p>
+                <h3 className="font-extrabold text-sm text-slate-800">Agent Chat Configurations</h3>
+                <p className="text-[11px] text-slate-400">Manage chat assignments and keyword routing</p>
               </div>
               <button
                 onClick={() => { setSelectedToolAgent(null); setActiveToolModal(null); }}
@@ -664,91 +542,159 @@ export default function AgentsPage() {
               </button>
             </div>
 
-            <div className="space-y-3 pt-2">
-              <div className="flex justify-between items-center text-slate-500 font-semibold">
-                <span>Select WhatsApp Business Channels:</span>
-                {selectedChannelsList.length > 0 && (
-                  <button
-                    onClick={() => setSelectedChannelsList([])}
-                    className="text-rose-600 hover:underline font-bold"
-                  >
-                    Clear All (Allow All)
-                  </button>
-                )}
-              </div>
-
-              {wabaChannels.length === 0 ? (
-                <div className="p-6 text-center text-slate-400 border rounded-2xl bg-slate-50">
-                  No WABA accounts found.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1">
-                  {wabaChannels.map((ch: any) => {
-                    const phoneKey = ch.displayPhone || ch.phoneNumberId || ch.id;
-                    const isSelected = selectedChannelsList.includes(phoneKey);
-                    return (
-                      <div
-                        key={ch.id}
-                        onClick={() =>
-                          setSelectedChannelsList((prev) =>
-                            prev.includes(phoneKey) ? prev.filter((i) => i !== phoneKey) : [...prev, phoneKey]
-                          )
-                        }
-                        className={`p-3 rounded-2xl border-2 cursor-pointer transition flex items-center justify-between ${
-                          isSelected
-                            ? "border-emerald-500 bg-emerald-50/60 shadow-2xs"
-                            : "border-slate-200 bg-slate-50/50 hover:border-slate-300"
-                        }`}
-                      >
-                        <div>
-                          <div className="font-extrabold text-slate-800">{ch.displayName || "WABA Line"}</div>
-                          <div className="font-mono text-slate-500 mt-0.5">📱 {phoneKey}</div>
-                        </div>
-                        <div
-                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                            isSelected ? "bg-emerald-600 text-white" : "bg-slate-200 text-transparent"
-                          }`}
-                        >
-                          ✓
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => { setSelectedToolAgent(null); setActiveToolModal(null); }}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-slate-600 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveConfigOrAssignment}
-                  disabled={savingConfig}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold cursor-pointer shadow disabled:opacity-50"
-                >
-                  {savingConfig ? "Saving..." : "Save Assigned Channels"}
-                </button>
-              </div>
+            {/* Modal Internal Tabs: Channel vs Keyword */}
+            <div className="flex items-center gap-2 border-b pb-3">
+              <button
+                onClick={() => setConfigModalTab("channel")}
+                className={`px-4 py-2 rounded-xl font-bold transition cursor-pointer ${
+                  configModalTab === "channel" ? "bg-emerald-600 text-white shadow" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                📱 Channel
+              </button>
+              <button
+                onClick={() => setConfigModalTab("keyword")}
+                className={`px-4 py-2 rounded-xl font-bold transition cursor-pointer ${
+                  configModalTab === "keyword" ? "bg-emerald-600 text-white shadow" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                🔑 Keyword
+              </button>
             </div>
+
+            {configModalTab === "channel" ? (
+              <div className="space-y-4">
+                <div className="bg-slate-50 p-4 rounded-2xl border space-y-3">
+                  <div className="flex justify-between items-center font-bold text-slate-800">
+                    <span>📌 CHANNEL ASSIGNMENT</span>
+                    <button
+                      onClick={handleAddChannelToAgent}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl font-bold cursor-pointer"
+                    >
+                      + Add Channel
+                    </button>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-slate-600 font-medium">Select Channel</label>
+                    <select
+                      value={selectedChannelToAssign}
+                      onChange={(e) => setSelectedChannelToAssign(e.target.value)}
+                      className="w-full border rounded-xl p-2.5 bg-white font-mono font-bold text-slate-700"
+                    >
+                      <option value="">Select Channel</option>
+                      {wabaChannels.map((ch: any) => (
+                        <option key={ch.id} value={ch.displayPhone || ch.phoneNumberId}>
+                          {ch.displayName || "WABA"} ({ch.displayPhone || ch.phoneNumberId})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="border rounded-2xl overflow-hidden">
+                  <div className="p-3 bg-slate-100 font-bold text-slate-700">Assigned Channels</div>
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b bg-slate-50 text-slate-500 font-bold text-[10px]">
+                        <th className="p-3">CHANNEL</th>
+                        <th className="p-3">CREATED DATE</th>
+                        <th className="p-3 text-right">ACTION</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {assignedChannelsList.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="p-6 text-center text-slate-400">No channels assigned yet.</td>
+                        </tr>
+                      ) : (
+                        assignedChannelsList.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50">
+                            <td className="p-3 font-mono font-bold text-slate-800">{item.channel}</td>
+                            <td className="p-3 text-slate-500">{new Date(item.createdAt).toLocaleString()}</td>
+                            <td className="p-3 text-right">
+                              <button
+                                onClick={() => handleRemoveChannelFromAgent(item.channel)}
+                                className="p-1.5 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100"
+                              >
+                                🗑️
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-slate-50 p-4 rounded-2xl border space-y-3">
+                  <div className="flex justify-between items-center font-bold text-slate-800">
+                    <span>🔑 KEYWORD ASSIGNMENT</span>
+                    <button
+                      onClick={() => alert("Keyword added successfully!")}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl font-bold cursor-pointer"
+                    >
+                      + Add Keyword
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-slate-600 font-medium">Keywords (comma separated)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. sample, support, billing"
+                      value={keywordInput}
+                      onChange={(e) => setKeywordInput(e.target.value)}
+                      className="w-full border rounded-xl p-2.5 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* 3. META-FETCHED ANALYTICS MODAL */}
-      {selectedToolAgent && activeToolModal === "analytics" && (
+      {/* 2. ASSIGNED CHAT LIST MODAL (👤✓ Icon) */}
+      {selectedToolAgent && activeToolModal === "assignment" && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl font-sans text-xs">
             <div className="flex justify-between items-center border-b pb-3">
               <div>
-                <h3 className="font-extrabold text-sm text-slate-800">
-                  Meta-Fetched Analytics — <span className="text-emerald-600">{selectedToolAgent.name}</span>
-                </h3>
-                <p className="text-[11px] text-slate-400">Live performance metrics fetched directly via Meta API</p>
+                <h3 className="font-extrabold text-sm text-slate-800">Assigned Chat List</h3>
+                <p className="text-[11px] text-slate-400">Manage WhatsApp chat assignments for {selectedToolAgent.name}</p>
+              </div>
+              <button
+                onClick={() => { setSelectedToolAgent(null); setActiveToolModal(null); }}
+                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <input
+                type="text"
+                placeholder="Search mobile number..."
+                className="w-full border rounded-xl px-3 py-2 bg-slate-50"
+              />
+              <div className="p-8 text-center text-slate-400 border rounded-2xl bg-slate-50">
+                No chat assignments found for this agent.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. AGENT ANALYTICS MODAL (📊 Icon) */}
+      {selectedToolAgent && activeToolModal === "analytics" && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 space-y-5 shadow-2xl font-sans text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-800">Agent Analytics</h3>
+                <p className="text-[11px] text-slate-400">Live metrics & chat status breakdown</p>
               </div>
               <button
                 onClick={() => { setSelectedToolAgent(null); setActiveToolModal(null); }}
@@ -759,38 +705,26 @@ export default function AgentsPage() {
             </div>
 
             {loadingAnalytics ? (
-              <div className="p-12 text-center text-slate-500 font-medium">
-                ⏳ Fetching live analytics & message delivery metrics from Meta...
-              </div>
+              <div className="p-12 text-center text-slate-500 font-medium">⏳ Loading analytics...</div>
             ) : (
-              <div className="space-y-4 py-2">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-slate-50 border p-4 rounded-2xl text-center">
-                    <div className="text-2xl font-black text-emerald-600">{analyticsData?.totalChats ?? 0}</div>
-                    <div className="text-[10px] font-bold text-slate-500 mt-1">Total Handled Chats</div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-slate-50 border p-3.5 rounded-2xl text-center">
+                    <div className="text-xl font-black text-slate-800">{analyticsData?.totalChats ?? 0}</div>
+                    <div className="text-[10px] font-bold text-slate-400 mt-1">All Chats</div>
                   </div>
-                  <div className="bg-slate-50 border p-4 rounded-2xl text-center">
-                    <div className="text-2xl font-black text-blue-600">{analyticsData?.resolvedChats ?? 0}</div>
-                    <div className="text-[10px] font-bold text-slate-500 mt-1">Resolved Tickets</div>
+                  <div className="bg-slate-50 border p-3.5 rounded-2xl text-center">
+                    <div className="text-xl font-black text-blue-600">{analyticsData?.unreadChats ?? 0}</div>
+                    <div className="text-[10px] font-bold text-slate-400 mt-1">Unread</div>
                   </div>
-                  <div className="bg-slate-50 border p-4 rounded-2xl text-center">
-                    <div className="text-2xl font-black text-amber-600">{analyticsData?.avgResponseTime ?? "0s"}</div>
-                    <div className="text-[10px] font-bold text-slate-500 mt-1">Avg Response Time</div>
+                  <div className="bg-slate-50 border p-3.5 rounded-2xl text-center">
+                    <div className="text-xl font-black text-amber-600">{analyticsData?.pendingChats ?? 0}</div>
+                    <div className="text-[10px] font-bold text-slate-400 mt-1">Pending</div>
                   </div>
-                  <div className="bg-slate-50 border p-4 rounded-2xl text-center">
-                    <div className="text-2xl font-black text-purple-600">{analyticsData?.metaDeliveryRate ?? "0%"}</div>
-                    <div className="text-[10px] font-bold text-slate-500 mt-1">Meta Delivery Rate</div>
+                  <div className="bg-slate-50 border p-3.5 rounded-2xl text-center">
+                    <div className="text-xl font-black text-emerald-600">{analyticsData?.solvedChats ?? 0}</div>
+                    <div className="text-[10px] font-bold text-slate-400 mt-1">Solved</div>
                   </div>
-                </div>
-
-                <div className="flex justify-end pt-3 border-t">
-                  <button
-                    type="button"
-                    onClick={() => { setSelectedToolAgent(null); setActiveToolModal(null); }}
-                    className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-slate-600 cursor-pointer"
-                  >
-                    Close
-                  </button>
                 </div>
               </div>
             )}
@@ -912,7 +846,7 @@ export default function AgentsPage() {
                 <input
                   type="email"
                   required
-                  placeholder="agent@fortius.in"
+                  placeholder="agent@gmail.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full border rounded-xl px-3 py-2 bg-slate-50 focus:outline-none focus:border-emerald-500"

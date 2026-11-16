@@ -9,7 +9,7 @@ export async function GET(req: Request) {
     const endDateParam = searchParams.get("endDate");
     const channelId = searchParams.get("channelId");
 
-    // 1. Fetch all onboarded WABA accounts
+    // 1. Fetch all accounts from database
     const allAccounts = await prisma.wabaAccount.findMany({
       orderBy: { createdAt: "asc" },
     });
@@ -28,31 +28,14 @@ export async function GET(req: Request) {
 
     const activeChannelId = targetAccount?.phoneNumberId || targetAccount?.id;
 
-    // 2. Fetch Live Health from Meta Graph API for target account
+    // 2. Use Database values directly (matching WABA Channels configuration page)
     let metaHealth = {
-      qualityRating: targetAccount?.qualityRating || "GREEN",
-      messagingLimit: "100K/day",
+      qualityRating: targetAccount?.qualityRating || "HIGH",
+      messagingLimit: targetAccount?.messagingLimit || "100,000 / 24 hrs",
       verifiedName: targetAccount
         ? targetAccount.displayName || targetAccount.displayPhone || targetAccount.phoneNumberId
-        : "No Account Connected",
+        : "WhatsApp Business",
     };
-
-    if (targetAccount && targetAccount.accessToken && targetAccount.phoneNumberId) {
-      try {
-        const metaRes = await fetch(
-          `https://graph.facebook.com/v21.0/${targetAccount.phoneNumberId}?fields=quality_rating,messaging_limit_tier,verified_name`,
-          { headers: { Authorization: `Bearer ${targetAccount.accessToken}` } }
-        );
-        const metaData = await metaRes.json();
-        if (metaData && !metaData.error) {
-          metaHealth.qualityRating = metaData.quality_rating || metaHealth.qualityRating;
-          metaHealth.messagingLimit = metaData.messaging_limit_tier || metaHealth.messagingLimit;
-          metaHealth.verifiedName = metaData.verified_name || metaHealth.verifiedName;
-        }
-      } catch (e) {
-        console.error("Meta Health API error:", e);
-      }
-    }
 
     // 3. Date Range Calculation
     const now = new Date();
@@ -81,7 +64,7 @@ export async function GET(req: Request) {
       ? { chatSession: { channel: activeChannelId } }
       : {};
 
-    // 4. Database Metrics (Sent, Delivered, Read, Unread, Failed)
+    // 4. Database Metrics
     const totalSent = await prisma.chatMessage.count({
       where: { senderType: "AGENT", ...dateQuery, ...channelQuery },
     });
@@ -119,6 +102,8 @@ export async function GET(req: Request) {
         phoneNumberId: acc.phoneNumberId,
         displayPhone: acc.displayPhone,
         displayName: acc.displayName,
+        qualityRating: acc.qualityRating,
+        messagingLimit: acc.messagingLimit,
         isDefault: acc.isDefault || false,
       })),
       stats: {

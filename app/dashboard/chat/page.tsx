@@ -15,6 +15,7 @@ export default function LiveChatPage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
+  const [currentAgent, setCurrentAgent] = useState<any>(null);
 
   const [tabFilter, setTabFilter] = useState<"ACTIVE" | "INACTIVE" | "HISTORY">("ACTIVE");
   const [searchQuery, setSearchQuery] = useState("");
@@ -35,6 +36,16 @@ export default function LiveChatPage() {
   }, [activeSession]);
 
   useEffect(() => {
+    // Check if logged in as an Agent
+    const agentStr = localStorage.getItem("currentAgent");
+    if (agentStr) {
+      try {
+        setCurrentAgent(JSON.parse(agentStr));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     fetchSessions(true);
     fetchTemplates();
     const interval = setInterval(() => fetchSessions(false), 4000);
@@ -63,7 +74,21 @@ export default function LiveChatPage() {
       const res = await fetch(`/api/chat/sessions?userId=${userId}`);
       const data = await res.json();
       if (data.success) {
-        const newSessions = data.sessions || [];
+        let newSessions = data.sessions || [];
+
+        // AGENT CHANNEL RESTRICTION FILTER
+        const agentStr = localStorage.getItem("currentAgent");
+        if (agentStr) {
+          const agent = JSON.parse(agentStr);
+          // If agent does not have allChannelAccess, filter chats by their assigned channel or ID
+          if (agent.allChannelAccess === false && agent.assignedChannelId) {
+            newSessions = newSessions.filter((s: any) => 
+              String(s.channel) === String(agent.assignedChannelId) || 
+              String(s.assignedAgentId) === String(agent.id)
+            );
+          }
+        }
+
         setSessions(newSessions);
 
         if (isInitial && !activeSession && newSessions.length > 0) {
@@ -106,10 +131,9 @@ export default function LiveChatPage() {
     } catch (e) {}
   };
 
-  // Helper to convert Meta Media Graph URL to our secure Media Proxy route
   const getProxiedMediaUrl = (url: string) => {
     if (!url) return "";
-    if (url.startsWith("blob:")) return url; // Local optimistic preview
+    if (url.startsWith("blob:")) return url;
     if (url.includes("graph.facebook.com")) {
       const parts = url.split("/");
       const mediaId = parts[parts.length - 1];
@@ -120,7 +144,6 @@ export default function LiveChatPage() {
     return url;
   };
 
-  // Meta 24h Window Status with Auto-Reset on last customer message
   const getSessionWindowStatus = (session: any) => {
     if (!session) return { isOpen: false, hoursLeft: 0 };
     
@@ -177,15 +200,15 @@ export default function LiveChatPage() {
     const isImage = localMedia?.type.startsWith("image/");
     const isVideo = localMedia?.type.startsWith("video/");
     const localPreviewUrl = localMedia ? URL.createObjectURL(localMedia) : null;
+    const senderDisplayName = currentAgent ? currentAgent.name : "Admin Agent";
 
     setSending(true);
     setShowSlashMenu(false);
 
-    // Instant Optimistic UI Update
     const optimisticMsg = {
       id: "temp-" + Date.now(),
       senderType: "AGENT",
-      senderName: "Admin Agent",
+      senderName: senderDisplayName,
       messageBody: localMedia ? `📎 [${isImage ? "IMAGE" : isVideo ? "VIDEO" : "DOCUMENT"}: ${localMedia.name}]${finalBody ? " - " + finalBody : ""}` : finalBody,
       messageType: localMedia ? (isImage ? "image" : isVideo ? "video" : "document") : customType,
       mediaUrl: localPreviewUrl,
@@ -201,7 +224,7 @@ export default function LiveChatPage() {
       formData.append("sessionId", activeSession.id);
       formData.append("messageBody", finalBody);
       formData.append("messageType", localMedia ? "media" : customType);
-      formData.append("agentName", "Admin Agent");
+      formData.append("agentName", senderDisplayName);
 
       if (localMedia) {
         formData.append("mediaFile", localMedia);
@@ -260,7 +283,7 @@ export default function LiveChatPage() {
         <div className="p-3.5 border-b space-y-3">
           <div className="flex justify-between items-center">
             <span className="font-bold text-sm text-gray-800 flex items-center gap-1.5">
-              <span>💬</span> Live Chats
+              <span>💬</span> {currentAgent ? `${currentAgent.name}'s Chats` : "Live Chats"}
             </span>
             <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full text-[10px]">
               {sessions.length} Total
@@ -379,12 +402,10 @@ export default function LiveChatPage() {
                         {isCustomer ? (activeSession.customerName || "Customer") : `👤 ${msg.senderName || "Agent"}`}
                       </div>
 
-                      {/* Image Preview with Proxy Support */}
                       {proxiedUrl && isImg && (
                         <img src={proxiedUrl} alt="media" className="rounded-xl max-h-48 object-cover mt-1 border" />
                       )}
 
-                      {/* Video Player with Proxy Support */}
                       {proxiedUrl && isVid && (
                         <video controls className="rounded-xl max-h-48 w-full object-cover mt-1 border">
                           <source src={proxiedUrl} type="video/mp4" />
@@ -392,7 +413,6 @@ export default function LiveChatPage() {
                         </video>
                       )}
 
-                      {/* Document File Card */}
                       {(isDoc || bodyStr.includes("📎")) && !isImg && !isVid && (
                         <div className={`flex items-center gap-3 p-2.5 rounded-xl border ${isCustomer ? "bg-gray-50 border-gray-200 text-gray-800" : "bg-emerald-700/60 border-emerald-500 text-white"}`}>
                           <span className="text-2xl">📄</span>
@@ -481,13 +501,17 @@ export default function LiveChatPage() {
                   >
                     📎 Attach Media / File
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowTemplateModal(true)}
-                    className="text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg cursor-pointer"
-                  >
-                    📋 Send Template
-                  </button>
+
+                  {/* Show Template button only if agent has permission OR if admin */}
+                  {(!currentAgent || currentAgent.sendTemplate) && (
+                    <button
+                      type="button"
+                      onClick={() => setShowTemplateModal(true)}
+                      className="text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg cursor-pointer"
+                    >
+                      📋 Send Template
+                    </button>
+                  )}
                 </div>
               </div>
 

@@ -15,14 +15,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Agent model not initialized" }, { status: 500 });
     }
 
-    // Safely check using findFirst or handle both string/number IDs to prevent type crash
-    const agent = await (prisma as any).agent.findFirst({
+    // Convert agentId strictly to String to match Prisma schema type expectation
+    const stringId = String(agentId);
+
+    const agent = await (prisma as any).agent.findUnique({
       where: {
-        OR: [
-          { id: agentId },
-          { id: String(agentId) },
-          ...(!isNaN(Number(agentId)) ? [{ id: Number(agentId) }] : [])
-        ]
+        id: stringId,
       },
     });
 

@@ -17,7 +17,6 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "desc" },
     });
 
-    // Parse assignedChannels JSON string into array for frontend
     const formattedAgents = agents.map((ag: any) => {
       let parsedChannels: string[] = [];
       if (ag.assignedChannels) {
@@ -47,25 +46,52 @@ export async function POST(request: Request) {
 
     const channelsJson = Array.isArray(body.assignedChannels)
       ? JSON.stringify(body.assignedChannels)
+      : typeof body.assignedChannels === "string"
+      ? body.assignedChannels
       : "[]";
 
-    const newAgent = await (prisma as any).agent.create({
-      data: {
-        userId: body.userId,
-        name: body.name,
-        email: body.email || `${body.userId}@fortius.in`,
-        phone: body.phone || "",
-        password: body.password || "agent123",
-        expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
-        allChannelAccess: body.allChannelAccess ?? true,
-        assignedChannels: channelsJson,
-        sendTemplate: body.sendTemplate ?? false,
-        sendCampaign: body.sendCampaign ?? false,
-        liveChat: body.liveChat ?? true,
-        role: "AGENT",
-        status: "ACTIVE",
-      },
-    });
+    let newAgent;
+    try {
+      newAgent = await (prisma as any).agent.create({
+        data: {
+          userId: body.userId,
+          name: body.name,
+          email: body.email || `${body.userId}@fortius.in`,
+          phone: body.phone || "",
+          password: body.password || "agent123",
+          expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
+          allChannelAccess: body.allChannelAccess ?? true,
+          assignedChannels: channelsJson,
+          sendTemplate: body.sendTemplate ?? false,
+          sendCampaign: body.sendCampaign ?? false,
+          liveChat: body.liveChat ?? true,
+          role: "AGENT",
+          status: "ACTIVE",
+        },
+      });
+    } catch (prismaErr: any) {
+      // Fallback if assignedChannels column is not yet pushed in live DB
+      if (prismaErr.message?.includes("assignedChannels")) {
+        newAgent = await (prisma as any).agent.create({
+          data: {
+            userId: body.userId,
+            name: body.name,
+            email: body.email || `${body.userId}@fortius.in`,
+            phone: body.phone || "",
+            password: body.password || "agent123",
+            expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
+            allChannelAccess: body.allChannelAccess ?? true,
+            sendTemplate: body.sendTemplate ?? false,
+            sendCampaign: body.sendCampaign ?? false,
+            liveChat: body.liveChat ?? true,
+            role: "AGENT",
+            status: "ACTIVE",
+          },
+        });
+      } else {
+        throw prismaErr;
+      }
+    }
 
     return NextResponse.json({ success: true, agent: newAgent });
   } catch (error: any) {
@@ -88,16 +114,31 @@ export async function PATCH(request: Request) {
       updates.expiryDate = new Date(updates.expiryDate);
     }
 
-    // Serialize assignedChannels array to JSON string for DB
     if (Array.isArray(updates.assignedChannels)) {
       updates.assignedChannels = JSON.stringify(updates.assignedChannels);
     }
     delete updates.assignedChannelsList;
 
-    const updatedAgent = await (prisma as any).agent.update({
-      where: { id: isNaN(Number(targetId)) ? targetId : Number(targetId) },
-      data: updates,
-    });
+    const whereClause = { id: isNaN(Number(targetId)) ? targetId : Number(targetId) };
+
+    let updatedAgent;
+    try {
+      updatedAgent = await (prisma as any).agent.update({
+        where: whereClause,
+        data: updates,
+      });
+    } catch (prismaErr: any) {
+      // Fallback if assignedChannels column doesn't exist in compiled Prisma client yet
+      if (prismaErr.message?.includes("assignedChannels")) {
+        const { assignedChannels, ...safeUpdates } = updates;
+        updatedAgent = await (prisma as any).agent.update({
+          where: whereClause,
+          data: safeUpdates,
+        });
+      } else {
+        throw prismaErr;
+      }
+    }
 
     return NextResponse.json({ success: true, agent: updatedAgent });
   } catch (error: any) {

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { getAgentPermittedChannels } from "@/lib/agentChannelFilter";
 
 export default function ManageTemplatesPage() {
   const router = useRouter();
@@ -45,26 +46,16 @@ export default function ManageTemplatesPage() {
       const res = await fetch(`/api/templates?userId=${uid}`);
       const data = await res.json();
       if (data.success) {
-        const dbTemplates = data.templates || [];
-        if (dbTemplates.length === 0) {
-          setTemplates([
-            {
-              id: "1",
-              name: "otp_test",
-              language: "en_US",
-              metaTemplateId: "1758713771836411",
-              wabaNumber: "919876543210",
-              wabaId: "28402710282733872",
-              bodyText: "{{1}} is your verification code. For your security, do not share this code.",
-              category: "AUTHENTICATION",
-              status: "APPROVED",
-              createdAt: new Date().toISOString(),
-            },
-          ]);
-        } else {
-          setTemplates(dbTemplates);
-        }
-        setWabaAccounts(data.wabaAccounts || []);
+        const permittedAccounts = getAgentPermittedChannels(data.wabaAccounts || []);
+        const permittedWabaIds = permittedAccounts.map((a: any) => a.wabaId);
+        const permittedPhones = permittedAccounts.map((a: any) => a.displayPhone);
+
+        const dbTemplates = (data.templates || []).filter(
+          (t: any) => permittedWabaIds.includes(t.wabaId) || permittedPhones.includes(t.wabaNumber)
+        );
+
+        setTemplates(dbTemplates);
+        setWabaAccounts(permittedAccounts);
       }
     } catch (err) {
       console.error("Failed to load templates:", err);

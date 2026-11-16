@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { getAgentPermittedChannels } from "@/lib/agentChannelFilter";
 
 const META_LANGUAGES = [
   { code: "en_US", label: "English (US) - en_US" },
@@ -130,15 +131,19 @@ export default function CreateWhatsAppTemplateModule() {
     initUserAndWabas();
   }, []);
 
+  // Aur fetchWabaAccounts function ko isse replace karein:
   const fetchWabaAccounts = async (uid: string) => {
     try {
       const url = uid ? `/api/templates?userId=${uid}` : `/api/templates`;
       const res = await fetch(url);
       const data = await res.json();
       if (data.success && Array.isArray(data.wabaAccounts)) {
-        setWabaAccounts(data.wabaAccounts);
-        if (data.wabaAccounts.length > 0) {
-          setWabaAccount(data.wabaAccounts[0].wabaId);
+        const permitted = getAgentPermittedChannels(data.wabaAccounts);
+        setWabaAccounts(permitted);
+        if (permitted.length > 0) {
+          setWabaAccount(permitted[0].wabaId);
+        } else {
+          setWabaAccount("");
         }
       }
     } catch (err) {

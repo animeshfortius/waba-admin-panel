@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { getAgentPermittedChannels } from "@/lib/agentChannelFilter";
 
 function CampaignsContent() {
   const searchParams = useSearchParams();
@@ -142,38 +143,46 @@ function CampaignsContent() {
       const res = await fetch(`/api/templates?userId=${uid}`);
       const data = await res.json();
       if (data.success) {
-        const accounts = data.wabaAccounts || [];
-        const tpls = data.templates || [];
-        setWabaAccounts(accounts);
-        setAllTemplates(tpls);
+        // 🔒 Strictly filter WABA channels for logged-in Agent
+        const permittedAccounts = getAgentPermittedChannels(data.wabaAccounts || []);
+        const permittedWabaIds = permittedAccounts.map((a: any) => a.wabaId);
+        const permittedPhones = permittedAccounts.map((a: any) => a.displayPhone);
+
+        const rawTpls = data.templates || [];
+        const permittedTpls = rawTpls.filter(
+          (t: any) => permittedWabaIds.includes(t.wabaId) || permittedPhones.includes(t.wabaNumber)
+        );
+
+        setWabaAccounts(permittedAccounts);
+        setAllTemplates(permittedTpls);
 
         if (data.userRates) {
           setUserRates(data.userRates);
         }
 
-        // 🟢 Robust URL query param matching for channelId or wabaNumber
         const urlChannelId = searchParams?.get("channelId");
         const urlWaba = searchParams?.get("wabaNumber");
         const urlTplId = searchParams?.get("templateId");
 
-        if (accounts.length > 0) {
+        if (permittedAccounts.length > 0) {
           if (urlChannelId) {
-            const matchedAcc = accounts.find(
+            const matchedAcc = permittedAccounts.find(
               (a: any) => a.id === urlChannelId || a.phoneNumberId === urlChannelId || a.wabaId === urlChannelId
             );
-            setSelectedChannel(matchedAcc ? (matchedAcc.phoneNumberId || matchedAcc.wabaId) : accounts[0].phoneNumberId || accounts[0].wabaId);
+            setSelectedChannel(matchedAcc ? (matchedAcc.phoneNumberId || matchedAcc.wabaId) : permittedAccounts[0].phoneNumberId || permittedAccounts[0].wabaId);
           } else if (urlWaba) {
-            const matchedAcc = accounts.find((a: any) => a.displayPhone === urlWaba || a.wabaId === urlWaba);
-            setSelectedChannel(matchedAcc ? (matchedAcc.phoneNumberId || matchedAcc.wabaId) : accounts[0].phoneNumberId || accounts[0].wabaId);
+            const matchedAcc = permittedAccounts.find((a: any) => a.displayPhone === urlWaba || a.wabaId === urlWaba);
+            setSelectedChannel(matchedAcc ? (matchedAcc.phoneNumberId || matchedAcc.wabaId) : permittedAccounts[0].phoneNumberId || permittedAccounts[0].wabaId);
           } else {
-            // Default to configured default account or first account
-            const defaultAcc = accounts.find((a: any) => a.isDefault) || accounts[0];
+            const defaultAcc = permittedAccounts.find((a: any) => a.isDefault) || permittedAccounts[0];
             setSelectedChannel(defaultAcc.phoneNumberId || defaultAcc.wabaId);
           }
+        } else {
+          setSelectedChannel("");
         }
 
-        if (urlTplId && tpls.length > 0) {
-          const matchedTpl = tpls.find((t: any) => t.id === urlTplId);
+        if (urlTplId && permittedTpls.length > 0) {
+          const matchedTpl = permittedTpls.find((t: any) => t.id === urlTplId);
           if (matchedTpl) {
             setSelectedCategory(matchedTpl.category || "");
             setSelectedTemplateId(matchedTpl.id);
@@ -225,7 +234,7 @@ function CampaignsContent() {
       return;
     }
     if (!selectedChannel) {
-      alert("Please select an onboarded WABA Channel.");
+      alert("Please select a permitted WABA Channel.");
       return;
     }
     if (processedNumbers.length === 0) {
@@ -383,7 +392,7 @@ function CampaignsContent() {
                     className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-700 focus:outline-none focus:border-emerald-500"
                   >
                     {wabaAccounts.length === 0 ? (
-                      <option value="">No Onboarded WABA Found</option>
+                      <option value="">No Permitted WABA Channel Assigned</option>
                     ) : (
                       wabaAccounts.map((acc) => {
                         const accKey = acc.phoneNumberId || acc.wabaId;

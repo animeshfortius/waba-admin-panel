@@ -8,11 +8,11 @@ export default function AgentsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<any>(null);
 
-  // Form Fields matching original requirements
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState(""); // Username / Email for login
-  const [phone, setPhone] = useState("");
+  // Exact Fields required: User ID, Password, Name, Mobile Number, Expiry Date
+  const [userIdVal, setUserIdVal] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
 
   useEffect(() => {
@@ -35,8 +35,8 @@ export default function AgentsPage() {
 
   const handleSaveAgent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email) {
-      alert("Name and Email/Username are required!");
+    if (!userIdVal || !name) {
+      alert("User ID and Agent Name are required!");
       return;
     }
 
@@ -44,8 +44,8 @@ export default function AgentsPage() {
       const url = "/api/agents";
       const method = editId ? "PATCH" : "POST";
       const body = editId 
-        ? { agentId: editId, name, email, phone, expiryDate }
-        : { name, email, phone, password: password || "agent123", expiryDate };
+        ? { agentId: editId, userId: userIdVal, name, phone, expiryDate }
+        : { userId: userIdVal, password, name, phone, expiryDate };
 
       const res = await fetch(url, {
         method,
@@ -56,7 +56,7 @@ export default function AgentsPage() {
 
       if (data.success) {
         setShowModal(false);
-        setName(""); setEmail(""); setPhone(""); setPassword(""); setExpiryDate(""); setEditId(null);
+        setUserIdVal(""); setPassword(""); setName(""); setPhone(""); setExpiryDate(""); setEditId(null);
         fetchAgents();
       } else {
         alert(data.error || "Failed to save agent");
@@ -119,7 +119,6 @@ export default function AgentsPage() {
 
   return (
     <div className="p-6 space-y-6 font-sans text-xs">
-      {/* Top Header Bar */}
       <div className="flex justify-between items-center bg-white p-5 rounded-2xl border shadow-xs">
         <div>
           <h1 className="text-xl font-bold text-gray-800">Agent Command Center</h1>
@@ -132,7 +131,7 @@ export default function AgentsPage() {
           <button
             onClick={() => {
               setEditId(null);
-              setName(""); setEmail(""); setPhone(""); setPassword(""); setExpiryDate("");
+              setUserIdVal(""); setPassword(""); setName(""); setPhone(""); setExpiryDate("");
               setShowModal(true);
             }}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl transition cursor-pointer shadow"
@@ -142,7 +141,6 @@ export default function AgentsPage() {
         </div>
       </div>
 
-      {/* Agents Table */}
       <div className="bg-white rounded-2xl border shadow-xs overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead>
@@ -167,10 +165,12 @@ export default function AgentsPage() {
             ) : (
               agents.map((ag) => (
                 <tr key={ag.id} className="hover:bg-gray-50/50 transition">
-                  <td className="p-4 font-bold text-gray-900 text-sm">{ag.name}</td>
+                  <td className="p-4 font-bold text-gray-900 text-sm">
+                    {ag.name}
+                    <div className="text-[10px] text-gray-400 font-mono">ID: {ag.userId || ag.email}</div>
+                  </td>
                   <td className="p-4 text-gray-600">
                     <div>📞 {ag.phone || "N/A"}</div>
-                    <div className="text-[10px] text-gray-400">✉️ {ag.email}</div>
                   </td>
                   <td className="p-4 text-gray-500">
                     {ag.createdAt ? new Date(ag.createdAt).toLocaleDateString() : "Recent"}
@@ -223,7 +223,9 @@ export default function AgentsPage() {
                       <button
                         onClick={() => {
                           setEditId(ag.id);
-                          setName(ag.name); setEmail(ag.email); setPhone(ag.phone || "");
+                          setUserIdVal(ag.userId || "");
+                          setName(ag.name);
+                          setPhone(ag.phone || "");
                           setExpiryDate(ag.expiryDate ? ag.expiryDate.split("T")[0] : "");
                           setShowModal(true);
                         }}
@@ -278,11 +280,37 @@ export default function AgentsPage() {
 
             <form onSubmit={handleSaveAgent} className="space-y-3">
               <div>
-                <label className="block font-medium text-gray-700 mb-1">Agent Name</label>
+                <label className="block font-medium text-gray-700 mb-1">1. User ID (Username)</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Test Agent"
+                  placeholder="e.g. agent001"
+                  value={userIdVal}
+                  onChange={(e) => setUserIdVal(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+
+              {!editId && (
+                <div>
+                  <label className="block font-medium text-gray-700 mb-1">2. Password</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Enter agent login password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block font-medium text-gray-700 mb-1">3. Agent Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Rahul Sharma"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
@@ -290,30 +318,18 @@ export default function AgentsPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-gray-700 mb-1">User ID / Email (For Login)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="test@test.in"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-gray-700 mb-1">Phone Number</label>
+                <label className="block font-medium text-gray-700 mb-1">4. Mobile Number</label>
                 <input
                   type="text"
                   placeholder="9876543210"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
+                  className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500 font-mono"
                 />
               </div>
 
               <div>
-                <label className="block font-medium text-gray-700 mb-1">Account Expiry Date</label>
+                <label className="block font-medium text-gray-700 mb-1">5. Account Expiry Date</label>
                 <input
                   type="date"
                   value={expiryDate}
@@ -321,19 +337,6 @@ export default function AgentsPage() {
                   className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
                 />
               </div>
-
-              {!editId && (
-                <div>
-                  <label className="block font-medium text-gray-700 mb-1">Password</label>
-                  <input
-                    type="password"
-                    placeholder="Enter agent password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              )}
 
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button

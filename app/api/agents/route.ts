@@ -27,8 +27,9 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    if (!body.name || !body.email) {
-      return NextResponse.json({ success: false, error: "Name and Email are required" }, { status: 400 });
+    // Validate required fields based on your exact layout
+    if (!body.userId || !body.password || !body.name) {
+      return NextResponse.json({ success: false, error: "User ID, Password, and Name are required" }, { status: 400 });
     }
 
     let newAgent;
@@ -36,11 +37,11 @@ export async function POST(request: Request) {
     if ((prisma as any).agent) {
       newAgent = await (prisma as any).agent.create({
         data: {
-          userId: body.userId || "default_user",
+          userId: body.userId, // User ID login key
           name: body.name,
-          email: body.email,
+          email: body.email || `${body.userId}@fortius.in`,
           phone: body.phone || "",
-          password: body.password || "",
+          password: body.password,
           expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
           allChannelAccess: body.allChannelAccess ?? true,
           sendTemplate: body.sendTemplate ?? false,

@@ -129,7 +129,7 @@ export default function AgentsPage() {
     );
   };
 
-  // Active Login As (Impersonation) Handler
+  // Active Login As (Impersonation) Handler - Clean Fallback Redirect to Dashboard
   const handleLoginAs = async (ag: any) => {
     try {
       const res = await fetch("/api/agents/login-as", {
@@ -141,7 +141,7 @@ export default function AgentsPage() {
       if (data.success) {
         localStorage.setItem("currentAgent", JSON.stringify(data.agent));
         alert(`🚀 Successfully switched session to Agent: ${ag.name}`);
-        window.location.href = `/dashboard/live-chat?agentMode=true`;
+        window.location.href = `/dashboard?agentMode=true`;
       } else {
         alert(`❌ Failed to login as agent: ${data.error}`);
       }

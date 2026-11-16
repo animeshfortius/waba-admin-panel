@@ -900,7 +900,7 @@ function CampaignPageContent() {
 export default function CampaignsPage() {
   return (
     <Suspense fallback={<div className="p-8 text-center text-gray-500 font-semibold">Loading Campaigns...</div>}>
-      <CampaignsContent />
+      <CampaignPageContent /> {/* ✅ Yeh bilkul sahi hai */}
     </Suspense>
   );
 }

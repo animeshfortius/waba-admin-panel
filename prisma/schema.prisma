@@ -135,6 +135,7 @@ model WhatsAppTemplate {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
+
 model CampaignLog {
   id           String    @id @default(uuid())
   userId       String
@@ -154,6 +155,7 @@ model CampaignLog {
   @@index([messageId])
   @@index([recipient])
 }
+
 model ChatSession {
   id             String        @id @default(uuid())
   userId         String        // Tenant / Admin ID
@@ -193,19 +195,21 @@ model ChatNote {
   noteBody      String      // Internal whisper note content
   createdAt     DateTime    @default(now())
 }
+
 model Agent {
-  id               String   @id @default(cuid())
-  userId           String   @unique // 👈 Yeh line add karni hai
+  id               String    @id @default(cuid())
+  userId           String    @unique
   name             String
-  email            String   @unique
+  email            String    @unique
   phone            String
   password         String
   expiryDate       DateTime?
-  allChannelAccess Boolean  @default(true)
-  sendTemplate     Boolean  @default(false)
-  sendCampaign     Boolean  @default(false)
-  liveChat         Boolean  @default(true)
-  role             String   @default("AGENT")
-  status           String   @default("ACTIVE")
-  createdAt        DateTime @default(now())
+  allChannelAccess Boolean   @default(true)
+  assignedChannels String?   @default("[]")
+  sendTemplate     Boolean   @default(false)
+  sendCampaign     Boolean   @default(false)
+  liveChat         Boolean   @default(true)
+  role             String    @default("AGENT")
+  status           String    @default("ACTIVE")
+  createdAt        DateTime  @default(now())
 }

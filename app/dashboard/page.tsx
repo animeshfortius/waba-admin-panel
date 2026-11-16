@@ -21,7 +21,7 @@ export default function DashboardPage() {
     utilityDelivered: 0,
     authTotal: 0,
     authDelivered: 0,
-    qualityRating: "GREEN",
+    qualityRating: "N/A",
     messagingLimit: "100K/day",
     verifiedName: "Loading Default Account...",
   });
@@ -377,7 +377,13 @@ export default function DashboardPage() {
             <div>
               <span className="text-[9px] text-emerald-700 block uppercase font-bold">Quality Rating</span>
               <span className="font-bold text-emerald-900 font-mono">
-                {stats.qualityRating === "GREEN" ? "🟢 HIGH (GREEN)" : stats.qualityRating === "YELLOW" ? "🟡 MEDIUM (YELLOW)" : "🔴 LOW (RED)"}
+                {stats.qualityRating === "GREEN" || stats.qualityRating === "HIGH" 
+                  ? "🟢 HIGH (GREEN)" 
+                  : stats.qualityRating === "YELLOW" || stats.qualityRating === "MEDIUM" 
+                  ? "🟡 MEDIUM (YELLOW)" 
+                  : stats.qualityRating === "RED" || stats.qualityRating === "LOW" 
+                  ? "🔴 LOW (RED)" 
+                  : "⚪ N/A (NEUTRAL)"}
               </span>
             </div>
           </div>

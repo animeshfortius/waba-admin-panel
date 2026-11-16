@@ -28,9 +28,24 @@ export async function GET(req: Request) {
 
     const activeChannelId = targetAccount?.phoneNumberId || targetAccount?.id;
 
-    // 2. Use Database values directly (matching WABA Channels configuration page)
+    // 2. Safely resolve Quality Rating and Messaging Limit
+    let rawRating = targetAccount?.qualityRating;
+    let qualityRating = "GREEN";
+    
+    if (!rawRating || rawRating === "N/A" || rawRating === "UNKNOWN" || rawRating === "") {
+      qualityRating = "N/A";
+    } else if (rawRating.toUpperCase().includes("HIGH") || rawRating.toUpperCase().includes("GREEN")) {
+      qualityRating = "GREEN";
+    } else if (rawRating.toUpperCase().includes("MED")) {
+      qualityRating = "YELLOW";
+    } else if (rawRating.toUpperCase().includes("LOW") || rawRating.toUpperCase().includes("RED")) {
+      qualityRating = "RED";
+    } else {
+      qualityRating = rawRating;
+    }
+
     let metaHealth = {
-      qualityRating: targetAccount?.qualityRating || "HIGH",
+      qualityRating: qualityRating,
       messagingLimit: targetAccount?.messagingLimit || "100,000 / 24 hrs",
       verifiedName: targetAccount
         ? targetAccount.displayName || targetAccount.displayPhone || targetAccount.phoneNumberId

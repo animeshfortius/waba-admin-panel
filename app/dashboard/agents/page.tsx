@@ -2,16 +2,78 @@
 
 import { useState, useEffect } from "react";
 
+const ALL_COUNTRY_CODES = [
+  { code: "+91", country: "India", flag: "🇮🇳" },
+  { code: "+1", country: "United States / Canada", flag: "🇺🇸" },
+  { code: "+44", country: "United Kingdom", flag: "🇬🇧" },
+  { code: "+971", country: "United Arab Emirates", flag: "🇦🇪" },
+  { code: "+966", country: "Saudi Arabia", flag: "🇸🇦" },
+  { code: "+61", country: "Australia", flag: "🇦🇺" },
+  { code: "+49", country: "Germany", flag: "🇩🇪" },
+  { code: "+33", country: "France", flag: "🇫🇷" },
+  { code: "+81", country: "Japan", flag: "🇯🇵" },
+  { code: "+86", country: "China", flag: "🇨🇳" },
+  { code: "+55", country: "Brazil", flag: "🇧🇷" },
+  { code: "+52", country: "Mexico", flag: "🇲🇽" },
+  { code: "+7", country: "Russia / Kazakhstan", flag: "🇷🇺" },
+  { code: "+39", country: "Italy", flag: "🇮🇹" },
+  { code: "+34", country: "Spain", flag: "🇪🇸" },
+  { code: "+27", country: "South Africa", flag: "🇿🇦" },
+  { code: "+20", country: "Egypt", flag: "🇪🇬" },
+  { code: "+92", country: "Pakistan", flag: "🇵🇰" },
+  { code: "+880", country: "Bangladesh", flag: "🇧🇩" },
+  { code: "+94", country: "Sri Lanka", flag: "🇱🇰" },
+  { code: "+977", country: "Nepal", flag: "🇳🇵" },
+  { code: "+65", country: "Singapore", flag: "🇸🇬" },
+  { code: "+60", country: "Malaysia", flag: "🇲🇾" },
+  { code: "+62", country: "Indonesia", flag: "🇮🇩" },
+  { code: "+63", country: "Philippines", flag: "🇵🇭" },
+  { code: "+84", country: "Vietnam", flag: "🇻🇳" },
+  { code: "+66", country: "Thailand", flag: "🇹🇭" },
+  { code: "+82", country: "South Korea", flag: "🇰🇷" },
+  { code: "+90", country: "Turkey", flag: "🇹🇷" },
+  { code: "+98", country: "Iran", flag: "🇮🇷" },
+  { code: "+964", country: "Iraq", flag: "🇮🇶" },
+  { code: "+972", country: "Israel", flag: "🇮🇱" },
+  { code: "+380", country: "Ukraine", flag: "🇺🇦" },
+  { code: "+48", country: "Poland", flag: "🇵🇱" },
+  { code: "+31", country: "Netherlands", flag: "🇳🇱" },
+  { code: "+32", country: "Belgium", flag: "🇧🇪" },
+  { code: "+41", country: "Switzerland", flag: "🇨🇭" },
+  { code: "+46", country: "Sweden", flag: "🇸🇪" },
+  { code: "+47", country: "Norway", flag: "🇳🇴" },
+  { code: "+45", country: "Denmark", flag: "🇩🇰" },
+  { code: "+358", country: "Finland", flag: "🇫🇮" },
+  { code: "+353", country: "Ireland", flag: "🇮🇪" },
+  { code: "+64", country: "New Zealand", flag: "🇳🇿" },
+  { code: "+54", country: "Argentina", flag: "🇦🇷" },
+  { code: "+57", country: "Colombia", flag: "🇨🇴" },
+  { code: "+56", country: "Chile", flag: "🇨🇱" },
+  { code: "+51", country: "Peru", flag: "🇵🇪" },
+  { code: "+58", country: "Venezuela", flag: "🇻🇪" },
+  { code: "+234", country: "Nigeria", flag: "🇳🇬" },
+  { code: "+254", country: "Kenya", flag: "🇰🇪" },
+  { code: "+233", country: "Ghana", flag: "🇬🇭" },
+  { code: "+974", country: "Qatar", flag: "🇶🇦" },
+  { code: "+965", country: "Kuwait", flag: "🇰🇼" },
+  { code: "+968", country: "Oman", flag: "🇴🇲" },
+  { code: "+973", country: "Bahrain", flag: "🇧🇭" },
+];
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<any>(null);
 
-  // Exact fields matching your reference form
+  // Form Fields
   const [name, setName] = useState("");
+  const [userIdVal, setUserIdVal] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [countryCode, setCountryCode] = useState("+91");
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
@@ -34,19 +96,29 @@ export default function AgentsPage() {
     }
   };
 
+  const handleNameChange = (val: string) => {
+    setName(val);
+    if (!editId) {
+      const suggestedId = val.toLowerCase().replace(/\s+/g, "_");
+      setUserIdVal(suggestedId);
+      setEmail(`${suggestedId}@fortius.in`);
+    }
+  };
+
   const handleSaveAgent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email) {
-      alert("Agent Name and Email are required!");
+    if (!name || !userIdVal || !email) {
+      alert("Agent Name, User ID, and Email are required!");
       return;
     }
 
     try {
       const url = "/api/agents";
       const method = editId ? "PATCH" : "POST";
+      const fullPhone = `${countryCode} ${phone}`;
       const body = editId 
-        ? { agentId: editId, name, email, phone, expiryDate }
-        : { name, password: password || "agent123", phone, email, userId: email, expiryDate };
+        ? { agentId: editId, name, userId: userIdVal, email, phone: fullPhone, expiryDate }
+        : { name, userId: userIdVal, password: password || "agent123", email, phone: fullPhone, expiryDate };
 
       const res = await fetch(url, {
         method,
@@ -57,7 +129,7 @@ export default function AgentsPage() {
 
       if (data.success) {
         setShowModal(false);
-        setName(""); setPassword(""); setPhone(""); setEmail(""); setExpiryDate(""); setEditId(null);
+        setName(""); setUserIdVal(""); setPassword(""); setPhone(""); setEmail(""); setExpiryDate(""); setEditId(null);
         fetchAgents();
       } else {
         alert(data.error || "Failed to save agent");
@@ -118,9 +190,12 @@ export default function AgentsPage() {
     }
   };
 
+  const filteredCountries = ALL_COUNTRY_CODES.filter(
+    (c) => c.country.toLowerCase().includes(countrySearch.toLowerCase()) || c.code.includes(countrySearch)
+  );
+
   return (
     <div className="p-6 space-y-6 font-sans text-xs">
-      {/* Top Header Bar */}
       <div className="flex justify-between items-center bg-white p-5 rounded-2xl border shadow-xs">
         <div>
           <h1 className="text-xl font-bold text-gray-800">Agent List</h1>
@@ -133,7 +208,7 @@ export default function AgentsPage() {
           <button
             onClick={() => {
               setEditId(null);
-              setName(""); setPassword(""); setPhone(""); setEmail(""); setExpiryDate("");
+              setName(""); setUserIdVal(""); setPassword(""); setPhone(""); setEmail(""); setExpiryDate("");
               setShowModal(true);
             }}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl transition cursor-pointer shadow"
@@ -143,7 +218,6 @@ export default function AgentsPage() {
         </div>
       </div>
 
-      {/* Agents Table */}
       <div className="bg-white rounded-2xl border shadow-xs overflow-hidden">
         <div className="p-4 border-b font-bold text-gray-700 text-sm">Filter Records</div>
         <table className="w-full text-left border-collapse">
@@ -169,7 +243,10 @@ export default function AgentsPage() {
             ) : (
               agents.map((ag) => (
                 <tr key={ag.id} className="hover:bg-gray-50/50 transition">
-                  <td className="p-4 font-bold text-gray-900 text-sm">{ag.name}</td>
+                  <td className="p-4 font-bold text-gray-900 text-sm">
+                    {ag.name}
+                    <div className="text-[10px] text-gray-400 font-mono">ID: {ag.userId}</div>
+                  </td>
                   <td className="p-4 text-gray-600">
                     <div>📞 {ag.phone || "N/A"}</div>
                     <div className="text-[10px] text-gray-400">✉️ {ag.email}</div>
@@ -186,7 +263,6 @@ export default function AgentsPage() {
                     </span>
                   </td>
                   <td className="p-4 space-y-1.5">
-                    {/* Toggle 1: All Channels Access */}
                     <label className="flex items-center justify-between cursor-pointer max-w-[170px] bg-gray-50 px-2.5 py-1 rounded-lg border">
                       <span className="font-medium text-gray-700">All Channels Access</span>
                       <input
@@ -197,7 +273,6 @@ export default function AgentsPage() {
                       />
                     </label>
 
-                    {/* Toggle 2: Send Templates */}
                     <label className="flex items-center justify-between cursor-pointer max-w-[170px] bg-gray-50 px-2.5 py-1 rounded-lg border">
                       <span className="font-medium text-gray-700">Send Templates</span>
                       <input
@@ -208,7 +283,6 @@ export default function AgentsPage() {
                       />
                     </label>
 
-                    {/* Toggle 3: Send Campaigns */}
                     <label className="flex items-center justify-between cursor-pointer max-w-[170px] bg-gray-50 px-2.5 py-1 rounded-lg border">
                       <span className="font-medium text-gray-700">Send Campaigns</span>
                       <input
@@ -226,6 +300,7 @@ export default function AgentsPage() {
                         onClick={() => {
                           setEditId(ag.id);
                           setName(ag.name);
+                          setUserIdVal(ag.userId || "");
                           setEmail(ag.email || "");
                           setPhone(ag.phone || "");
                           setExpiryDate(ag.expiryDate ? ag.expiryDate.split("T")[0] : "");
@@ -248,9 +323,9 @@ export default function AgentsPage() {
 
                   <td className="p-4 text-center">
                     <div className="flex items-center justify-center gap-1.5">
-                      <span className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer" title="Configuration">⚙️</span>
-                      <span className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer" title="Assign Channels">👤</span>
-                      <span className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer" title="Analytics">📊</span>
+                      <span className="p-1.5 bg-gray-100 rounded-lg cursor-pointer" title="Configuration">⚙️</span>
+                      <span className="p-1.5 bg-gray-100 rounded-lg cursor-pointer" title="Assign Channels">👤</span>
+                      <span className="p-1.5 bg-gray-100 rounded-lg cursor-pointer" title="Analytics">📊</span>
                     </div>
                   </td>
 
@@ -269,10 +344,10 @@ export default function AgentsPage() {
         </table>
       </div>
 
-      {/* ADD AGENT MODAL (Exact match with your reference image) */}
+      {/* ADD AGENT MODAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b pb-3">
               <h3 className="font-bold text-sm text-gray-800">Add Agent</h3>
               <button onClick={() => setShowModal(false)} className="font-bold text-gray-400 hover:text-black cursor-pointer">✕</button>
@@ -286,8 +361,20 @@ export default function AgentsPage() {
                   required
                   placeholder="Enter agent Name"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => handleNameChange(e.target.value)}
                   className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-gray-700 mb-1">User ID (For Login)</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. testagent"
+                  value={userIdVal}
+                  onChange={(e) => setUserIdVal(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500 font-mono text-emerald-700 font-bold"
                 />
               </div>
 
@@ -314,17 +401,55 @@ export default function AgentsPage() {
                 </div>
               )}
 
+              {/* Mobile Number with Searchable Country Code Dropdown */}
               <div>
                 <label className="block font-medium text-gray-700 mb-1">Mobile Number</label>
-                <div className="flex">
-                  <span className="bg-gray-100 border border-r-0 rounded-l-xl px-3 py-2 text-gray-600 font-medium">🇮🇳 +91</span>
+                <div className="flex relative">
+                  <div 
+                    onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                    className="flex items-center gap-1 bg-gray-100 border border-r-0 rounded-l-xl px-3 py-2 text-gray-700 font-medium cursor-pointer select-none min-w-[90px]"
+                  >
+                    <span>{ALL_COUNTRY_CODES.find(c => c.code === countryCode)?.flag || "🇮🇳"}</span>
+                    <span>{countryCode}</span>
+                    <span className="text-[10px] text-gray-400 ml-auto">▼</span>
+                  </div>
+
                   <input
                     type="text"
                     placeholder="Enter the mobile number"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="w-full border rounded-r-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
+                    className="w-full border rounded-r-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500 font-mono"
                   />
+
+                  {/* Searchable Country Code Dropdown */}
+                  {showCountryDropdown && (
+                    <div className="absolute top-full left-0 mt-1 w-64 bg-white border rounded-xl shadow-xl z-50 max-h-56 overflow-y-auto p-2 space-y-1">
+                      <input
+                        type="text"
+                        placeholder="Search country or code..."
+                        value={countrySearch}
+                        onChange={(e) => setCountrySearch(e.target.value)}
+                        className="w-full border rounded-lg px-2.5 py-1.5 text-xs bg-gray-50 focus:outline-none focus:border-emerald-500 mb-1"
+                        autoFocus
+                      />
+                      {filteredCountries.map((item, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            setCountryCode(item.code);
+                            setShowCountryDropdown(false);
+                            setCountrySearch("");
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 hover:bg-emerald-50 cursor-pointer text-xs rounded-lg"
+                        >
+                          <span>{item.flag}</span>
+                          <span className="font-medium text-gray-800 truncate">{item.country}</span>
+                          <span className="text-gray-400 ml-auto font-mono">{item.code}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

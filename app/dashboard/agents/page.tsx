@@ -89,6 +89,10 @@ export default function AgentsPage() {
   const [autoAssignChat, setAutoAssignChat] = useState(true);
   const [selectedWabaChannel, setSelectedWabaChannel] = useState("ALL");
 
+  // Live Meta Analytics State
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+
   useEffect(() => {
     fetchAgents();
     fetchWabaChannels();
@@ -129,10 +133,14 @@ export default function AgentsPage() {
         const res = await fetch("/api/chat/sessions");
         const data = await res.json();
         if (data.success && data.sessions) {
-          // Filter chats assigned to this agent or show all if allChannelAccess is true
           const filtered = agent.allChannelAccess
             ? data.sessions
-            : data.sessions.filter((s: any) => s.assignedTo === agent.userId || s.assignedTo === agent.name);
+            : data.sessions.filter(
+                (s: any) =>
+                  s.assignedTo === agent.userId ||
+                  s.assignedTo === agent.name ||
+                  s.assignedTo === agent.email
+              );
           setAgentChats(filtered);
         } else {
           setAgentChats([]);
@@ -140,6 +148,22 @@ export default function AgentsPage() {
       } catch (err) {
         console.error("Error fetching agent chats:", err);
         setAgentChats([]);
+      }
+    }
+
+    if (tool === "analytics") {
+      setLoadingAnalytics(true);
+      setAnalyticsData(null);
+      try {
+        const res = await fetch(`/api/agents/analytics?agentId=${agent.id}`);
+        const data = await res.json();
+        if (data.success) {
+          setAnalyticsData(data.analytics);
+        }
+      } catch (err) {
+        console.error("Error fetching agent analytics:", err);
+      } finally {
+        setLoadingAnalytics(false);
       }
     }
   };
@@ -710,33 +734,65 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* 4. AGENT TOOL MODAL: 📊 AGENT ANALYTICS */}
+      {/* 4. AGENT TOOL MODAL: 📊 LIVE META-SYNCED AGENT ANALYTICS */}
       {activeToolModal === "analytics" && selectedToolAgent && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-sm text-gray-800">📊 Performance Analytics — {selectedToolAgent.name}</h3>
-              <button onClick={() => setActiveToolModal(null)} className="font-bold text-gray-400 hover:text-black cursor-pointer">✕</button>
+              <h3 className="font-bold text-sm text-gray-800">
+                📊 Live Meta Analytics — {selectedToolAgent.name}
+              </h3>
+              <button
+                onClick={() => setActiveToolModal(null)}
+                className="font-bold text-gray-400 hover:text-black cursor-pointer"
+              >
+                ✕
+              </button>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl text-center">
-                <div className="text-2xl font-bold text-emerald-700">24</div>
-                <div className="text-[11px] font-semibold text-emerald-900 mt-1">Total Chats Handled</div>
+
+            {loadingAnalytics ? (
+              <div className="p-8 text-center text-gray-500 font-medium">
+                Fetching live Meta WABA stats...
               </div>
-              <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl text-center">
-                <div className="text-2xl font-bold text-blue-700">19</div>
-                <div className="text-[11px] font-semibold text-blue-900 mt-1">Resolved Chats</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl text-center">
+                  <div className="text-2xl font-bold text-emerald-700">
+                    {analyticsData?.totalChats ?? 0}
+                  </div>
+                  <div className="text-[11px] font-semibold text-emerald-900 mt-1">
+                    Total Chats Handled
+                  </div>
+                </div>
+                <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl text-center">
+                  <div className="text-2xl font-bold text-blue-700">
+                    {analyticsData?.resolvedChats ?? 0}
+                  </div>
+                  <div className="text-[11px] font-semibold text-blue-900 mt-1">
+                    Resolved Chats
+                  </div>
+                </div>
+                <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl text-center">
+                  <div className="text-2xl font-bold text-amber-700">
+                    {analyticsData?.avgResponseTime ?? "0s"}
+                  </div>
+                  <div className="text-[11px] font-semibold text-amber-900 mt-1">
+                    Avg First Response
+                  </div>
+                </div>
+                <div className="bg-purple-50 border border-purple-100 p-4 rounded-xl text-center">
+                  <div className="text-2xl font-bold text-purple-700">
+                    {analyticsData?.metaDeliveryRate ?? "0%"}
+                  </div>
+                  <div className="text-[11px] font-semibold text-purple-900 mt-1">
+                    Meta Delivery / Read Rate
+                  </div>
+                </div>
               </div>
-              <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl text-center">
-                <div className="text-2xl font-bold text-amber-700">1m 42s</div>
-                <div className="text-[11px] font-semibold text-amber-900 mt-1">Avg First Response</div>
-              </div>
-              <div className="bg-purple-50 border border-purple-100 p-4 rounded-xl text-center">
-                <div className="text-2xl font-bold text-purple-700">98%</div>
-                <div className="text-[11px] font-semibold text-purple-900 mt-1">Customer Satisfaction</div>
-              </div>
-            </div>
-            <div className="flex justify-end pt-3 border-t">
+            )}
+
+            <div className="flex justify-between items-center pt-3 border-t text-[11px] text-gray-400">
+              <span>Messages Sent: {analyticsData?.totalMessagesSent ?? 0}</span>
               <button
                 onClick={() => setActiveToolModal(null)}
                 className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold text-gray-600 cursor-pointer"

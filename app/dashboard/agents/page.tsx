@@ -8,7 +8,6 @@ export default function AgentsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editAgent, setEditAgent] = useState<any>(null);
 
-  // Form states
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -33,7 +32,6 @@ export default function AgentsPage() {
   };
 
   const handleToggle = async (agentId: string, field: string, currentValue: boolean) => {
-    // Optimistic UI update
     setAgents((prev) =>
       prev.map((ag) => (ag.id === agentId ? { ...ag, [field]: !currentValue } : ag))
     );
@@ -46,7 +44,7 @@ export default function AgentsPage() {
       });
     } catch (err) {
       console.error("Failed to update permission", err);
-      fetchAgents(); // Rollback on failure
+      fetchAgents();
     }
   };
 
@@ -137,13 +135,13 @@ export default function AgentsPage() {
                     </span>
                   </td>
                   <td className="p-4 space-y-2">
-                    {/* Toggle 1: All Chats */}
+                    {/* Toggle 1: Chats (allChannelAccess) */}
                     <label className="flex items-center justify-between cursor-pointer max-w-[180px] bg-gray-50 px-2.5 py-1 rounded-lg border">
                       <span className="font-medium text-gray-700">Chats (All)</span>
                       <input
                         type="checkbox"
-                        checked={ag.allChatsAccess ?? true}
-                        onChange={() => handleToggle(ag.id, "allChatsAccess", ag.allChatsAccess ?? true)}
+                        checked={ag.allChannelAccess ?? true}
+                        onChange={() => handleToggle(ag.id, "allChannelAccess", ag.allChannelAccess ?? true)}
                         className="accent-emerald-600 w-4 h-4 cursor-pointer"
                       />
                     </label>

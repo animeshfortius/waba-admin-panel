@@ -8,7 +8,6 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
 
-    // Fallback if model is not generated yet
     if (!(prisma as any).agent) {
       return NextResponse.json({ success: true, agents: [] });
     }
@@ -62,7 +61,6 @@ export async function POST(request: Request) {
   }
 }
 
-// 🟢 PATCH Method added for live toggles sync
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();

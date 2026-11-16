@@ -87,7 +87,10 @@ export default function AgentsPage() {
   const [wabaChannels, setWabaChannels] = useState<any[]>([]);
   const [agentChats, setAgentChats] = useState<any[]>([]);
   const [autoAssignChat, setAutoAssignChat] = useState(true);
-  const [selectedWabaChannel, setSelectedWabaChannel] = useState("ALL");
+  
+  // Multi-Channel Selection State
+  const [selectedChannelsList, setSelectedChannelsList] = useState<string[]>([]);
+  const [savingConfig, setSavingConfig] = useState(false);
 
   // Live Meta Analytics State
   const [analyticsData, setAnalyticsData] = useState<any>(null);
@@ -128,6 +131,21 @@ export default function AgentsPage() {
     setSelectedToolAgent(agent);
     setActiveToolModal(tool);
 
+    if (tool === "config") {
+      // Load saved channels from agent object (supports array or JSON string)
+      let existingChannels: string[] = [];
+      if (Array.isArray(agent.assignedChannelsList)) {
+        existingChannels = agent.assignedChannelsList;
+      } else if (typeof agent.assignedChannels === "string") {
+        try {
+          existingChannels = JSON.parse(agent.assignedChannels);
+        } catch {
+          existingChannels = agent.assignedChannels.split(",").filter(Boolean);
+        }
+      }
+      setSelectedChannelsList(existingChannels);
+    }
+
     if (tool === "chats") {
       try {
         const res = await fetch("/api/chat/sessions");
@@ -165,6 +183,34 @@ export default function AgentsPage() {
       } finally {
         setLoadingAnalytics(false);
       }
+    }
+  };
+
+  const handleSaveChannelConfig = async () => {
+    if (!selectedToolAgent) return;
+    setSavingConfig(true);
+    try {
+      const res = await fetch("/api/agents", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId: selectedToolAgent.id,
+          assignedChannels: JSON.stringify(selectedChannelsList),
+          allChannelAccess: selectedChannelsList.length === 0,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchAgents();
+        setActiveToolModal(null);
+      } else {
+        alert(data.error || "Failed to save channel permissions");
+      }
+    } catch (err) {
+      console.error("Config save error:", err);
+      alert("Error saving channel permissions");
+    } finally {
+      setSavingConfig(false);
     }
   };
 
@@ -219,7 +265,6 @@ export default function AgentsPage() {
 
   const handleToggle = async (agentId: string, field: string, currentValue: boolean) => {
     const newValue = !currentValue;
-    // Optimistic UI update
     setAgents((prev) =>
       prev.map((ag) => (ag.id === agentId ? { ...ag, [field]: newValue } : ag))
     );
@@ -265,7 +310,22 @@ export default function AgentsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        localStorage.setItem("currentAgent", JSON.stringify(data.agent));
+        // Parse assignedChannels so templates & campaigns know exact permitted numbers
+        let permittedChannels: string[] = [];
+        if (typeof data.agent?.assignedChannels === "string") {
+          try {
+            permittedChannels = JSON.parse(data.agent.assignedChannels);
+          } catch {
+            permittedChannels = data.agent.assignedChannels.split(",").filter(Boolean);
+          }
+        } else if (Array.isArray(agent.assignedChannelsList)) {
+          permittedChannels = agent.assignedChannelsList;
+        }
+
+        localStorage.setItem(
+          "currentAgent",
+          JSON.stringify({ ...data.agent, assignedChannelsList: permittedChannels })
+        );
         window.location.href = "/dashboard/chat?agentMode=true";
       } else {
         alert(data.error || "Failed to login as agent");
@@ -287,7 +347,6 @@ export default function AgentsPage() {
       ag.phone?.includes(searchQuery)
   );
 
-  // Reusable Sliding Toggle Switch Component
   const ToggleSwitch = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
     <button
       type="button"
@@ -371,120 +430,138 @@ export default function AgentsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredAgents.map((ag) => (
-                  <tr key={ag.id} className="hover:bg-gray-50/50 transition">
-                    <td className="p-4 font-bold text-gray-900 text-sm">
-                      {ag.name}
-                      <div className="text-[10px] text-gray-400 font-mono">ID: {ag.userId}</div>
-                    </td>
-                    <td className="p-4 text-gray-600">
-                      <div>📞 {ag.phone || "N/A"}</div>
-                      <div className="text-[10px] text-gray-400">✉️ {ag.email}</div>
-                    </td>
-                    <td className="p-4 text-gray-500">
-                      {ag.createdAt ? new Date(ag.createdAt).toLocaleString() : "16 Nov 2026"}
-                    </td>
-                    <td className="p-4">
-                      <div className="font-bold text-gray-800">
-                        {ag.expiryDate ? new Date(ag.expiryDate).toLocaleDateString() : "30/10/2026"}
-                      </div>
-                      <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full text-[9px]">
-                        ACTIVE
-                      </span>
-                    </td>
-                    <td className="p-4 space-y-2">
-                      {/* Toggle 1: All Chats Access */}
-                      <div className="flex items-center justify-between max-w-[185px] bg-gray-50 px-3 py-1.5 rounded-xl border">
-                        <span className="font-semibold text-gray-700">All Chats Access</span>
-                        <ToggleSwitch
-                          checked={ag.allChannelAccess ?? true}
-                          onChange={() => handleToggle(ag.id, "allChannelAccess", ag.allChannelAccess ?? true)}
-                        />
-                      </div>
+                filteredAgents.map((ag) => {
+                  let chCount = 0;
+                  if (typeof ag.assignedChannels === "string") {
+                    try {
+                      chCount = JSON.parse(ag.assignedChannels).length;
+                    } catch {
+                      chCount = 0;
+                    }
+                  } else if (Array.isArray(ag.assignedChannelsList)) {
+                    chCount = ag.assignedChannelsList.length;
+                  }
 
-                      {/* Toggle 2: Send Templates */}
-                      <div className="flex items-center justify-between max-w-[185px] bg-gray-50 px-3 py-1.5 rounded-xl border">
-                        <span className="font-semibold text-gray-700">Send Templates</span>
-                        <ToggleSwitch
-                          checked={ag.sendTemplate ?? false}
-                          onChange={() => handleToggle(ag.id, "sendTemplate", ag.sendTemplate ?? false)}
-                        />
-                      </div>
+                  return (
+                    <tr key={ag.id} className="hover:bg-gray-50/50 transition">
+                      <td className="p-4 font-bold text-gray-900 text-sm">
+                        {ag.name}
+                        <div className="text-[10px] text-gray-400 font-mono">ID: {ag.userId}</div>
+                        <div className="mt-1">
+                          <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md text-[9px] font-semibold">
+                            {chCount > 0 ? `${chCount} Channel(s) Permitted` : "All Channels"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-4 text-gray-600">
+                        <div>📞 {ag.phone || "N/A"}</div>
+                        <div className="text-[10px] text-gray-400">✉️ {ag.email}</div>
+                      </td>
+                      <td className="p-4 text-gray-500">
+                        {ag.createdAt ? new Date(ag.createdAt).toLocaleString() : "16 Nov 2026"}
+                      </td>
+                      <td className="p-4">
+                        <div className="font-bold text-gray-800">
+                          {ag.expiryDate ? new Date(ag.expiryDate).toLocaleDateString() : "30/10/2026"}
+                        </div>
+                        <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full text-[9px]">
+                          ACTIVE
+                        </span>
+                      </td>
+                      <td className="p-4 space-y-2">
+                        {/* Toggle 1: All Chats Access */}
+                        <div className="flex items-center justify-between max-w-[185px] bg-gray-50 px-3 py-1.5 rounded-xl border">
+                          <span className="font-semibold text-gray-700">All Chats Access</span>
+                          <ToggleSwitch
+                            checked={ag.allChannelAccess ?? true}
+                            onChange={() => handleToggle(ag.id, "allChannelAccess", ag.allChannelAccess ?? true)}
+                          />
+                        </div>
 
-                      {/* Toggle 3: Send Campaigns */}
-                      <div className="flex items-center justify-between max-w-[185px] bg-gray-50 px-3 py-1.5 rounded-xl border">
-                        <span className="font-semibold text-gray-700">Send Campaigns</span>
-                        <ToggleSwitch
-                          checked={ag.sendCampaign ?? false}
-                          onChange={() => handleToggle(ag.id, "sendCampaign", ag.sendCampaign ?? false)}
-                        />
-                      </div>
-                    </td>
+                        {/* Toggle 2: Send Templates */}
+                        <div className="flex items-center justify-between max-w-[185px] bg-gray-50 px-3 py-1.5 rounded-xl border">
+                          <span className="font-semibold text-gray-700">Send Templates</span>
+                          <ToggleSwitch
+                            checked={ag.sendTemplate ?? false}
+                            onChange={() => handleToggle(ag.id, "sendTemplate", ag.sendTemplate ?? false)}
+                          />
+                        </div>
 
-                    <td className="p-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => {
-                            setEditId(ag.id);
-                            setName(ag.name);
-                            setUserIdVal(ag.userId || "");
-                            setEmail(ag.email || "");
-                            setPhone(ag.phone || "");
-                            setExpiryDate(ag.expiryDate ? ag.expiryDate.split("T")[0] : "");
-                            setShowModal(true);
-                          }}
-                          className="p-2 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl cursor-pointer transition border border-amber-200"
-                          title="Edit Agent"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDelete(ag.id)}
-                          className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl cursor-pointer transition border border-red-200"
-                          title="Delete Agent"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
+                        {/* Toggle 3: Send Campaigns */}
+                        <div className="flex items-center justify-between max-w-[185px] bg-gray-50 px-3 py-1.5 rounded-xl border">
+                          <span className="font-semibold text-gray-700">Send Campaigns</span>
+                          <ToggleSwitch
+                            checked={ag.sendCampaign ?? false}
+                            onChange={() => handleToggle(ag.id, "sendCampaign", ag.sendCampaign ?? false)}
+                          />
+                        </div>
+                      </td>
 
-                    {/* Working Agent Tools Buttons */}
-                    <td className="p-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => openAgentTool(ag, "config")}
-                          className="p-2 bg-gray-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl cursor-pointer transition border border-gray-200"
-                          title="Chat Configuration"
-                        >
-                          ⚙️
-                        </button>
-                        <button
-                          onClick={() => openAgentTool(ag, "chats")}
-                          className="p-2 bg-gray-100 hover:bg-blue-50 hover:text-blue-700 rounded-xl cursor-pointer transition border border-gray-200"
-                          title="Assigned Chats"
-                        >
-                          👤
-                        </button>
-                        <button
-                          onClick={() => openAgentTool(ag, "analytics")}
-                          className="p-2 bg-gray-100 hover:bg-purple-50 hover:text-purple-700 rounded-xl cursor-pointer transition border border-gray-200"
-                          title="Agent Analytics"
-                        >
-                          📊
-                        </button>
-                      </div>
-                    </td>
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditId(ag.id);
+                              setName(ag.name);
+                              setUserIdVal(ag.userId || "");
+                              setEmail(ag.email || "");
+                              setPhone(ag.phone || "");
+                              setExpiryDate(ag.expiryDate ? ag.expiryDate.split("T")[0] : "");
+                              setShowModal(true);
+                            }}
+                            className="p-2 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl cursor-pointer transition border border-amber-200"
+                            title="Edit Agent"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDelete(ag.id)}
+                            className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl cursor-pointer transition border border-red-200"
+                            title="Delete Agent"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
 
-                    <td className="p-4 text-right">
-                      <button
-                        onClick={() => handleLoginAs(ag)}
-                        className="bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white font-bold px-3.5 py-2 rounded-xl transition cursor-pointer border border-emerald-200"
-                      >
-                        🔓 Login
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      {/* Working Agent Tools Buttons */}
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => openAgentTool(ag, "config")}
+                            className="p-2 bg-gray-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl cursor-pointer transition border border-gray-200"
+                            title="Multi-Channel Access & Configuration"
+                          >
+                            ⚙️
+                          </button>
+                          <button
+                            onClick={() => openAgentTool(ag, "chats")}
+                            className="p-2 bg-gray-100 hover:bg-blue-50 hover:text-blue-700 rounded-xl cursor-pointer transition border border-gray-200"
+                            title="Assigned Chats"
+                          >
+                            👤
+                          </button>
+                          <button
+                            onClick={() => openAgentTool(ag, "analytics")}
+                            className="p-2 bg-gray-100 hover:bg-purple-50 hover:text-purple-700 rounded-xl cursor-pointer transition border border-gray-200"
+                            title="Agent Analytics"
+                          >
+                            📊
+                          </button>
+                        </div>
+                      </td>
+
+                      <td className="p-4 text-right">
+                        <button
+                          onClick={() => handleLoginAs(ag)}
+                          className="bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white font-bold px-3.5 py-2 rounded-xl transition cursor-pointer border border-emerald-200"
+                        >
+                          🔓 Login
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -642,35 +719,90 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* 2. AGENT TOOL MODAL: ⚙️ CHAT CONFIGURATION */}
+      {/* 2. AGENT TOOL MODAL: ⚙️ MULTI-CHANNEL PERMISSION & CHAT CONFIG */}
       {activeToolModal === "config" && selectedToolAgent && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-sm text-gray-800">⚙️ Chat Configuration — {selectedToolAgent.name}</h3>
-              <button onClick={() => setActiveToolModal(null)} className="font-bold text-gray-400 hover:text-black cursor-pointer">✕</button>
+              <h3 className="font-bold text-sm text-gray-800">
+                ⚙️ Channel Access & Config — {selectedToolAgent.name}
+              </h3>
+              <button
+                onClick={() => setActiveToolModal(null)}
+                className="font-bold text-gray-400 hover:text-black cursor-pointer"
+              >
+                ✕
+              </button>
             </div>
+
             <div className="space-y-4">
+              <div className="bg-emerald-50/70 border border-emerald-200 p-3 rounded-xl text-[11px] text-emerald-900">
+                <strong>Channel Isolation:</strong> Agent will only be able to view chats, send templates, and run campaigns from the channels selected below. (Leave all unchecked for All Channels access).
+              </div>
+
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Assign WABA Channel</label>
-                <select
-                  value={selectedWabaChannel}
-                  onChange={(e) => setSelectedWabaChannel(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="ALL">All Connected WABA Numbers</option>
-                  {wabaChannels.map((ch: any) => (
-                    <option key={ch.id} value={ch.displayPhone}>
-                      {ch.displayName} ({ch.displayPhone})
-                    </option>
-                  ))}
-                </select>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="font-bold text-gray-700">
+                    Select Permitted WABA Channels (Multi-Select)
+                  </label>
+                  {selectedChannelsList.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedChannelsList([])}
+                      className="text-[10px] text-red-600 hover:underline font-semibold cursor-pointer"
+                    >
+                      Clear Selection
+                    </button>
+                  )}
+                </div>
+
+                {wabaChannels.length === 0 ? (
+                  <div className="p-4 text-center text-gray-400 border rounded-xl bg-gray-50">
+                    No WABA channels connected yet.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto border rounded-xl p-2 bg-gray-50">
+                    {wabaChannels.map((ch: any) => {
+                      const phoneKey = ch.displayPhone || ch.phoneNumberId || ch.id;
+                      const isChecked = selectedChannelsList.includes(phoneKey);
+                      return (
+                        <label
+                          key={ch.id}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition ${
+                            isChecked
+                              ? "bg-emerald-50 border-emerald-400 text-emerald-900"
+                              : "bg-white border-gray-200 text-gray-700 hover:bg-gray-100"
+                          }`}
+                        >
+                          <div>
+                            <div className="font-bold text-xs">{ch.displayName || "WABA Channel"}</div>
+                            <div className="text-[10px] font-mono text-gray-500">{phoneKey}</div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              setSelectedChannelsList((prev) =>
+                                prev.includes(phoneKey)
+                                  ? prev.filter((item) => item !== phoneKey)
+                                  : [...prev, phoneKey]
+                              );
+                            }}
+                            className="accent-emerald-600 w-4 h-4 cursor-pointer"
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border">
                 <div>
                   <div className="font-bold text-gray-800">Auto-Assign Incoming Chats</div>
-                  <div className="text-[10px] text-gray-400">Automatically route new customer messages to this agent</div>
+                  <div className="text-[10px] text-gray-400">
+                    Automatically route new customer messages to this agent
+                  </div>
                 </div>
                 <ToggleSwitch checked={autoAssignChat} onChange={() => setAutoAssignChat(!autoAssignChat)} />
               </div>
@@ -683,13 +815,11 @@ export default function AgentsPage() {
                   Close
                 </button>
                 <button
-                  onClick={() => {
-                    alert(`✅ Configuration saved for ${selectedToolAgent.name}!`);
-                    setActiveToolModal(null);
-                  }}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold cursor-pointer"
+                  onClick={handleSaveChannelConfig}
+                  disabled={savingConfig}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold cursor-pointer shadow disabled:opacity-50"
                 >
-                  Save Config
+                  {savingConfig ? "Saving..." : "Save Permissions"}
                 </button>
               </div>
             </div>

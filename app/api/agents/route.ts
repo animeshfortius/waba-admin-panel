@@ -16,7 +16,21 @@ export async function GET(request: Request) {
       where: userId ? { userId } : undefined,
       orderBy: { createdAt: "desc" },
     });
-    return NextResponse.json({ success: true, agents });
+
+    // Parse assignedChannels JSON string into array for frontend
+    const formattedAgents = agents.map((ag: any) => {
+      let parsedChannels: string[] = [];
+      if (ag.assignedChannels) {
+        try {
+          parsedChannels = JSON.parse(ag.assignedChannels);
+        } catch {
+          parsedChannels = ag.assignedChannels.split(",").filter(Boolean);
+        }
+      }
+      return { ...ag, assignedChannelsList: parsedChannels };
+    });
+
+    return NextResponse.json({ success: true, agents: formattedAgents });
   } catch (error: any) {
     console.error("Fetch agents error:", error);
     return NextResponse.json({ success: true, agents: [] });
@@ -26,33 +40,32 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    
+
     if (!body.name || !body.userId) {
       return NextResponse.json({ success: false, error: "Agent Name and User ID are required" }, { status: 400 });
     }
 
-    let newAgent;
+    const channelsJson = Array.isArray(body.assignedChannels)
+      ? JSON.stringify(body.assignedChannels)
+      : "[]";
 
-    if ((prisma as any).agent) {
-      newAgent = await (prisma as any).agent.create({
-        data: {
-          userId: body.userId, // 👈 Saved as unique User ID for login
-          name: body.name,
-          email: body.email || `${body.userId}@fortius.in`,
-          phone: body.phone || "",
-          password: body.password || "agent123",
-          expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
-          allChannelAccess: body.allChannelAccess ?? true,
-          sendTemplate: body.sendTemplate ?? false,
-          sendCampaign: body.sendCampaign ?? false,
-          liveChat: body.liveChat ?? true,
-          role: "AGENT",
-          status: "ACTIVE",
-        },
-      });
-    } else {
-      throw new Error("Prisma Agent model is not compiled in this deployment yet.");
-    }
+    const newAgent = await (prisma as any).agent.create({
+      data: {
+        userId: body.userId,
+        name: body.name,
+        email: body.email || `${body.userId}@fortius.in`,
+        phone: body.phone || "",
+        password: body.password || "agent123",
+        expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
+        allChannelAccess: body.allChannelAccess ?? true,
+        assignedChannels: channelsJson,
+        sendTemplate: body.sendTemplate ?? false,
+        sendCampaign: body.sendCampaign ?? false,
+        liveChat: body.liveChat ?? true,
+        role: "AGENT",
+        status: "ACTIVE",
+      },
+    });
 
     return NextResponse.json({ success: true, agent: newAgent });
   } catch (error: any) {
@@ -75,15 +88,16 @@ export async function PATCH(request: Request) {
       updates.expiryDate = new Date(updates.expiryDate);
     }
 
-    let updatedAgent;
-    if ((prisma as any).agent) {
-      updatedAgent = await (prisma as any).agent.update({
-        where: { id: isNaN(Number(targetId)) ? targetId : Number(targetId) },
-        data: updates,
-      });
-    } else {
-      throw new Error("Prisma Agent model is not compiled in this deployment yet.");
+    // Serialize assignedChannels array to JSON string for DB
+    if (Array.isArray(updates.assignedChannels)) {
+      updates.assignedChannels = JSON.stringify(updates.assignedChannels);
     }
+    delete updates.assignedChannelsList;
+
+    const updatedAgent = await (prisma as any).agent.update({
+      where: { id: isNaN(Number(targetId)) ? targetId : Number(targetId) },
+      data: updates,
+    });
 
     return NextResponse.json({ success: true, agent: updatedAgent });
   } catch (error: any) {
@@ -96,16 +110,14 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
-    
+
     if (!id) {
       return NextResponse.json({ success: false, error: "Agent ID required" }, { status: 400 });
     }
 
-    if ((prisma as any).agent) {
-      await (prisma as any).agent.delete({
-        where: { id: isNaN(Number(id)) ? id : Number(id) },
-      });
-    }
+    await (prisma as any).agent.delete({
+      where: { id: isNaN(Number(id)) ? id : Number(id) },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

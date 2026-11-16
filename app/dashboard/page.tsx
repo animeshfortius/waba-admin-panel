@@ -27,49 +27,34 @@ export default function DashboardPage() {
   });
   const [loading, setLoading] = useState(true);
 
-  // 1. Fetch channels on mount and set the default active channel first
+  // Fetch stats and accounts directly from the stats API endpoint
   useEffect(() => {
-    fetchChannels();
-  }, []);
-
-  // 2. Fetch stats whenever filter or selected channel changes
-  useEffect(() => {
-    if (selectedChannel) {
-      fetchDashboardStats();
-    }
+    fetchDashboardStats();
   }, [filter, selectedChannel, startDate, endDate]);
 
-  const fetchChannels = async () => {
-    try {
-      const res = await fetch("/api/waba/accounts");
-      const data = await res.json();
-      if (data.accounts && data.accounts.length > 0) {
-        setChannels(data.accounts);
-
-        // Find the default account or fallback to the first onboarded account
-        const defaultAcc = data.accounts.find((acc: any) => acc.isDefault) || data.accounts[0];
-        const defaultId = defaultAcc.phoneNumberId || defaultAcc.id;
-
-        setSelectedChannel(defaultId);
-      }
-    } catch (e) {
-      console.error("Error fetching accounts:", e);
-    }
-  };
-
   const fetchDashboardStats = async () => {
-    if (!selectedChannel) return;
     setLoading(true);
     try {
-      let url = `/api/dashboard/stats?filter=${filter}&channelId=${selectedChannel}`;
+      let url = `/api/dashboard/stats?filter=${filter}`;
+      if (selectedChannel) {
+        url += `&channelId=${selectedChannel}`;
+      }
       if (filter === "CUSTOM" && startDate && endDate) {
         url += `&startDate=${startDate}&endDate=${endDate}`;
       }
 
       const res = await fetch(url);
       const data = await res.json();
-      if (data.success && data.stats) {
-        setStats(data.stats);
+      if (data.success) {
+        if (data.accounts && data.accounts.length > 0) {
+          setChannels(data.accounts);
+        }
+        if (!selectedChannel && data.selectedChannelId) {
+          setSelectedChannel(data.selectedChannelId);
+        }
+        if (data.stats) {
+          setStats(data.stats);
+        }
       }
     } catch (err) {
       console.error("Error fetching stats:", err);
@@ -108,7 +93,7 @@ export default function DashboardPage() {
             ) : (
               channels.map((ch: any) => (
                 <option key={ch.id} value={ch.phoneNumberId || ch.id}>
-                  📱 {ch.displayPhone || ch.phoneNumberId} — {ch.verifiedName || "Active WABA"} {ch.isDefault ? "⭐ (Default)" : ""}
+                  📱 {ch.displayPhone || ch.phoneNumberId} — {ch.displayName || "Active WABA"} {ch.isDefault ? "⭐ (Default)" : ""}
                 </option>
               ))
             )}

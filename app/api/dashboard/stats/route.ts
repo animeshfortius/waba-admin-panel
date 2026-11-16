@@ -9,8 +9,10 @@ export async function GET(req: Request) {
     const endDateParam = searchParams.get("endDate");
     const channelId = searchParams.get("channelId");
 
-    // 1. Fetch all accounts to find target or default account
-    const allAccounts = await prisma.wabaAccount.findMany();
+    // 1. Fetch all onboarded WABA accounts
+    const allAccounts = await prisma.wabaAccount.findMany({
+      orderBy: { createdAt: "asc" },
+    });
 
     let targetAccount = null;
     if (channelId && channelId !== "ALL") {
@@ -19,7 +21,7 @@ export async function GET(req: Request) {
       );
     }
 
-    // Fallback to default account if no specific channel requested
+    // Fallback to default or first account
     if (!targetAccount && allAccounts.length > 0) {
       targetAccount = allAccounts.find((acc: any) => acc.isDefault) || allAccounts[0];
     }
@@ -32,7 +34,7 @@ export async function GET(req: Request) {
       messagingLimit: "100K/day",
       verifiedName: targetAccount
         ? targetAccount.displayName || targetAccount.displayPhone || targetAccount.phoneNumberId
-        : "WhatsApp Business",
+        : "No Account Connected",
     };
 
     if (targetAccount && targetAccount.accessToken && targetAccount.phoneNumberId) {
@@ -111,6 +113,14 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       success: true,
+      selectedChannelId: activeChannelId || "",
+      accounts: allAccounts.map((acc: any) => ({
+        id: acc.id,
+        phoneNumberId: acc.phoneNumberId,
+        displayPhone: acc.displayPhone,
+        displayName: acc.displayName,
+        isDefault: acc.isDefault || false,
+      })),
       stats: {
         totalSent,
         totalDelivered,

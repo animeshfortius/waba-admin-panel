@@ -1,6 +1,6 @@
 "use client";
 
-import Sidebar import "@/components/sidebar";
+import Sidebar from "@/components/sidebar";
 import LogoutButton from "@/components/LogoutButton";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";

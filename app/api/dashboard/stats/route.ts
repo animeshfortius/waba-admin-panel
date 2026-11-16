@@ -9,25 +9,30 @@ export async function GET(req: Request) {
     const endDateParam = searchParams.get("endDate");
     const channelId = searchParams.get("channelId");
 
-    // 1. Fetch all accounts to find the requested or default one
+    // 1. Fetch all accounts to find target or default account
     const allAccounts = await prisma.wabaAccount.findMany();
-    
+
     let targetAccount = null;
-    if (channelId) {
+    if (channelId && channelId !== "ALL") {
       targetAccount = allAccounts.find(
         (acc: any) => acc.id === channelId || acc.phoneNumberId === channelId
       );
     }
-    // Fallback to default or first account if none matched
+
+    // Fallback to default account if no specific channel requested
     if (!targetAccount && allAccounts.length > 0) {
       targetAccount = allAccounts.find((acc: any) => acc.isDefault) || allAccounts[0];
     }
 
-    // 2. Fetch Live Meta Health for this specific account
+    const activeChannelId = targetAccount?.phoneNumberId || targetAccount?.id;
+
+    // 2. Fetch Live Health from Meta Graph API for target account
     let metaHealth = {
-      qualityRating: "GREEN",
+      qualityRating: targetAccount?.qualityRating || "GREEN",
       messagingLimit: "100K/day",
-      verifiedName: targetAccount ? (targetAccount.verifiedName || targetAccount.displayPhone || targetAccount.phoneNumberId) : "WhatsApp Business",
+      verifiedName: targetAccount
+        ? targetAccount.displayName || targetAccount.displayPhone || targetAccount.phoneNumberId
+        : "WhatsApp Business",
     };
 
     if (targetAccount && targetAccount.accessToken && targetAccount.phoneNumberId) {
@@ -38,8 +43,8 @@ export async function GET(req: Request) {
         );
         const metaData = await metaRes.json();
         if (metaData && !metaData.error) {
-          metaHealth.qualityRating = metaData.quality_rating || "GREEN";
-          metaHealth.messagingLimit = metaData.messaging_limit_tier || "100K/day";
+          metaHealth.qualityRating = metaData.quality_rating || metaHealth.qualityRating;
+          metaHealth.messagingLimit = metaData.messaging_limit_tier || metaHealth.messagingLimit;
           metaHealth.verifiedName = metaData.verified_name || metaHealth.verifiedName;
         }
       } catch (e) {
@@ -66,13 +71,15 @@ export async function GET(req: Request) {
       startDate = new Date(0);
     }
 
-    const dateQuery = filter === "ALL" && !startDateParam ? {} : { createdAt: { gte: startDate, lte: endDate } };
-    
-    // Filter messages strictly for this account's phone number or session channel
-    const activeChannelId = targetAccount?.phoneNumberId || channelId;
-    const channelQuery = activeChannelId ? { chatSession: { channel: activeChannelId } } : {};
+    const dateQuery =
+      filter === "ALL" && !startDateParam
+        ? {}
+        : { createdAt: { gte: startDate, lte: endDate } };
+    const channelQuery = activeChannelId
+      ? { chatSession: { channel: activeChannelId } }
+      : {};
 
-    // 4. Database Metrics
+    // 4. Database Metrics (Sent, Delivered, Read, Unread, Failed)
     const totalSent = await prisma.chatMessage.count({
       where: { senderType: "AGENT", ...dateQuery, ...channelQuery },
     });
@@ -93,7 +100,7 @@ export async function GET(req: Request) {
       where: { status: "FAILED", ...dateQuery, ...channelQuery },
     });
 
-    // Categories Breakdown
+    // Category Breakdowns
     const marketingTotal = await prisma.chatMessage.count({
       where: { messageType: "template", ...dateQuery, ...channelQuery },
     });

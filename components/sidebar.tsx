@@ -14,7 +14,8 @@ export default function Sidebar() {
     if (agent) {
       setIsAgentMode(true);
       try {
-        setAgentData(JSON.parse(agent));
+        const parsed = JSON.parse(agent);
+        setAgentData(parsed);
       } catch (e) {
         console.error("Failed to parse agent data", e);
       }
@@ -43,7 +44,7 @@ export default function Sidebar() {
                 <span>Live Chat</span>
               </Link>
 
-              {/* Show Manage Template ONLY if sendTemplate is ticked */}
+              {/* Show Manage Template ONLY if sendTemplate is explicitly true */}
               {agentData?.sendTemplate === true && (
                 <Link
                   href="/dashboard/templates"
@@ -56,7 +57,7 @@ export default function Sidebar() {
                 </Link>
               )}
 
-              {/* Show Campaigns & Broadcast ONLY if sendCampaign is ticked */}
+              {/* Show Campaigns & Broadcast ONLY if sendCampaign is explicitly true */}
               {agentData?.sendCampaign === true && (
                 <Link
                   href="/dashboard/campaigns"

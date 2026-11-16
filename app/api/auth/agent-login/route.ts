@@ -8,15 +8,21 @@ export async function POST(request: Request) {
     const { email, password } = await request.json();
 
     if (!email || !password) {
-      return NextResponse.json({ success: false, error: "Email and password are required" }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Username/Email and password are required" }, { status: 400 });
     }
 
     if (!(prisma as any).agent) {
       return NextResponse.json({ success: false, error: "Agent system not initialized" }, { status: 500 });
     }
 
+    // Find agent by email or name (username)
     const agent = await (prisma as any).agent.findFirst({
-      where: { email },
+      where: {
+        OR: [
+          { email: email },
+          { name: email }
+        ]
+      },
     });
 
     if (!agent) {

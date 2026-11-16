@@ -5,9 +5,10 @@ import { useState, useEffect } from "react";
 export default function AgentsPage() {
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editAgent, setEditAgent] = useState<any>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [editId, setEditId] = useState<any>(null);
 
+  // Form Fields
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -28,6 +29,39 @@ export default function AgentsPage() {
       console.error("Error fetching agents:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveAgent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !email) {
+      alert("Name and Email are required!");
+      return;
+    }
+
+    try {
+      const url = "/api/agents";
+      const method = editId ? "PATCH" : "POST";
+      const body = editId 
+        ? { agentId: editId, name, email, phone }
+        : { name, email, phone, password: password || "agent123" };
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setShowModal(false);
+        setName(""); setEmail(""); setPhone(""); setPassword(""); setEditId(null);
+        fetchAgents();
+      } else {
+        alert(data.error || "Failed to save agent");
+      }
+    } catch (err) {
+      console.error("Save error:", err);
     }
   };
 
@@ -91,9 +125,9 @@ export default function AgentsPage() {
         </div>
         <button
           onClick={() => {
-            setEditAgent(null);
+            setEditId(null);
             setName(""); setEmail(""); setPhone(""); setPassword("");
-            setShowAddModal(true);
+            setShowModal(true);
           }}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl transition cursor-pointer"
         >
@@ -118,7 +152,7 @@ export default function AgentsPage() {
             {agents.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-8 text-center text-gray-400">
-                  {loading ? "Loading agents..." : "No agents found. Add your first agent above."}
+                  {loading ? "Loading agents..." : "No agents found. Click '+ Add New Agent' above to create one."}
                 </td>
               </tr>
             ) : (
@@ -126,7 +160,7 @@ export default function AgentsPage() {
                 <tr key={ag.id} className="hover:bg-gray-50/50 transition">
                   <td className="p-4 font-bold text-gray-900">{ag.name}</td>
                   <td className="p-4 text-gray-600">
-                    <div>📞 {ag.phone}</div>
+                    <div>📞 {ag.phone || "N/A"}</div>
                     <div className="text-[10px] text-gray-400">✉️ {ag.email}</div>
                   </td>
                   <td className="p-4">
@@ -173,9 +207,9 @@ export default function AgentsPage() {
                     <div className="flex items-center justify-center gap-2">
                       <button
                         onClick={() => {
-                          setEditAgent(ag);
-                          setName(ag.name); setEmail(ag.email); setPhone(ag.phone);
-                          setShowAddModal(true);
+                          setEditId(ag.id);
+                          setName(ag.name); setEmail(ag.email); setPhone(ag.phone || "");
+                          setShowModal(true);
                         }}
                         className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer"
                         title="Edit Agent"
@@ -214,6 +248,86 @@ export default function AgentsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* ADD / EDIT AGENT MODAL */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-sm text-gray-800">
+                {editId ? "✏️ Edit Agent Details" : "➕ Add New Live Chat Agent"}
+              </h3>
+              <button onClick={() => setShowModal(false)} className="font-bold text-gray-400 hover:text-black cursor-pointer">✕</button>
+            </div>
+
+            <form onSubmit={handleSaveAgent} className="space-y-3">
+              <div>
+                <label className="block font-medium text-gray-700 mb-1">Agent Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Rahul Sharma"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-gray-700 mb-1">Email Address (Username)</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="rahul@fortius.in"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-gray-700 mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  placeholder="9876543210"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {!editId && (
+                <div>
+                  <label className="block font-medium text-gray-700 mb-1">Password</label>
+                  <input
+                    type="password"
+                    placeholder="Enter agent password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full border rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold text-gray-600 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold cursor-pointer shadow"
+                >
+                  {editId ? "Update Agent" : "Create Agent 🚀"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

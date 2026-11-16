@@ -13,7 +13,7 @@ export default function DashboardPage() {
     totalSent: 0,
     totalDelivered: 0,
     totalRead: 0,
-    totalUnreadDelivered: 0,
+    totalUnread: 0,
     totalFailed: 0,
     marketingTotal: 0,
     marketingDelivered: 0,
@@ -21,20 +21,9 @@ export default function DashboardPage() {
     utilityDelivered: 0,
     authTotal: 0,
     authDelivered: 0,
-    walletActual: 0,
-    walletVirtual: 0,
     qualityRating: "GREEN",
     messagingLimit: "100K/day",
     verifiedName: "WhatsApp Business",
-    dailyTrend: [
-      { date: "Day 1", sent: 120, delivered: 115, read: 90 },
-      { date: "Day 2", sent: 250, delivered: 240, read: 180 },
-      { date: "Day 3", sent: 180, delivered: 175, read: 140 },
-      { date: "Day 4", sent: 320, delivered: 310, read: 250 },
-      { date: "Day 5", sent: 410, delivered: 395, read: 320 },
-      { date: "Day 6", sent: 290, delivered: 280, read: 210 },
-      { date: "Day 7", sent: 380, delivered: 370, read: 300 },
-    ],
   });
   const [loading, setLoading] = useState(true);
 
@@ -68,7 +57,7 @@ export default function DashboardPage() {
       const res = await fetch(url);
       const data = await res.json();
       if (data.success && data.stats) {
-        setStats((prev) => ({ ...prev, ...data.stats }));
+        setStats(data.stats);
       }
     } catch (err) {
       console.error("Error fetching stats:", err);
@@ -77,32 +66,28 @@ export default function DashboardPage() {
     }
   };
 
-  // Calculations for Pie/Donut breakdown
-  const totalCat = (stats.marketingTotal || 0) + (stats.utilityTotal || 0) + (stats.authTotal || 0) || 1;
-  const mktPercent = Math.round(((stats.marketingTotal || 0) / totalCat) * 100);
-  const utiPercent = Math.round(((stats.utilityTotal || 0) / totalCat) * 100);
-  const autPercent = 100 - mktPercent - utiPercent;
+  const readRate = stats.totalDelivered > 0 ? ((stats.totalRead / stats.totalDelivered) * 100).toFixed(1) : "0";
 
   return (
     <div className="w-full min-h-screen bg-gray-50/60 p-6 space-y-6 font-sans text-xs">
       
-      {/* TOP HEADER & MULTI-CHANNEL / WALLET BAR */}
+      {/* TOP HEADER & ACCOUNT SELECTOR (Wallet removed from here since header has it) */}
       <div className="flex flex-wrap justify-between items-center bg-white p-4 rounded-2xl shadow-xs border border-gray-100 gap-4">
         <div>
           <h1 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
             <span>📊</span> WABA Analytics & Performance Dashboard
           </h1>
-          <p className="text-gray-400 text-[11px]">Real-time Meta Graph API analytics, campaign graphs & health monitoring</p>
+          <p className="text-gray-400 text-[11px]">Real-time webhook & Meta Graph API analytics across onboarded accounts</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div>
           {channels.length > 0 && (
             <select
               value={selectedChannel}
               onChange={(e) => setSelectedChannel(e.target.value)}
               className="border border-gray-200 bg-gray-50 font-bold px-3 py-2 rounded-xl text-gray-700 focus:outline-none focus:border-emerald-500"
             >
-              <option value="">📱 All Numbers / WABA Accounts</option>
+              <option value="">📱 All Onboarded Accounts</option>
               {channels.map((ch: any) => (
                 <option key={ch.id} value={ch.phoneNumberId || ch.id}>
                   {ch.displayPhone || ch.phoneNumberId} ({ch.verifiedName || "Active"})
@@ -110,17 +95,6 @@ export default function DashboardPage() {
               ))}
             </select>
           )}
-
-          <div className="flex items-center gap-2">
-            <div className="bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex flex-col">
-              <span className="text-[9px] font-bold text-emerald-700 uppercase">Actual Wallet</span>
-              <span className="font-mono font-extrabold text-xs text-emerald-900">₹{stats.walletActual.toLocaleString()}</span>
-            </div>
-            <div className="bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl flex flex-col">
-              <span className="text-[9px] font-bold text-blue-700 uppercase">Virtual Wallet</span>
-              <span className="font-mono font-extrabold text-xs text-blue-900">₹{stats.walletVirtual.toLocaleString()}</span>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -167,7 +141,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ROW 1: PRIMARY METRICS CARDS */}
+      {/* ROW 1: PRIMARY METRICS WITH READ / UNREAD SPLIT */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
@@ -178,9 +152,10 @@ export default function DashboardPage() {
             </div>
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg font-bold">📤</div>
           </div>
-          <div className="mt-4 text-emerald-600 font-bold text-[11px]"><span>Live Broadcast Sync</span></div>
+          <div className="mt-4 text-emerald-600 font-bold text-[11px]"><span>Live Database Sync</span></div>
         </div>
 
+        {/* Total Delivered with Actual Read / Unread Breakdown */}
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
@@ -189,19 +164,17 @@ export default function DashboardPage() {
             </div>
             <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg font-bold">✓</div>
           </div>
-          <div className="mt-3 pt-2 border-t flex justify-between text-[10px] font-bold text-gray-500">
+          <div className="mt-3 pt-2 border-t flex justify-between text-[10px] font-bold">
             <span className="text-purple-700">👁️ Read: {stats.totalRead}</span>
-            <span className="text-amber-600">⏳ Unread: {stats.totalUnreadDelivered}</span>
+            <span className="text-amber-600">⏳ Unread: {stats.totalUnread}</span>
           </div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-gray-400 font-bold uppercase text-[10px]">Delivered & Read Rate</p>
-              <h3 className="text-2xl font-black text-purple-700 mt-1 font-mono">
-                {stats.totalDelivered > 0 ? ((stats.totalRead / stats.totalDelivered) * 100).toFixed(1) : 0}%
-              </h3>
+              <p className="text-gray-400 font-bold uppercase text-[10px]">Read Rate</p>
+              <h3 className="text-2xl font-black text-purple-700 mt-1 font-mono">{readRate}%</h3>
             </div>
             <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-lg font-bold">📈</div>
           </div>
@@ -216,164 +189,12 @@ export default function DashboardPage() {
             </div>
             <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center text-lg font-bold">⚠️</div>
           </div>
-          <div className="mt-4 text-red-500 font-bold text-[11px]"><span>Error tracking active</span></div>
+          <div className="mt-4 text-red-500 font-bold text-[11px]"><span>Webhook Error Tracking</span></div>
         </div>
 
       </div>
 
-      {/* ROW 2: CATEGORY BREAKDOWN CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        
-        <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 space-y-3">
-          <div className="flex justify-between items-center border-b pb-2.5">
-            <span className="font-bold text-gray-800 flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-pink-500"></span> Marketing
-            </span>
-            <span className="bg-pink-50 text-pink-700 px-2 py-0.5 rounded-md font-bold text-[10px]">{mktPercent}% Share</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <div className="bg-gray-50 p-2.5 rounded-xl">
-              <span className="text-gray-400 text-[10px]">Sent</span>
-              <p className="text-lg font-black font-mono text-gray-900">{stats.marketingTotal}</p>
-            </div>
-            <div className="bg-gray-50 p-2.5 rounded-xl">
-              <span className="text-gray-400 text-[10px]">Delivered</span>
-              <p className="text-lg font-black font-mono text-emerald-600">{stats.marketingDelivered}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 space-y-3">
-          <div className="flex justify-between items-center border-b pb-2.5">
-            <span className="font-bold text-gray-800 flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Utility
-            </span>
-            <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md font-bold text-[10px]">{utiPercent}% Share</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <div className="bg-gray-50 p-2.5 rounded-xl">
-              <span className="text-gray-400 text-[10px]">Sent</span>
-              <p className="text-lg font-black font-mono text-gray-900">{stats.utilityTotal}</p>
-            </div>
-            <div className="bg-gray-50 p-2.5 rounded-xl">
-              <span className="text-gray-400 text-[10px]">Delivered</span>
-              <p className="text-lg font-black font-mono text-emerald-600">{stats.utilityDelivered}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 space-y-3">
-          <div className="flex justify-between items-center border-b pb-2.5">
-            <span className="font-bold text-gray-800 flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Authentication
-            </span>
-            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold text-[10px]">{autPercent}% Share</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <div className="bg-gray-50 p-2.5 rounded-xl">
-              <span className="text-gray-400 text-[10px]">Sent</span>
-              <p className="text-lg font-black font-mono text-gray-900">{stats.authTotal}</p>
-            </div>
-            <div className="bg-gray-50 p-2.5 rounded-xl">
-              <span className="text-gray-400 text-[10px]">Delivered</span>
-              <p className="text-lg font-black font-mono text-emerald-600">{stats.authDelivered}</p>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ROW 3: REAL CHARTS (LINE GRAPH & PIE/DONUT CHART) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* LINE GRAPH: Delivery Trend Over Time (2 Cols) */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-xs border border-gray-100 space-y-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="font-bold text-sm text-gray-900">📈 Message Delivery & Read Performance Trend</h3>
-              <p className="text-gray-400 text-[10px]">Comparative volumetric analysis ({filter})</p>
-            </div>
-            <div className="flex items-center gap-3 text-[10px] font-bold">
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Sent</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Delivered</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span> Read</span>
-            </div>
-          </div>
-
-          {/* Interactive SVG Line / Bar Graph */}
-          <div className="h-64 w-full bg-gray-50/60 rounded-xl border border-dashed border-gray-200 p-4 flex flex-col justify-end">
-            <div className="w-full h-48 flex items-end justify-between gap-3 pt-6">
-              {stats.dailyTrend.map((item, i) => {
-                const maxVal = 500; // scale limit
-                const sentH = Math.min(100, (item.sent / maxVal) * 100);
-                const delH = Math.min(100, (item.delivered / maxVal) * 100);
-                const readH = Math.min(100, (item.read / maxVal) * 100);
-
-                return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group relative">
-                    {/* Tooltip */}
-                    <div className="absolute -top-10 bg-gray-900 text-white text-[9px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 transition pointer-events-none z-20 whitespace-nowrap">
-                      {item.date}: {item.sent} Sent, {item.read} Read
-                    </div>
-                    <div className="w-full flex items-end justify-center gap-1 h-full">
-                      <div className="w-1.5 bg-blue-500 rounded-t transition-all duration-300" style={{ height: `${sentH}%` }} title={`Sent: ${item.sent}`}></div>
-                      <div className="w-1.5 bg-emerald-500 rounded-t transition-all duration-300" style={{ height: `${delH}%` }} title={`Delivered: ${item.delivered}`}></div>
-                      <div className="w-1.5 bg-purple-500 rounded-t transition-all duration-300" style={{ height: `${readH}%` }} title={`Read: ${item.read}`}></div>
-                    </div>
-                    <span className="text-[9px] text-gray-500 font-mono mt-2">{item.date}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* PIE / DONUT CHART: Category Distribution (1 Col) */}
-        <div className="bg-white p-6 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between space-y-4">
-          <div>
-            <h3 className="font-bold text-sm text-gray-900">pie Category Distribution</h3>
-            <p className="text-gray-400 text-[10px]">Marketing vs Utility vs Auth breakdown</p>
-          </div>
-
-          {/* Visual Donut representation using CSS conic-gradient */}
-          <div className="flex flex-col items-center justify-center my-auto py-2">
-            <div 
-              className="w-36 h-36 rounded-full relative flex items-center justify-center shadow-inner"
-              style={{
-                background: `conic-gradient(#ec4899 0% ${mktPercent}%, #f59e0b ${mktPercent}% ${mktPercent + utiPercent}%, #3b82f6 ${mktPercent + utiPercent}% 100%)`
-              }}
-            >
-              <div className="w-24 h-24 bg-white rounded-full flex flex-col items-center justify-center shadow-xs">
-                <span className="text-[10px] text-gray-400 font-bold uppercase">Total</span>
-                <span className="text-sm font-black text-gray-900 font-mono">{totalCat}</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 w-full mt-5 text-center">
-              <div className="bg-pink-50 p-2 rounded-xl">
-                <span className="text-[9px] text-pink-700 font-bold block">Marketing</span>
-                <span className="font-black text-pink-900">{mktPercent}%</span>
-              </div>
-              <div className="bg-amber-50 p-2 rounded-xl">
-                <span className="text-[9px] text-amber-700 font-bold block">Utility</span>
-                <span className="font-black text-amber-900">{utiPercent}%</span>
-              </div>
-              <div className="bg-blue-50 p-2 rounded-xl">
-                <span className="text-[9px] text-blue-700 font-bold block">Auth</span>
-                <span className="font-black text-blue-900">{autPercent}%</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t pt-3 flex justify-between items-center text-[11px] text-gray-400">
-            <span>Meta API Sync</span>
-            <span className="text-emerald-600 font-bold">100% Active</span>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ROW 4: META WABA ACCOUNT HEALTH DETAILS WIDGET */}
+      {/* META ACCOUNT HEALTH */}
       <div className="bg-white p-6 rounded-2xl shadow-xs border border-gray-100 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h3 className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
@@ -386,7 +207,7 @@ export default function DashboardPage() {
           <div className="bg-gray-50 border px-4 py-2.5 rounded-xl flex items-center gap-3">
             <span className="text-xl">🏢</span>
             <div>
-              <span className="text-[9px] text-gray-400 block uppercase font-bold">Business Name</span>
+              <span className="text-[9px] text-gray-400 block uppercase font-bold">Account Name</span>
               <span className="font-bold text-gray-900">{stats.verifiedName}</span>
             </div>
           </div>

@@ -59,7 +59,7 @@ export default function AgentsPage() {
   const [configModalTab, setConfigModalTab] = useState<"channel" | "keyword">("channel");
   
   // WABA Channels State
-  const [wabaChannels, setWabaChannels] = useState<any[]>([]);
+  const [wabaAccounts, setWabaAccounts] = useState<any[]>([]);
   const [selectedChannelToAssign, setSelectedChannelToAssign] = useState("");
   const [assignedChannelsList, setAssignedChannelsList] = useState<any[]>([]);
 
@@ -69,6 +69,10 @@ export default function AgentsPage() {
   // Analytics State
   const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+
+  // New Global Feature Modals State
+  const [showGlobalChatConfigModal, setShowGlobalChatConfigModal] = useState(false);
+  const [showGlobalCampaignModal, setShowGlobalCampaignModal] = useState(false);
 
   useEffect(() => {
     fetchAgents();
@@ -94,7 +98,7 @@ export default function AgentsPage() {
       const res = await fetch("/api/templates");
       const data = await res.json();
       if (data.success && data.wabaAccounts) {
-        setWabaChannels(data.wabaAccounts);
+        setWabaAccounts(data.wabaAccounts);
       }
     } catch (err) {
       console.error("Error fetching channels:", err);
@@ -296,7 +300,6 @@ export default function AgentsPage() {
       ag.phone?.includes(searchQuery)
   );
 
-  // FIXED WORKING TOGGLE COMPONENT WITH CLICK HANDLER
   const PremiumToggle = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
     <button
       type="button"
@@ -331,7 +334,25 @@ export default function AgentsPage() {
           </div>
           <p className="text-slate-400 mt-0.5">Manage agent accounts and permissions</p>
         </div>
-        <div className="flex items-center gap-3">
+        
+        {/* ACTION BUTTONS: Chat Config & Agent Campaign added BEFORE Add Agent */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => setShowGlobalChatConfigModal(true)}
+            className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3.5 py-2.5 rounded-xl transition cursor-pointer shadow-xs flex items-center gap-1.5"
+          >
+            <span>⚙️</span>
+            <span>Chat Config</span>
+          </button>
+
+          <button
+            onClick={() => setShowGlobalCampaignModal(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-2.5 rounded-xl transition cursor-pointer shadow-xs flex items-center gap-1.5"
+          >
+            <span>📢</span>
+            <span>Agent Campaign</span>
+          </button>
+
           <button
             onClick={() => {
               setEditId(null);
@@ -387,13 +408,11 @@ export default function AgentsPage() {
               ) : (
                 filteredAgents.map((ag) => (
                   <tr key={ag.id} className="hover:bg-slate-50/70 transition">
-                    {/* NAME */}
                     <td className="p-4 font-bold text-slate-900 text-sm">
                       {ag.name}
                       <div className="text-[10px] text-slate-400 font-mono font-normal">@{ag.userId}</div>
                     </td>
 
-                    {/* CONTACT INFO */}
                     <td className="p-4 space-y-1">
                       <div className="flex items-center gap-1.5 text-slate-700 font-medium">
                         <span className="text-emerald-600">📞</span> {ag.phone || "N/A"}
@@ -403,7 +422,6 @@ export default function AgentsPage() {
                       </div>
                     </td>
 
-                    {/* REGISTRATION DATE */}
                     <td className="p-4 text-slate-600">
                       <div className="font-medium">📅 {ag.createdAt ? new Date(ag.createdAt).toLocaleDateString() : "16 Nov 2026"}</div>
                       <div className="text-[10px] text-slate-400 font-mono">
@@ -411,7 +429,6 @@ export default function AgentsPage() {
                       </div>
                     </td>
 
-                    {/* ACCOUNT EXPIRY */}
                     <td className="p-4 space-y-1">
                       <div className="font-bold text-slate-800">
                         🗓️ {ag.expiryDate ? new Date(ag.expiryDate).toLocaleDateString() : "30 Nov 2026"}
@@ -422,7 +439,6 @@ export default function AgentsPage() {
                       </span>
                     </td>
 
-                    {/* PERMISSIONS BOX (All Chats Access, Send Template, Send Campaign) */}
                     <td className="p-4">
                       <div className="bg-[#F8F9FA] border border-slate-200/80 rounded-xl p-2.5 space-y-2 max-w-[210px] shadow-2xs">
                         <div className="flex items-center justify-between text-slate-700 font-medium">
@@ -449,7 +465,6 @@ export default function AgentsPage() {
                       </div>
                     </td>
 
-                    {/* ACTIONS (Edit & Delete) */}
                     <td className="p-4">
                       <div className="flex items-center gap-2">
                         <button
@@ -477,7 +492,6 @@ export default function AgentsPage() {
                       </div>
                     </td>
 
-                    {/* AGENT TOOLS */}
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
@@ -504,7 +518,6 @@ export default function AgentsPage() {
                       </div>
                     </td>
 
-                    {/* LOGIN AS */}
                     <td className="p-4 text-right">
                       <button
                         onClick={() => handleLoginAs(ag)}
@@ -521,6 +534,72 @@ export default function AgentsPage() {
           </table>
         </div>
       </div>
+
+      {/* NEW FEATURE MODAL 1: GLOBAL CHAT CONFIG */}
+      {showGlobalChatConfigModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl font-sans text-xs">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-800">Global Chat Configuration</h3>
+                <p className="text-[11px] text-slate-400">Configure default routing and chat rules across all agents</p>
+              </div>
+              <button
+                onClick={() => setShowGlobalChatConfigModal(false)}
+                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-4 py-2">
+              <div className="p-4 bg-slate-50 rounded-2xl border text-center text-slate-500 font-medium">
+                ⚙️ Global Chat Configuration panel ready for coding logic integration.
+              </div>
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => setShowGlobalChatConfigModal(false)}
+                  className="px-5 py-2 bg-slate-800 text-white rounded-xl font-bold cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW FEATURE MODAL 2: AGENT CAMPAIGN */}
+      {showGlobalCampaignModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl font-sans text-xs">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-800">Agent Campaign Management</h3>
+                <p className="text-[11px] text-slate-400">Monitor and manage agent-level broadcast templates and campaigns</p>
+              </div>
+              <button
+                onClick={() => setShowGlobalCampaignModal(false)}
+                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-4 py-2">
+              <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 text-center text-indigo-700 font-medium">
+                📢 Agent Campaign manager ready for backend connectivity.
+              </div>
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => setShowGlobalCampaignModal(false)}
+                  className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 1. AGENT CHAT CONFIGURATIONS MODAL */}
       {selectedToolAgent && activeToolModal === "config" && (
@@ -579,7 +658,7 @@ export default function AgentsPage() {
                       className="w-full border rounded-xl p-2.5 bg-white font-mono font-bold text-slate-700"
                     >
                       <option value="">Select Channel</option>
-                      {wabaChannels.map((ch: any) => (
+                      {wabaAccounts.map((ch: any) => (
                         <option key={ch.id} value={ch.displayPhone || ch.phoneNumberId}>
                           {ch.displayName || "WABA"} ({ch.displayPhone || ch.phoneNumberId})
                         </option>

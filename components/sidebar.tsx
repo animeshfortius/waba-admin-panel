@@ -53,7 +53,7 @@ export default function Sidebar() {
           }`}
         >
           <span>👥</span>
-          <span>Agents & Contacts</span>
+          <span>Agents</span>
         </Link>
 
         <Link

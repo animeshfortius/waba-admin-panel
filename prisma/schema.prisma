@@ -194,19 +194,15 @@ model ChatNote {
   createdAt     DateTime    @default(now())
 }
 model Agent {
-  id               String    @id @default(uuid())
-  userId           String    // Parent user/admin ID
+  id               String   @id @default(cuid())
   name             String
-  email            String
-  phone            String?
-  password         String?
-  expiryDate       DateTime?
-  allChannelAccess Boolean   @default(true)
-  sendTemplate     Boolean   @default(false)
-  sendCampaign     Boolean   @default(false)
-  liveChat         Boolean   @default(true)
-  role             String    @default("AGENT")
-  status           String    @default("ACTIVE")
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  email            String   @unique
+  phone            String
+  password         String
+  allChatsAccess   Boolean  @default(true)  // "All Chats" toggle
+  sendTemplate     Boolean  @default(false) // Send Templates toggle
+  sendCampaign     Boolean  @default(false) // Send Campaigns toggle
+  assignedChannels String   @default("")    // Specific channel IDs if allChatsAccess is false
+  status           String   @default("ACTIVE")
+  createdAt        DateTime @default(now())
 }

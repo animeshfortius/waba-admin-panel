@@ -20,7 +20,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, agents });
   } catch (error: any) {
     console.error("Fetch agents error:", error);
-    // Return empty array instead of 500 to keep UI clean
     return NextResponse.json({ success: true, agents: [] });
   }
 }
@@ -35,7 +34,6 @@ export async function POST(request: Request) {
 
     let newAgent;
 
-    // Check if prisma.agent is available, otherwise use raw query or handle gracefully
     if ((prisma as any).agent) {
       newAgent = await (prisma as any).agent.create({
         data: {
@@ -61,6 +59,34 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error("Create agent error:", error);
     return NextResponse.json({ success: false, error: error.message || "Failed to create agent" }, { status: 500 });
+  }
+}
+
+// 🟢 PATCH Method added for live toggles sync
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+    const { agentId, id, ...updates } = body;
+    const targetId = agentId || id;
+
+    if (!targetId) {
+      return NextResponse.json({ success: false, error: "Agent ID is required" }, { status: 400 });
+    }
+
+    let updatedAgent;
+    if ((prisma as any).agent) {
+      updatedAgent = await (prisma as any).agent.update({
+        where: { id: isNaN(Number(targetId)) ? targetId : Number(targetId) },
+        data: updates,
+      });
+    } else {
+      throw new Error("Prisma Agent model is not compiled in this deployment yet.");
+    }
+
+    return NextResponse.json({ success: true, agent: updatedAgent });
+  } catch (error: any) {
+    console.error("Update agent error:", error);
+    return NextResponse.json({ success: false, error: error.message || "Failed to update agent" }, { status: 500 });
   }
 }
 

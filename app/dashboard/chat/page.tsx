@@ -106,6 +106,20 @@ export default function LiveChatPage() {
     } catch (e) {}
   };
 
+  // Helper to convert Meta Media Graph URL to our secure Media Proxy route
+  const getProxiedMediaUrl = (url: string) => {
+    if (!url) return "";
+    if (url.startsWith("blob:")) return url; // Local optimistic preview
+    if (url.includes("graph.facebook.com")) {
+      const parts = url.split("/");
+      const mediaId = parts[parts.length - 1];
+      if (mediaId && !isNaN(Number(mediaId))) {
+        return `/api/media/${mediaId}`;
+      }
+    }
+    return url;
+  };
+
   // Meta 24h Window Status with Auto-Reset on last customer message
   const getSessionWindowStatus = (session: any) => {
     if (!session) return { isOpen: false, hoursLeft: 0 };
@@ -349,6 +363,8 @@ export default function LiveChatPage() {
                 const isImg = msg.messageType === "image" || bodyStr.includes("[IMAGE:") || bodyStr.match(/\.(jpg|jpeg|png|webp|gif)/i);
                 const isVid = msg.messageType === "video" || bodyStr.includes("[VIDEO:") || bodyStr.match(/\.(mp4|mov|webm)/i);
                 const isDoc = msg.messageType === "document" || bodyStr.includes("[DOCUMENT:") || bodyStr.match(/\.(pdf|docx|xlsx|txt)/i);
+                
+                const proxiedUrl = getProxiedMediaUrl(msg.mediaUrl);
 
                 return (
                   <div key={msg.id} className={`flex ${isCustomer ? "justify-start" : "justify-end"}`}>
@@ -363,15 +379,15 @@ export default function LiveChatPage() {
                         {isCustomer ? (activeSession.customerName || "Customer") : `👤 ${msg.senderName || "Agent"}`}
                       </div>
 
-                      {/* Image Preview */}
-                      {msg.mediaUrl && isImg && (
-                        <img src={msg.mediaUrl} alt="media" className="rounded-xl max-h-48 object-cover mt-1 border" />
+                      {/* Image Preview with Proxy Support */}
+                      {proxiedUrl && isImg && (
+                        <img src={proxiedUrl} alt="media" className="rounded-xl max-h-48 object-cover mt-1 border" />
                       )}
 
-                      {/* Video Player */}
-                      {msg.mediaUrl && isVid && (
+                      {/* Video Player with Proxy Support */}
+                      {proxiedUrl && isVid && (
                         <video controls className="rounded-xl max-h-48 w-full object-cover mt-1 border">
-                          <source src={msg.mediaUrl} type="video/mp4" />
+                          <source src={proxiedUrl} type="video/mp4" />
                           Your browser does not support the video tag.
                         </video>
                       )}
@@ -401,7 +417,7 @@ export default function LiveChatPage() {
             </div>
 
             {showSlashMenu && (
-              <div className="mx-4 mb-1 bg-white border rounded-2xl shadow-xl overflow-hidden z-20">
+              <div className="mx-4 mb-1 bg-white border rounded-2xl shadow-xl overflow-hidden z-25">
                 <div className="bg-gray-50 px-3 py-1.5 font-bold text-[10px] text-gray-500 border-b">
                   ⚡ Quick Canned Responses (Click to insert)
                 </div>

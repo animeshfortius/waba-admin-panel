@@ -27,7 +27,6 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    // Validate required fields
     if (!body.name || !body.userId) {
       return NextResponse.json({ success: false, error: "Agent Name and User ID are required" }, { status: 400 });
     }
@@ -37,7 +36,7 @@ export async function POST(request: Request) {
     if ((prisma as any).agent) {
       newAgent = await (prisma as any).agent.create({
         data: {
-          userId: body.userId,
+          userId: body.userId, // 👈 Saved as unique User ID for login
           name: body.name,
           email: body.email || `${body.userId}@fortius.in`,
           phone: body.phone || "",
@@ -72,7 +71,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: "Agent ID is required" }, { status: 400 });
     }
 
-    // Format expiryDate if provided in updates
     if (updates.expiryDate) {
       updates.expiryDate = new Date(updates.expiryDate);
     }

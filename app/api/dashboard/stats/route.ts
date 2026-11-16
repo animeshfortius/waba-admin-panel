@@ -108,7 +108,7 @@ export async function GET(req: Request) {
     });
     const authTotal = Math.max(0, totalSent - marketingTotal - utilityTotal);
 
-    // 5. Generate Date-wise Graph Trends (Last N days breakdown)
+    // 5. Generate Date-wise Graph Trends
     const daysCount = filter === "TODAY" ? 1 : filter === "30DAYS" ? 30 : 7;
     const trendData = [];
     
@@ -134,6 +134,62 @@ export async function GET(req: Request) {
 
       trendData.push({ day: dayLabel, sent: daySent, del: dayDelivered, read: dayRead });
     }
+
+    // 6. Fetch All Messages in Range for Hourly Activity & Top Templates
+    const recentMsgs = await prisma.chatMessage.findMany({
+      where: { senderType: "AGENT", ...dateQuery, ...channelQuery },
+      include: { chatSession: true },
+      orderBy: { createdAt: "desc" },
+      take: 250,
+    });
+
+    // Hourly Peak Activity (09 AM to 09 PM buckets)
+    const hoursMap: Record<string, number> = {
+      "09 AM": 0, "11 AM": 0, "01 PM": 0, "03 PM": 0, "05 PM": 0, "07 PM": 0, "09 PM": 0,
+    };
+
+    const templateCounts: Record<string, { sent: number; read: number }> = {};
+
+    recentMsgs.forEach((m: any) => {
+      const hr = new Date(m.createdAt).getHours();
+      if (hr < 10) hoursMap["09 AM"]++;
+      else if (hr < 12) hoursMap["11 AM"]++;
+      else if (hr < 14) hoursMap["01 PM"]++;
+      else if (hr < 16) hoursMap["03 PM"]++;
+      else if (hr < 18) hoursMap["05 PM"]++;
+      else if (hr < 20) hoursMap["07 PM"]++;
+      else hoursMap["09 PM"]++;
+
+      if (m.messageType === "template") {
+        const tName = m.content?.slice(0, 26) || "Campaign Template";
+        if (!templateCounts[tName]) templateCounts[tName] = { sent: 0, read: 0 };
+        templateCounts[tName].sent++;
+        if (m.status === "READ") templateCounts[tName].read++;
+      }
+    });
+
+    const hourlyActivity = Object.entries(hoursMap).map(([hour, count]) => ({ hour, count }));
+
+    const topTemplates = Object.entries(templateCounts)
+      .map(([name, val]) => ({
+        name,
+        sent: val.sent,
+        readRate: val.sent > 0 ? Math.round((val.read / val.sent) * 100) : 0,
+      }))
+      .sort((a, b) => b.sent - a.sent)
+      .slice(0, 3);
+
+    // 7. Live Webhook Audit Logs (Top 6 latest events)
+    const recentWebhooks = recentMsgs.slice(0, 6).map((m: any) => ({
+      id: m.id,
+      phone: m.chatSession?.customerPhone || "Customer",
+      status: m.status || "SENT",
+      type: m.messageType || "text",
+      time: new Date(m.createdAt).toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    }));
 
     return NextResponse.json({
       success: true,
@@ -163,6 +219,9 @@ export async function GET(req: Request) {
         messagingLimit: metaHealth.messagingLimit,
         verifiedName: metaHealth.verifiedName,
         trendData,
+        hourlyActivity,
+        topTemplates,
+        recentWebhooks,
       },
     });
   } catch (error: any) {

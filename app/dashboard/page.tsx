@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 
 export default function DashboardPage() {
   const [filter, setFilter] = useState("7DAYS");
@@ -22,9 +23,12 @@ export default function DashboardPage() {
     authTotal: 0,
     authDelivered: 0,
     qualityRating: "N/A",
-    messagingLimit: "100K/day",
+    messagingLimit: "100,000 / 24 hrs",
     verifiedName: "Loading Default Account...",
     trendData: [] as any[],
+    hourlyActivity: [] as any[],
+    topTemplates: [] as any[],
+    recentWebhooks: [] as any[],
   });
   const [loading, setLoading] = useState(true);
 
@@ -63,27 +67,64 @@ export default function DashboardPage() {
     }
   };
 
+  // CSV Report Export Handler
+  const exportCSVReport = () => {
+    const headers = ["Date", "Sent", "Delivered", "Read"];
+    const rows = (stats.trendData || []).map((r: any) => [r.day, r.sent, r.del, r.read]);
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((e: any) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `WABA_Report_${stats.verifiedName}_${filter}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const totalCat = (stats.marketingTotal || 0) + (stats.utilityTotal || 0) + (stats.authTotal || 0) || 1;
   const mktPercent = Math.round(((stats.marketingTotal || 0) / totalCat) * 100);
   const utiPercent = Math.round(((stats.utilityTotal || 0) / totalCat) * 100);
   const autPercent = 100 - mktPercent - utiPercent;
 
-  // Max value calculation for graph scaling height
   const maxTrendVal = Math.max(...(stats.trendData?.map((t: any) => Math.max(t.sent, t.del, t.read)) || [10]), 10);
+  const maxHourVal = Math.max(...(stats.hourlyActivity?.map((h: any) => h.count) || [5]), 5);
 
   return (
     <div className="w-full min-h-screen bg-gray-50/60 p-6 space-y-6 font-sans text-xs">
       
-      {/* TOP HEADER & ACCOUNT SELECTOR */}
+      {/* TOP HEADER, QUICK ACTIONS & ACCOUNT SELECTOR */}
       <div className="flex flex-wrap justify-between items-center bg-white p-4 rounded-2xl shadow-xs border border-gray-100 gap-4">
         <div>
           <h1 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
             <span>📊</span> WABA Campaign Analytics & Performance Dashboard
           </h1>
-          <p className="text-gray-400 text-[11px]">Showing date-wise report trends for active WABA account</p>
+          <p className="text-gray-400 text-[11px]">Enterprise analytics, live webhook audit logs & default channel performance</p>
         </div>
 
-        <div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* QUICK ACTION SHORTCUTS */}
+          <Link
+            href="/dashboard/campaigns"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2.5 rounded-xl shadow-xs transition flex items-center gap-1.5"
+          >
+            <span>🚀</span> Launch Broadcast
+          </Link>
+          <Link
+            href="/dashboard/templates/create"
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2.5 rounded-xl shadow-xs transition flex items-center gap-1.5"
+          >
+            <span>➕</span> Add Template
+          </Link>
+          <button
+            onClick={exportCSVReport}
+            className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold px-3.5 py-2.5 rounded-xl border border-gray-200 transition cursor-pointer flex items-center gap-1.5"
+          >
+            <span>📥</span> Export CSV
+          </button>
+
+          {/* ACCOUNT DROPDOWN */}
           <select
             value={selectedChannel}
             onChange={(e) => setSelectedChannel(e.target.value)}
@@ -265,8 +306,6 @@ export default function DashboardPage() {
 
       {/* ROW 3: DATE-WISE GRAPHS & PIE CHART */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Date-Wise Line / Bar Trend Graph */}
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-xs border border-gray-100 space-y-4">
           <div className="flex justify-between items-center">
             <div>
@@ -285,7 +324,6 @@ export default function DashboardPage() {
               {stats.trendData && stats.trendData.length > 0 ? (
                 stats.trendData.map((item: any, i: number) => (
                   <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group relative">
-                    {/* Tooltip on hover */}
                     <div className="absolute -top-10 bg-gray-900 text-white text-[9px] px-2 py-1 rounded shadow-md opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10 pointer-events-none">
                       {item.day}: Sent {item.sent}, Del {item.del}, Read {item.read}
                     </div>
@@ -304,7 +342,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Pie / Donut Chart */}
         <div className="bg-white p-6 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between space-y-4">
           <div>
             <h3 className="font-bold text-sm text-gray-900">📊 Category Share (Pie Report)</h3>
@@ -345,10 +382,126 @@ export default function DashboardPage() {
             <span className="text-emerald-600 font-bold">100% Active</span>
           </div>
         </div>
+      </div>
+
+      {/* NEW ROW 4: HOURLY ACTIVITY SPARKLINE, TOP TEMPLATES & LIVE WEBHOOK FEED */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* 1. Hourly Peak Activity Meter */}
+        <div className="bg-white p-6 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between space-y-4">
+          <div>
+            <h3 className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
+              <span>⚡</span> Hourly Peak Activity
+            </h3>
+            <p className="text-gray-400 text-[10px]">Best messaging hours based on engagement volume</p>
+          </div>
+
+          <div className="h-44 flex items-end justify-between gap-2 pt-4 bg-gray-50/70 p-3 rounded-xl border border-dashed border-gray-200">
+            {stats.hourlyActivity && stats.hourlyActivity.length > 0 ? (
+              stats.hourlyActivity.map((h: any, idx: number) => (
+                <div key={idx} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group relative">
+                  <span className="text-[9px] font-bold text-emerald-700 opacity-0 group-hover:opacity-100 transition">
+                    {h.count}
+                  </span>
+                  <div
+                    className="w-full max-w-[18px] bg-gradient-to-t from-emerald-600 to-teal-400 rounded-t-md transition-all"
+                    style={{ height: `${Math.max(12, Math.min(100, (h.count / maxHourVal) * 100))}%` }}
+                  ></div>
+                  <span className="text-[8px] text-gray-500 font-mono">{h.hour}</span>
+                </div>
+              ))
+            ) : (
+              <div className="w-full text-center text-gray-400 my-auto">No hourly data recorded yet</div>
+            )}
+          </div>
+        </div>
+
+        {/* 2. Top Performing Templates Leaderboard */}
+        <div className="bg-white p-6 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between space-y-4">
+          <div>
+            <h3 className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
+              <span>🏆</span> Top Performing Templates
+            </h3>
+            <p className="text-gray-400 text-[10px]">Templates with highest delivery & open rates</p>
+          </div>
+
+          <div className="space-y-3 my-auto">
+            {stats.topTemplates && stats.topTemplates.length > 0 ? (
+              stats.topTemplates.map((tpl: any, idx: number) => (
+                <div key={idx} className="bg-gray-50 border border-gray-100 p-3 rounded-xl flex justify-between items-center">
+                  <div className="flex items-center gap-2.5 overflow-hidden">
+                    <span className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-800 font-black flex items-center justify-center shrink-0">
+                      #{idx + 1}
+                    </span>
+                    <div className="truncate">
+                      <p className="font-bold text-gray-900 truncate">{tpl.name}</p>
+                      <p className="text-[10px] text-gray-400">{tpl.sent} Messages Sent</p>
+                    </div>
+                  </div>
+                  <span className="bg-purple-50 text-purple-700 font-black px-2.5 py-1 rounded-lg text-[10px] shrink-0">
+                    {tpl.readRate}% Read
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed text-gray-400">
+                No template broadcast logs yet
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 3. Live Webhook Audit Log Ticker */}
+        <div className="bg-white p-6 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
+                <span>📡</span> Live Webhook Status Feed
+              </h3>
+              <p className="text-gray-400 text-[10px]">Real-time delivery & read receipts from Meta</p>
+            </div>
+            <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> LIVE
+            </span>
+          </div>
+
+          <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+            {stats.recentWebhooks && stats.recentWebhooks.length > 0 ? (
+              stats.recentWebhooks.map((log: any, idx: number) => (
+                <div key={idx} className="flex justify-between items-center text-[11px] p-2 rounded-lg bg-gray-50/80 border border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-gray-800">{log.phone}</span>
+                    <span className="text-[9px] text-gray-400 uppercase">({log.type})</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded font-bold text-[9px] ${
+                        log.status === "READ"
+                          ? "bg-purple-100 text-purple-800"
+                          : log.status === "DELIVERED"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : log.status === "FAILED"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-blue-100 text-blue-800"
+                      }`}
+                    >
+                      {log.status}
+                    </span>
+                    <span className="text-[9px] text-gray-400 font-mono">{log.time}</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed text-gray-400">
+                Waiting for incoming webhook events...
+              </div>
+            )}
+          </div>
+        </div>
 
       </div>
 
-      {/* ROW 4: META WABA ACCOUNT HEALTH */}
+      {/* ROW 5: META WABA ACCOUNT HEALTH */}
       <div className="bg-white p-6 rounded-2xl shadow-xs border border-gray-100 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h3 className="font-bold text-sm text-gray-900 flex items-center gap-1.5">

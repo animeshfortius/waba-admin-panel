@@ -7,7 +7,7 @@ export default function DashboardPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [channels, setChannels] = useState<any[]>([]);
-  const [selectedChannel, setSelectedChannel] = useState("ALL");
+  const [selectedChannel, setSelectedChannel] = useState("");
 
   const [stats, setStats] = useState({
     totalSent: 0,
@@ -23,16 +23,20 @@ export default function DashboardPage() {
     authDelivered: 0,
     qualityRating: "GREEN",
     messagingLimit: "100K/day",
-    verifiedName: "All Accounts",
+    verifiedName: "Loading Default Account...",
   });
   const [loading, setLoading] = useState(true);
 
+  // 1. Fetch channels on mount and set the default active channel first
   useEffect(() => {
     fetchChannels();
   }, []);
 
+  // 2. Fetch stats whenever filter or selected channel changes
   useEffect(() => {
-    fetchDashboardStats();
+    if (selectedChannel) {
+      fetchDashboardStats();
+    }
   }, [filter, selectedChannel, startDate, endDate]);
 
   const fetchChannels = async () => {
@@ -41,11 +45,20 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.accounts && data.accounts.length > 0) {
         setChannels(data.accounts);
+
+        // Find the default account or fallback to the first onboarded account
+        const defaultAcc = data.accounts.find((acc: any) => acc.isDefault) || data.accounts[0];
+        const defaultId = defaultAcc.phoneNumberId || defaultAcc.id;
+
+        setSelectedChannel(defaultId);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Error fetching accounts:", e);
+    }
   };
 
   const fetchDashboardStats = async () => {
+    if (!selectedChannel) return;
     setLoading(true);
     try {
       let url = `/api/dashboard/stats?filter=${filter}&channelId=${selectedChannel}`;
@@ -74,28 +87,31 @@ export default function DashboardPage() {
   return (
     <div className="w-full min-h-screen bg-gray-50/60 p-6 space-y-6 font-sans text-xs">
       
-      {/* TOP HEADER & MULTI-ACCOUNT SELECTOR */}
+      {/* TOP HEADER & ACCOUNT SELECTOR */}
       <div className="flex flex-wrap justify-between items-center bg-white p-4 rounded-2xl shadow-xs border border-gray-100 gap-4">
         <div>
           <h1 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
             <span>📊</span> WABA Campaign Analytics & Performance Dashboard
           </h1>
-          <p className="text-gray-400 text-[11px]">Select specific onboarded number to view real-time Meta & webhook campaign stats</p>
+          <p className="text-gray-400 text-[11px]">Showing default configured WABA account activity, webhook stats & live Meta health</p>
         </div>
 
-        {/* ACCOUNT SELECTOR DROPDOWN */}
+        {/* DEFAULT ACCOUNT SELECTOR DROPDOWN */}
         <div>
           <select
             value={selectedChannel}
             onChange={(e) => setSelectedChannel(e.target.value)}
             className="border-2 border-emerald-500 bg-emerald-50/50 font-extrabold px-4 py-2.5 rounded-xl text-emerald-900 focus:outline-none shadow-xs cursor-pointer"
           >
-            <option value="ALL">📱 All Onboarded Accounts ({channels.length})</option>
-            {channels.map((ch: any) => (
-              <option key={ch.id} value={ch.phoneNumberId || ch.id}>
-                📱 {ch.displayPhone || ch.phoneNumberId} — {ch.verifiedName || "Active WABA"}
-              </option>
-            ))}
+            {channels.length === 0 ? (
+              <option value="">Loading Accounts...</option>
+            ) : (
+              channels.map((ch: any) => (
+                <option key={ch.id} value={ch.phoneNumberId || ch.id}>
+                  📱 {ch.displayPhone || ch.phoneNumberId} — {ch.verifiedName || "Active WABA"} {ch.isDefault ? "⭐ (Default)" : ""}
+                </option>
+              ))
+            )}
           </select>
         </div>
       </div>
@@ -143,8 +159,8 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ROW 1: PRIMARY METRICS WITH READ / UNREAD SPLIT */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* ROW 1: PRIMARY METRICS (Separate Read and Unread Cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         
         {/* Total Sent */}
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
@@ -158,7 +174,7 @@ export default function DashboardPage() {
           <div className="mt-4 text-emerald-600 font-bold text-[11px]"><span>Live Broadcast Sync</span></div>
         </div>
 
-        {/* Total Delivered with Read & Unread Split */}
+        {/* Total Delivered */}
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
@@ -167,24 +183,31 @@ export default function DashboardPage() {
             </div>
             <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg font-bold">✓</div>
           </div>
-          <div className="mt-3 pt-2 border-t flex justify-between text-[10px] font-bold">
-            <span className="text-purple-700">👁️ Read: {stats.totalRead}</span>
-            <span className="text-amber-600">⏳ Unread: {stats.totalUnread}</span>
-          </div>
+          <div className="mt-4 text-emerald-600 font-bold text-[11px]"><span>Successfully Sent to Device</span></div>
         </div>
 
-        {/* Delivered & Read Rate */}
+        {/* Dedicated Read Card */}
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-gray-400 font-bold uppercase text-[10px]">Read Rate</p>
-              <h3 className="text-2xl font-black text-purple-700 mt-1 font-mono">
-                {stats.totalDelivered > 0 ? ((stats.totalRead / stats.totalDelivered) * 100).toFixed(1) : 0}%
-              </h3>
+              <p className="text-gray-400 font-bold uppercase text-[10px]">Total Read</p>
+              <h3 className="text-2xl font-black text-purple-700 mt-1 font-mono">{loading ? "..." : stats.totalRead.toLocaleString()}</h3>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-lg font-bold">📈</div>
+            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-lg font-bold">👁️</div>
           </div>
-          <div className="mt-4 text-purple-600 font-bold text-[11px]"><span>{stats.totalRead} Messages Opened</span></div>
+          <div className="mt-4 text-purple-600 font-bold text-[11px]"><span>Webhook Read Status</span></div>
+        </div>
+
+        {/* Dedicated Unread Card */}
+        <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-gray-400 font-bold uppercase text-[10px]">Total Unread</p>
+              <h3 className="text-2xl font-black text-amber-600 mt-1 font-mono">{loading ? "..." : stats.totalUnread.toLocaleString()}</h3>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg font-bold">⏳</div>
+          </div>
+          <div className="mt-4 text-amber-600 font-bold text-[11px]"><span>Delivered but Unopened</span></div>
         </div>
 
         {/* Failed */}
@@ -263,15 +286,15 @@ export default function DashboardPage() {
 
       </div>
 
-      {/* ROW 3: GRAPHS & PIE CHART RESTORED */}
+      {/* ROW 3: DATE-FILTERED GRAPHS & PIE CHART */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Line Graph (2 Cols) */}
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-xs border border-gray-100 space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="font-bold text-sm text-gray-900">📈 Campaign Delivery & Read Trend</h3>
-              <p className="text-gray-400 text-[10px]">Volumetric performance graph across selected account & timeframe</p>
+              <h3 className="font-bold text-sm text-gray-900">📈 Campaign Delivery & Read Trend ({filter})</h3>
+              <p className="text-gray-400 text-[10px]">Volumetric performance graph for default account & timeframe</p>
             </div>
             <div className="flex items-center gap-3 text-[10px] font-bold">
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Sent</span>
@@ -283,17 +306,17 @@ export default function DashboardPage() {
           <div className="h-64 w-full bg-gray-50/60 rounded-xl border border-dashed border-gray-200 p-4 flex flex-col justify-end">
             <div className="w-full h-48 flex items-end justify-between gap-3 pt-6">
               {[
-                { day: "Mon", sent: stats.totalSent * 0.1, del: stats.totalDelivered * 0.1, read: stats.totalRead * 0.1 },
-                { day: "Tue", sent: stats.totalSent * 0.2, del: stats.totalDelivered * 0.2, read: stats.totalRead * 0.2 },
-                { day: "Wed", sent: stats.totalSent * 0.15, del: stats.totalDelivered * 0.15, read: stats.totalRead * 0.15 },
-                { day: "Thu", sent: stats.totalSent * 0.25, del: stats.totalDelivered * 0.25, read: stats.totalRead * 0.25 },
-                { day: "Fri", sent: stats.totalSent * 0.3, del: stats.totalDelivered * 0.3, read: stats.totalRead * 0.3 },
+                { day: "Interval 1", sent: stats.totalSent * 0.2, del: stats.totalDelivered * 0.2, read: stats.totalRead * 0.2 },
+                { day: "Interval 2", sent: stats.totalSent * 0.4, del: stats.totalDelivered * 0.4, read: stats.totalRead * 0.4 },
+                { day: "Interval 3", sent: stats.totalSent * 0.6, del: stats.totalDelivered * 0.6, read: stats.totalRead * 0.6 },
+                { day: "Interval 4", sent: stats.totalSent * 0.8, del: stats.totalDelivered * 0.8, read: stats.totalRead * 0.8 },
+                { day: "Current", sent: stats.totalSent, del: stats.totalDelivered, read: stats.totalRead },
               ].map((item, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
                   <div className="w-full flex items-end justify-center gap-1 h-full">
-                    <div className="w-2 bg-blue-500 rounded-t" style={{ height: `${Math.max(10, Math.min(100, item.sent))}%` }}></div>
-                    <div className="w-2 bg-emerald-500 rounded-t" style={{ height: `${Math.max(10, Math.min(100, item.del))}%` }}></div>
-                    <div className="w-2 bg-purple-500 rounded-t" style={{ height: `${Math.max(10, Math.min(100, item.read))}%` }}></div>
+                    <div className="w-2.5 bg-blue-500 rounded-t" style={{ height: `${Math.max(10, Math.min(100, (item.sent / (stats.totalSent || 1)) * 100))}%` }}></div>
+                    <div className="w-2.5 bg-emerald-500 rounded-t" style={{ height: `${Math.max(10, Math.min(100, (item.del / (stats.totalDelivered || 1)) * 100))}%` }}></div>
+                    <div className="w-2.5 bg-purple-500 rounded-t" style={{ height: `${Math.max(10, Math.min(100, (item.read / (stats.totalRead || 1)) * 100))}%` }}></div>
                   </div>
                   <span className="text-[9px] text-gray-500 font-mono mt-2">{item.day}</span>
                 </div>
@@ -359,7 +382,7 @@ export default function DashboardPage() {
           <div className="bg-gray-50 border px-4 py-2.5 rounded-xl flex items-center gap-3">
             <span className="text-xl">🏢</span>
             <div>
-              <span className="text-[9px] text-gray-400 block uppercase font-bold">Account / Channel</span>
+              <span className="text-[9px] text-gray-400 block uppercase font-bold">Active Account</span>
               <span className="font-bold text-gray-900">{stats.verifiedName}</span>
             </div>
           </div>

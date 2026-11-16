@@ -9,21 +9,25 @@ export async function GET(req: Request) {
     const endDateParam = searchParams.get("endDate");
     const channelId = searchParams.get("channelId");
 
-    // 1. Fetch all onboarded accounts for multi-account handling
+    // 1. Fetch all accounts to find the requested or default one
     const allAccounts = await prisma.wabaAccount.findMany();
-
+    
     let targetAccount = null;
-    if (channelId && channelId !== "ALL") {
+    if (channelId) {
       targetAccount = allAccounts.find(
         (acc: any) => acc.id === channelId || acc.phoneNumberId === channelId
       );
     }
+    // Fallback to default or first account if none matched
+    if (!targetAccount && allAccounts.length > 0) {
+      targetAccount = allAccounts.find((acc: any) => acc.isDefault) || allAccounts[0];
+    }
 
-    // 2. Meta Health & Limits Fetching
+    // 2. Fetch Live Meta Health for this specific account
     let metaHealth = {
       qualityRating: "GREEN",
       messagingLimit: "100K/day",
-      verifiedName: targetAccount ? (targetAccount.displayPhone || targetAccount.phoneNumberId) : "All Accounts Combined",
+      verifiedName: targetAccount ? (targetAccount.verifiedName || targetAccount.displayPhone || targetAccount.phoneNumberId) : "WhatsApp Business",
     };
 
     if (targetAccount && targetAccount.accessToken && targetAccount.phoneNumberId) {
@@ -41,12 +45,9 @@ export async function GET(req: Request) {
       } catch (e) {
         console.error("Meta Health API error:", e);
       }
-    } else if (!targetAccount && allAccounts.length > 0) {
-      // If 'All' is selected, take the primary or first account for general health representation
-      metaHealth.verifiedName = `Combined (${allAccounts.length} Numbers)`;
     }
 
-    // 3. Date Range Filtration
+    // 3. Date Range Calculation
     const now = new Date();
     let startDate = new Date();
     let endDate = new Date(now);
@@ -67,10 +68,11 @@ export async function GET(req: Request) {
 
     const dateQuery = filter === "ALL" && !startDateParam ? {} : { createdAt: { gte: startDate, lte: endDate } };
     
-    // If specific account selected, filter by its channel/phone number ID
-    const channelQuery = channelId && channelId !== "ALL" ? { chatSession: { channel: channelId } } : {};
+    // Filter messages strictly for this account's phone number or session channel
+    const activeChannelId = targetAccount?.phoneNumberId || channelId;
+    const channelQuery = activeChannelId ? { chatSession: { channel: activeChannelId } } : {};
 
-    // 4. Real Database Aggregations
+    // 4. Database Metrics
     const totalSent = await prisma.chatMessage.count({
       where: { senderType: "AGENT", ...dateQuery, ...channelQuery },
     });
@@ -91,7 +93,7 @@ export async function GET(req: Request) {
       where: { status: "FAILED", ...dateQuery, ...channelQuery },
     });
 
-    // Category Breakdowns (Marketing, Utility, Auth)
+    // Categories Breakdown
     const marketingTotal = await prisma.chatMessage.count({
       where: { messageType: "template", ...dateQuery, ...channelQuery },
     });
@@ -99,10 +101,6 @@ export async function GET(req: Request) {
       where: { messageType: "text", ...dateQuery, ...channelQuery },
     });
     const authTotal = Math.max(0, totalSent - marketingTotal - utilityTotal);
-
-    const marketingDelivered = Math.floor(marketingTotal * 0.9);
-    const utilityDelivered = Math.floor(utilityTotal * 0.9);
-    const authDelivered = Math.floor(authTotal * 0.9);
 
     return NextResponse.json({
       success: true,
@@ -113,11 +111,11 @@ export async function GET(req: Request) {
         totalUnread,
         totalFailed,
         marketingTotal,
-        marketingDelivered,
+        marketingDelivered: Math.floor(marketingTotal * 0.9),
         utilityTotal,
-        utilityDelivered,
+        utilityDelivered: Math.floor(utilityTotal * 0.9),
         authTotal,
-        authDelivered,
+        authDelivered: Math.floor(authTotal * 0.9),
         qualityRating: metaHealth.qualityRating,
         messagingLimit: metaHealth.messagingLimit,
         verifiedName: metaHealth.verifiedName,

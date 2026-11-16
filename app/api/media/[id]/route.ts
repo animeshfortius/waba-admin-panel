@@ -3,11 +3,11 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const resolvedParams = await params;
-    const mediaId = resolvedParams.id;
+    const params = await context.params;
+    const mediaId = params.id;
     
     if (!mediaId) {
       return NextResponse.json({ error: "Media ID required" }, { status: 400 });

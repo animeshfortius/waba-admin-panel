@@ -129,6 +129,28 @@ export default function AgentsPage() {
     );
   };
 
+  // Active Login As (Impersonation) Handler
+  const handleLoginAs = async (ag: any) => {
+    try {
+      const res = await fetch("/api/agents/login-as", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: ag.id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem("currentAgent", JSON.stringify(data.agent));
+        alert(`🚀 Successfully switched session to Agent: ${ag.name}`);
+        window.location.href = `/dashboard/live-chat?agentMode=true`;
+      } else {
+        alert(`❌ Failed to login as agent: ${data.error}`);
+      }
+    } catch (err) {
+      console.error("Login as error:", err);
+      alert("❌ Network error during agent login simulation.");
+    }
+  };
+
   return (
     <div className="w-full min-h-screen bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6">
       {/* Top Header & Navigation */}
@@ -325,8 +347,8 @@ export default function AgentsPage() {
                     </td>
                     <td className="p-3.5">
                       <button
-                        onClick={() => alert(`Logging in as agent: ${ag.name}`)}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg border transition cursor-pointer flex items-center space-x-1"
+                        onClick={() => handleLoginAs(ag)}
+                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold px-3 py-1.5 rounded-lg border border-emerald-200 transition cursor-pointer flex items-center space-x-1"
                       >
                         <span>🔊</span>
                         <span>Login</span>
@@ -340,7 +362,7 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* CLEAN ADD AGENT MODAL (No permissions here, assigned after creation) */}
+      {/* CLEAN ADD AGENT MODAL */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 border animate-in fade-in duration-200">
@@ -438,7 +460,7 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* 1. CHAT CONFIGURATIONS MODAL (⚙️) - LIVE WABA CHANNELS FETCHED */}
+      {/* CHAT CONFIG MODAL */}
       {showConfigModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5 border">
@@ -494,7 +516,7 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* 2. ASSIGNMENTS MODAL (👤) */}
+      {/* ASSIGNMENTS MODAL */}
       {showAssignmentsModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-3xl w-full p-6 shadow-2xl space-y-5 border">
@@ -538,7 +560,7 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* 3. AGENT ANALYTICS MODAL (📊) - LIVE WABA CHANNELS FETCHED */}
+      {/* ANALYTICS MODAL */}
       {showAnalyticsModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl space-y-5 border max-h-[90vh] overflow-y-auto">
@@ -568,7 +590,6 @@ export default function AgentsPage() {
               <button onClick={() => alert("Analytics refreshed!")} className="text-emerald-600 font-bold hover:underline cursor-pointer">🔄 Refresh Stats</button>
             </div>
 
-            {/* Metrics Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
               {[
                 { label: "All Chats", val: 0, color: "text-gray-800" },
@@ -587,7 +608,6 @@ export default function AgentsPage() {
               ))}
             </div>
 
-            {/* Charts Breakdown */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="border p-5 rounded-2xl text-center space-y-3 bg-gray-50/50">
                 <h4 className="font-bold text-xs text-gray-700">Chat Status Breakdown</h4>

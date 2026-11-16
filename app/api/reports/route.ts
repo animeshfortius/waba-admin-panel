@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+export const dynamic = "force-dynamic";
+export async function GET(request: Request) {
 
 function formatIST(dateInput: Date | string | null) {
   if (!dateInput) return "N/A";

@@ -1,386 +1,1188 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 
-function TemplateCreateContent() {
-  const searchParams = useSearchParams();
+const META_LANGUAGES = [
+  { code: "en_US", label: "English (US) - en_US" },
+  { code: "en_GB", label: "English (UK) - en_GB" },
+  { code: "hi", label: "Hindi - हिंदी (hi)" },
+  { code: "bn", label: "Bengali - বাংলা (bn)" },
+  { code: "mr", label: "Marathi - मराठी (mr)" },
+  { code: "ta", label: "Tamil - தமிழ் (ta)" },
+  { code: "te", label: "Telugu - తెలుగు (te)" },
+  { code: "gu", label: "Gujarati - ગુજરાતી (gu)" },
+  { code: "kn", label: "Kannada - ಕನ್ನಡ (kn)" },
+  { code: "ml", label: "Malayalam - മലയാളം (ml)" },
+  { code: "pa", label: "Punjabi - ਪੰਜਾਬੀ (pa)" },
+  { code: "or", label: "Odia - ଓଡ଼ିଆ (or)" },
+  { code: "as", label: "Assamese - অসমীয়া (as)" },
+  { code: "ur", label: "Urdu - اردو (ur)" },
+  { code: "ar", label: "Arabic - العربية (ar)" },
+  { code: "es", label: "Spanish - Español (es)" },
+  { code: "fr", label: "French - Français (fr)" },
+  { code: "de", label: "German - Deutsch (de)" },
+  { code: "it", label: "Italian - Italiano (it)" },
+  { code: "pt_BR", label: "Portuguese (BR) - pt_BR" },
+  { code: "ru", label: "Russian - Русский (ru)" },
+  { code: "id", label: "Indonesian - Bahasa Indonesia (id)" },
+  { code: "ms", label: "Malay - Bahasa Melayu (ms)" },
+  { code: "th", label: "Thai - ไทย (th)" },
+  { code: "vi", label: "Vietnamese - Tiếng Việt (vi)" },
+  { code: "zh_CN", label: "Chinese (Simplified) - zh_CN" },
+  { code: "ja", label: "Japanese - 日本語 (ja)" },
+  { code: "ko", label: "Korean - 한국어 (ko)" },
+  { code: "tr", label: "Turkish - Türkçe (tr)" },
+  { code: "nl", label: "Dutch - Nederlands (nl)" },
+  { code: "pl", label: "Polish - Polski (pl)" },
+  { code: "uk", label: "Ukrainian - Українська (uk)" },
+];
+
+export default function CreateWhatsAppTemplateModule() {
+  const [step, setStep] = useState(1);
   const [userId, setUserId] = useState("");
   const [wabaAccounts, setWabaAccounts] = useState<any[]>([]);
-  const [selectedChannel, setSelectedChannel] = useState("");
+  const [loadingWabas, setLoadingWabas] = useState(true);
 
+  // Step 1 States
+  const [category, setCategory] = useState<"Marketing" | "Utility" | "Authentication">("Marketing");
+  const [subType, setSubType] = useState("Default");
+
+  // Step 2 General Form States
   const [templateName, setTemplateName] = useState("");
   const [language, setLanguage] = useState("en_US");
-  const [category, setCategory] = useState("UTILITY");
+  const [wabaAccount, setWabaAccount] = useState("");
   const [allowCategoryChange, setAllowCategoryChange] = useState(false);
 
-  // Header State
-  const [headerType, setHeaderType] = useState("NONE");
+  // Header, Body, Footer
+  const [mediaType, setMediaType] = useState("None");
   const [headerText, setHeaderText] = useState("");
-  const [headerFile, setHeaderFile] = useState<File | null>(null);
-
-  // Body State
-  const [bodyText, setBodyText] = useState("");
-
-  // Footer State
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
+  const [bodyText, setBodyText] = useState("Hello {{1}}, welcome to our service!");
   const [footerText, setFooterText] = useState("");
 
+  // Textarea Ref for Selection Formatting
+  const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Variable Samples State
+  const [variableSamples, setVariableSamples] = useState<{ [key: string]: string }>({ "1": "Animesh" });
+
   // Buttons State
-  const [buttonsType, setButtonsType] = useState("NONE");
-  const [callToActionType, setCallToActionType] = useState("PHONE_NUMBER");
-  const [buttonText1, setButtonText1] = useState("");
-  const [buttonValue1, setButtonValue1] = useState("");
-  const [buttonText2, setButtonText2] = useState("");
-  const [buttonValue2, setButtonValue2] = useState("");
+  const [buttons, setButtons] = useState<{ id: string; type: string; text: string; value?: string }[]>([]);
+  const [showButtonMenu, setShowButtonMenu] = useState(false);
 
-  const [loading, setLoading] = useState(false);
+  // Authentication Specific States
+  const [codeDeliveryOption, setCodeDeliveryOption] = useState("zero_tap");
+  const [apps, setApps] = useState<{ packageName: string; signatureHash: string }[]>([
+    { packageName: "com.example.myapp", signatureHash: "12345678901" },
+  ]);
+  const [otpExpiryMinutes, setOtpExpiryMinutes] = useState(10);
+  const [addSecurityRecommendation, setAddSecurityRecommendation] = useState(true);
 
+  // Carousel Cards State
+  const [carouselCards, setCarouselCards] = useState([
+    { id: 1, mediaType: "Image", mediaUrl: "", text: "Card 1 Offer Details", buttonText: "View Item" },
+    { id: 2, mediaType: "Image", mediaUrl: "", text: "Card 2 Offer Details", buttonText: "View Item" },
+  ]);
+  const [activeCarouselIndex, setActiveCarouselIndex] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Extract variables whenever bodyText changes
   useEffect(() => {
-    const storedUserId = localStorage.getItem("userId") || "";
-    if (storedUserId) {
-      setUserId(storedUserId);
-      fetchWabaAccounts(storedUserId);
+    const matches = bodyText.match(/\{\{(\d+)\}\}/g);
+    if (matches) {
+      const vars: { [key: string]: string } = {};
+      matches.forEach((m) => {
+        const num = m.replace(/[{}]/g, "");
+        vars[num] = variableSamples[num] || `Sample ${num}`;
+      });
+      setVariableSamples(vars);
     } else {
-      fetch("/api/admin/me")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.user?.id) {
-            setUserId(data.user.id);
-            fetchWabaAccounts(data.user.id);
-          }
-        })
-        .catch(() => fetchWabaAccounts(""));
+      setVariableSamples({});
     }
-  }, [searchParams]);
+  }, [bodyText]);
+
+  // Fetch Onboarded WABA Accounts Immediately on Load
+  useEffect(() => {
+    const initUserAndWabas = async () => {
+      setLoadingWabas(true);
+      let activeUserId = localStorage.getItem("userId") || "";
+
+      if (!activeUserId) {
+        try {
+          const meRes = await fetch("/api/admin/me");
+          const meData = await meRes.json();
+          if (meData?.user?.id) {
+            activeUserId = meData.user.id;
+            localStorage.setItem("userId", activeUserId);
+          }
+        } catch (err) {
+          console.error("Session fetch fallback:", err);
+        }
+      }
+
+      setUserId(activeUserId);
+      await fetchWabaAccounts(activeUserId);
+      setLoadingWabas(false);
+    };
+
+    initUserAndWabas();
+  }, []);
 
   const fetchWabaAccounts = async (uid: string) => {
     try {
-      const res = await fetch(`/api/templates?userId=${uid}`);
+      const url = uid ? `/api/templates?userId=${uid}` : `/api/templates`;
+      const res = await fetch(url);
       const data = await res.json();
-      if (data.success) {
-        const accounts = data.wabaAccounts || [];
-        setWabaAccounts(accounts);
-
-        // 🟢 Dashboard selected channel fallback check
-        const urlChannelId = searchParams?.get("channelId");
-        if (accounts.length > 0) {
-          if (urlChannelId) {
-            const matchedAcc = accounts.find(
-              (a: any) => a.id === urlChannelId || a.phoneNumberId === urlChannelId || a.wabaId === urlChannelId
-            );
-            setSelectedChannel(matchedAcc ? (matchedAcc.phoneNumberId || matchedAcc.wabaId) : accounts[0].phoneNumberId || accounts[0].wabaId);
-          } else {
-            const defaultAcc = accounts.find((a: any) => a.isDefault) || accounts[0];
-            setSelectedChannel(defaultAcc.phoneNumberId || defaultAcc.wabaId);
-          }
+      if (data.success && Array.isArray(data.wabaAccounts)) {
+        setWabaAccounts(data.wabaAccounts);
+        if (data.wabaAccounts.length > 0) {
+          setWabaAccount(data.wabaAccounts[0].wabaId);
         }
       }
     } catch (err) {
-      console.error("Failed to load WABA accounts:", err);
+      console.error("Error fetching WABA accounts:", err);
     }
   };
 
-  const handleCreateTemplate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const addVariableToHeader = () => {
+    const matches = headerText.match(/\{\{\d+\}\}/g);
+    const nextVar = matches ? matches.length + 1 : 1;
+    setHeaderText((prev) => prev + ` {{${nextVar}}}`);
+  };
+
+  const addVariableToBody = () => {
+    const matches = bodyText.match(/\{\{(\d+)\}\}/g);
+    const nextVar = matches ? matches.length + 1 : 1;
+    setBodyText((prev) => prev + ` {{${nextVar}}}`);
+  };
+
+  // Smart Selection Formatting Wrapper
+  const applyFormatting = (wrapper: string) => {
+    const textarea = bodyTextareaRef.current;
+    if (!textarea) {
+      setBodyText((prev) => prev + `${wrapper}text${wrapper}`);
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = bodyText.substring(start, end);
+
+    if (selectedText.length > 0) {
+      const updatedText = bodyText.substring(0, start) + wrapper + selectedText + wrapper + bodyText.substring(end);
+      setBodyText(updatedText);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + wrapper.length, end + wrapper.length);
+      }, 0);
+    } else {
+      const updatedText = bodyText.substring(0, start) + wrapper + "text" + wrapper + bodyText.substring(end);
+      setBodyText(updatedText);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + wrapper.length, start + wrapper.length + 4);
+      }, 0);
+    }
+  };
+
+  // Real-time WhatsApp Preview Formatter
+  const renderFormattedPreview = (text: string) => {
+    if (!text) return "Your message body content will appear here...";
+
+    let previewText = text;
+    Object.keys(variableSamples).forEach((key) => {
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, "g");
+      previewText = previewText.replace(regex, `[${variableSamples[key] || "val"}]`);
+    });
+
+    return previewText.split("\n").map((line, lineIdx) => {
+      return (
+        <div key={lineIdx} className="min-h-[16px]">
+          {line.split(" ").map((word, wordIdx) => {
+            if (word.startsWith("*") && word.endsWith("*") && word.length > 2) {
+              return <strong key={wordIdx} className="font-bold text-white">{word.slice(1, -1)} </strong>;
+            }
+            if (word.startsWith("_") && word.endsWith("_") && word.length > 2) {
+              return <em key={wordIdx} className="italic text-slate-200">{word.slice(1, -1)} </em>;
+            }
+            if (word.startsWith("~") && word.endsWith("~") && word.length > 2) {
+              return <span key={wordIdx} className="line-through text-slate-300">{word.slice(1, -1)} </span>;
+            }
+            if (word.startsWith("```") && word.endsWith("```") && word.length > 6) {
+              return <code key={wordIdx} className="font-mono bg-slate-800 px-1 rounded text-emerald-300">{word.slice(3, -3)} </code>;
+            }
+            return <span key={wordIdx}>{word} </span>;
+          })}
+        </div>
+      );
+    });
+  };
+
+  // Button Management
+  const handleAddButton = (type: string) => {
+    if (buttons.length >= 10) {
+      alert("Maximum 10 buttons allowed");
+      return;
+    }
+    const newBtn = {
+      id: Date.now().toString(),
+      type,
+      text: type === "Custom" ? "Quick Reply" : type === "Visit website" ? "Visit Website" : type,
+      value: "",
+    };
+    setButtons([...buttons, newBtn]);
+    setShowButtonMenu(false);
+  };
+
+  const removeButton = (id: string) => {
+    setButtons(buttons.filter((b) => b.id !== id));
+  };
+
+  // App Setup Helpers (Auth)
+  const handleAddApp = () => {
+    setApps([...apps, { packageName: "", signatureHash: "" }]);
+  };
+
+  const handleRemoveApp = (idx: number) => {
+    setApps(apps.filter((_, i) => i !== idx));
+  };
+
+  // Carousel Card Helpers
+  const handleAddCarouselCard = () => {
+    if (carouselCards.length >= 10) return alert("Maximum 10 Carousel cards allowed");
+    const newCard = {
+      id: Date.now(),
+      mediaType: "Image",
+      mediaUrl: "",
+      text: `Card ${carouselCards.length + 1} Details`,
+      buttonText: "Explore More",
+    };
+    setCarouselCards([...carouselCards, newCard]);
+  };
+
+  // Handle Media File Upload with Size Limits
+  const handleMediaFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const sizeMB = file.size / (1024 * 1024);
+    if (mediaType === "Image" && sizeMB > 5) {
+      alert("❌ Image size exceeds 5MB limit!");
+      e.target.value = "";
+      return;
+    }
+    if (mediaType === "Video" && sizeMB > 16) {
+      alert("❌ Video size exceeds 16MB limit!");
+      e.target.value = "";
+      return;
+    }
+    if (mediaType === "Document" && sizeMB > 100) {
+      alert("❌ Document size exceeds 100MB limit!");
+      e.target.value = "";
+      return;
+    }
+
+    setMediaFile(file);
+    setMediaPreviewUrl(URL.createObjectURL(file));
+  };
+
+  // Real Meta API Submit Handler with Strict NONE Header Control
+  const handleSubmitForReview = async () => {
     if (!templateName.trim()) {
-      alert("Please enter a template name.");
+      alert("Please enter template name");
       return;
     }
-    if (!selectedChannel) {
-      alert("Please select a WABA channel.");
-      return;
-    }
-    if (!bodyText.trim()) {
-      alert("Please enter body content for the template.");
+    if (!wabaAccount) {
+      alert("Please select an onboarded WABA account");
       return;
     }
 
-    setLoading(true);
-    try {
-      let headerMediaUrl = "";
-      if (headerFile) {
-        const uploadData = new FormData();
-        uploadData.append("file", headerFile);
-        uploadData.append("wabaId", selectedChannel);
-
-        const uploadRes = await fetch("/api/media/upload", {
-          method: "POST",
-          body: uploadData,
-        });
-        const uploadResult = await uploadRes.json();
-        if (uploadResult.success) {
-          headerMediaUrl = uploadResult.mediaId || uploadResult.url;
-        } else {
-          alert(`Media upload failed: ${uploadResult.error}`);
-          setLoading(false);
-          return;
-        }
+    // Strict validation: Only require media file if mediaType is actually Image, Video, or Document
+    if (mediaType !== "None" && mediaType !== "Location" && mediaType !== "" && !mediaFile) {
+      if (mediaType === "Image" || mediaType === "Video" || mediaType === "Document") {
+        alert(`❌ Please upload a sample ${mediaType} file for Meta template approval!`);
+        return;
       }
+    }
 
-      const payload = {
-        userId,
-        wabaId: selectedChannel,
-        name: templateName.toLowerCase().replace(/\s+/g, "_"),
-        language,
-        category,
-        allowCategoryChange,
-        headerType,
-        headerText,
-        headerMediaUrl,
-        bodyText,
-        footerText,
-        buttonsType,
-        callToActionType,
-        buttonText1,
-        buttonValue1,
-        buttonText2,
-        buttonValue2,
-      };
+    const selectedAccountObj = wabaAccounts.find((acc) => acc.wabaId === wabaAccount);
 
+    setSubmitting(true);
+    const formData = new FormData();
+    formData.append("userId", userId || selectedAccountObj?.userId || "default_user");
+    formData.append("wabaId", wabaAccount);
+    formData.append("wabaNumber", selectedAccountObj?.displayPhone || "");
+    formData.append("name", templateName.toLowerCase().trim().replace(/[^a-z0-9_]/g, "_"));
+    formData.append("language", language);
+    formData.append("category", category.toUpperCase());
+    formData.append("subType", subType);
+    formData.append("allowCategoryChange", String(allowCategoryChange));
+
+    // 🔥 Bulletproof Header Mapping: Strictly NONE when None is selected
+    let finalHeaderType = "NONE";
+    if (mediaType === "Image" || mediaType === "Video" || mediaType === "Document") {
+      finalHeaderType = mediaType.toUpperCase();
+    } else if (headerText && headerText.trim() !== "") {
+      finalHeaderType = "TEXT";
+    } else {
+      finalHeaderType = "NONE";
+    }
+
+    formData.append("headerType", finalHeaderType);
+    formData.append("headerText", finalHeaderType === "TEXT" ? headerText : "");
+
+    formData.append("bodyText", bodyText);
+    formData.append("footerText", footerText || "");
+    formData.append("variableSamples", JSON.stringify(Object.values(variableSamples)));
+    formData.append(
+      "buttons",
+      JSON.stringify(
+        buttons.map((b) => ({
+          type:
+            b.type === "Visit website"
+              ? "URL"
+              : b.type === "Call Phone Number"
+              ? "PHONE_NUMBER"
+              : b.type === "Copy offer code"
+              ? "COPY_CODE"
+              : "QUICK_REPLY",
+          text: b.text,
+          value: b.value || "",
+        }))
+      )
+    );
+
+    if (category === "Authentication") {
+      formData.append("authConfig", JSON.stringify({ codeDeliveryOption, apps, otpExpiryMinutes, addSecurityRecommendation }));
+    }
+
+    if (subType === "Carousel") {
+      formData.append("carouselCards", JSON.stringify(carouselCards));
+    }
+
+    if (mediaFile && (mediaType === "Image" || mediaType === "Video" || mediaType === "Document")) {
+      formData.append("mediaFile", mediaFile);
+    }
+
+    try {
       const res = await fetch("/api/templates/manage", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: formData,
       });
 
       const data = await res.json();
-      if (data.success) {
-        alert("✅ Template submitted successfully and synced with Meta!");
+
+      if (res.ok && data.success) {
+        alert("✅ WhatsApp Template submitted successfully to Meta! Status: PENDING ⏳");
         window.location.href = "/dashboard/templates";
       } else {
-        alert(`❌ Failed to submit template: ${data.error}`);
+        alert("❌ Meta API Error: " + (data.error || "Failed to submit template"));
       }
     } catch (err) {
-      console.error("Template creation error:", err);
-      alert("❌ Network error submitting template.");
+      console.error("Error submitting template:", err);
+      alert("Network error while submitting template to Meta.");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="w-full min-h-screen bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-2xl border shadow-xs gap-3 w-full">
+    <div className="w-full bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6 min-h-screen">
+      {/* Top Header - Full Width */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-2xl border shadow-xs gap-3">
         <div>
-          <div className="text-gray-400 font-medium">Dashboard › Templates › Create New</div>
-          <h1 className="text-xl font-bold text-gray-800">Create Meta WhatsApp Template</h1>
+          <div className="text-gray-400 font-medium">WhatsApp Manager › Templates › Create</div>
+          <h1 className="text-xl font-bold text-gray-800">Create & Edit Message Template</h1>
         </div>
         <Link
           href="/dashboard/templates"
-          className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2 rounded-xl transition cursor-pointer"
+          className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2 rounded-xl border transition"
         >
-          ⬅ Back to Templates
+          📁 Template Library
         </Link>
       </div>
 
-      <form onSubmit={handleCreateTemplate} className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
-        <div className="lg:col-span-8 bg-white p-6 rounded-2xl border shadow-xs space-y-6">
-          <h2 className="text-base font-bold text-gray-800 border-b pb-3">Template Core Details</h2>
+      {/* Step Navigation Tabs */}
+      <div className="flex items-center space-x-3 bg-white p-3 rounded-2xl border shadow-xs">
+        <button
+          onClick={() => setStep(1)}
+          className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+            step === 1 ? "bg-emerald-600 text-white shadow-md" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px]">1</span>
+          <span>Set up template</span>
+        </button>
+        <span className="text-gray-300">➔</span>
+        <button
+          onClick={() => setStep(2)}
+          className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+            step === 2 ? "bg-emerald-600 text-white shadow-md" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px]">2</span>
+          <span>Edit template</span>
+        </button>
+      </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block font-bold text-gray-600 mb-1">SELECT WABA ACCOUNT *</label>
-              <select
-                value={selectedChannel}
-                onChange={(e) => setSelectedChannel(e.target.value)}
-                className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-700 focus:outline-none focus:border-emerald-500"
-              >
-                {wabaAccounts.length === 0 ? (
-                  <option value="">No Onboarded Accounts Found</option>
-                ) : (
-                  wabaAccounts.map((acc) => (
-                    <option key={acc.id} value={acc.phoneNumberId || acc.wabaId}>
-                      📱 {acc.displayPhone || acc.phoneNumberId} — {acc.displayName || "Active WABA"} {acc.isDefault ? "⭐ (Default)" : ""}
-                    </option>
-                  ))
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Interactive Builder Form */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border shadow-xs space-y-6">
+          {/* STEP 1: SET UP TEMPLATE */}
+          {step === 1 && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-base font-bold text-gray-800">Choose Template Category & Sub-type</h2>
+                <p className="text-gray-500 mt-1">Select the intent and structure of your message template.</p>
+              </div>
+
+              {/* Category Tabs */}
+              <div className="grid grid-cols-3 gap-3">
+                {(["Marketing", "Utility", "Authentication"] as const).map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      setCategory(cat);
+                      setSubType(cat === "Marketing" ? "Default" : cat === "Utility" ? "None" : "Zero-tap OTP");
+                    }}
+                    className={`py-3 px-4 rounded-xl text-xs font-bold border transition text-center cursor-pointer ${
+                      category === cat
+                        ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                        : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                    }`}
+                  >
+                    {cat === "Marketing" && "📣 "}
+                    {cat === "Utility" && "🛠️ "}
+                    {cat === "Authentication" && "🔐 "}
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              {/* Sub-types List */}
+              <div className="border rounded-2xl p-4 bg-gray-50/50 space-y-3">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  Available Formats for {category}
+                </label>
+
+                {category === "Marketing" && (
+                  <div className="space-y-2">
+                    {[
+                      { id: "Default", label: "Default", desc: "Send messages with media and customized buttons to your customers." },
+                      { id: "Catalogue", label: "Catalogue", desc: "Send messages with product catalog by connecting your products catalogue." },
+                      { id: "Flows", label: "Flows", desc: "Send messages to capture customer interest, appointments requests or let surveys." },
+                      { id: "Calling permissions request", label: "Calling permissions request", desc: "Ask if user can call them on WhatsApp." },
+                      { id: "Limited Time Offer (LTO)", label: "Limited Time Offer (LTO)", desc: "Send messages with expiration date for high user engagement and conversion." },
+                      { id: "Carousel", label: "Carousel", desc: "Carousel lets you showcase multiple products, services or variable formats in one banner." },
+                    ].map((item) => (
+                      <label
+                        key={item.id}
+                        className={`flex items-start space-x-3 p-3.5 rounded-xl border cursor-pointer transition ${
+                          subType === item.id ? "bg-emerald-50/80 border-emerald-400 shadow-xs" : "bg-white hover:bg-gray-100 border-gray-200"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="m_subtype"
+                          checked={subType === item.id}
+                          onChange={() => setSubType(item.id)}
+                          className="mt-0.5 accent-emerald-600"
+                        />
+                        <div>
+                          <div className="font-bold text-gray-800">{item.label}</div>
+                          <div className="text-[11px] text-gray-500">{item.desc}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
                 )}
-              </select>
+
+                {category === "Utility" && (
+                  <div className="space-y-2">
+                    {[
+                      { id: "None", label: "Default Utility", desc: "Send account updates, notifications or transactional alerts." },
+                      { id: "Order status", label: "Order status", desc: "Send messages to keep customers updated about the progress of their orders." },
+                      { id: "Order details", label: "Order details", desc: "Send detailed order confirmations and receipts." },
+                    ].map((item) => (
+                      <label
+                        key={item.id}
+                        className={`flex items-start space-x-3 p-3.5 rounded-xl border cursor-pointer transition ${
+                          subType === item.id ? "bg-emerald-50/80 border-emerald-400 shadow-xs" : "bg-white hover:bg-gray-100 border-gray-200"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="u_subtype"
+                          checked={subType === item.id}
+                          onChange={() => setSubType(item.id)}
+                          className="mt-0.5 accent-emerald-600"
+                        />
+                        <div>
+                          <div className="font-bold text-gray-800">{item.label}</div>
+                          <div className="text-[11px] text-gray-500">{item.desc}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {category === "Authentication" && (
+                  <div className="space-y-2">
+                    {[
+                      { id: "Zero-tap OTP", label: "Zero-tap OTP", desc: "Automatically send and verify OTP codes without manual user interaction." },
+                      { id: "One-tap auto fill", label: "One-tap auto fill", desc: "Allow customers to autofill verification codes with a single tap button." },
+                      { id: "Copy code", label: "Copy code button", desc: "Standard OTP template with a button to copy code directly." },
+                    ].map((item) => (
+                      <label
+                        key={item.id}
+                        className={`flex items-start space-x-3 p-3.5 rounded-xl border cursor-pointer transition ${
+                          subType === item.id ? "bg-emerald-50/80 border-emerald-400 shadow-xs" : "bg-white hover:bg-gray-100 border-gray-200"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="a_subtype"
+                          checked={subType === item.id}
+                          onChange={() => setSubType(item.id)}
+                          className="mt-0.5 accent-emerald-600"
+                        />
+                        <div>
+                          <div className="font-bold text-gray-800">{item.label}</div>
+                          <div className="text-[11px] text-gray-500">{item.desc}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-between items-center pt-4 border-t">
+                <Link
+                  href="/dashboard/templates"
+                  className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200"
+                >
+                  Go to Template Library
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center space-x-1"
+                >
+                  <span>Next: Edit Template</span>
+                  <span>➔</span>
+                </button>
+              </div>
             </div>
+          )}
 
-            <div>
-              <label className="block font-bold text-gray-600 mb-1">TEMPLATE NAME *</label>
-              <input
-                type="text"
-                placeholder="e.g. order_update_alert"
-                value={templateName}
-                onChange={(e) => setTemplateName(e.target.value)}
-                className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono focus:bg-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block font-bold text-gray-600 mb-1">LANGUAGE *</label>
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold text-gray-700"
-              >
-                <option value="en_US">English (en_US)</option>
-                <option value="hi">Hindi (hi)</option>
-                <option value="en">English (en)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-bold text-gray-600 mb-1">CATEGORY *</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold text-gray-700"
-              >
-                <option value="UTILITY">Utility</option>
-                <option value="MARKETING">Marketing</option>
-                <option value="AUTHENTICATION">Authentication</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Header Section */}
-          <div className="space-y-3 pt-4 border-t">
-            <label className="block font-bold text-gray-700">HEADER (OPTIONAL)</label>
-            <select
-              value={headerType}
-              onChange={(e) => setHeaderType(e.target.value)}
-              className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold text-gray-700"
-            >
-              <option value="NONE">None</option>
-              <option value="TEXT">Text</option>
-              <option value="IMAGE">Image</option>
-              <option value="VIDEO">Video</option>
-              <option value="DOCUMENT">Document</option>
-            </select>
-
-            {headerType === "TEXT" && (
-              <input
-                type="text"
-                placeholder="Enter header title..."
-                value={headerText}
-                onChange={(e) => setHeaderText(e.target.value)}
-                className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs focus:outline-none"
-              />
-            )}
-
-            {["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType) && (
-              <input
-                type="file"
-                accept={headerType === "IMAGE" ? "image/*" : headerType === "VIDEO" ? "video/*" : ".pdf,.doc,.docx"}
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    setHeaderFile(e.target.files[0]);
-                  }
-                }}
-                className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer"
-              />
-            )}
-          </div>
-
-          {/* Body Section */}
-          <div className="space-y-2 pt-4 border-t">
-            <label className="block font-bold text-gray-700">BODY CONTENT * (Use &#123;&#123;1&#125;&#125;, &#123;&#123;2&#125;&#125; for variables)</label>
-            <textarea
-              rows={5}
-              placeholder="Hello {{1}}, your order {{2}} has been shipped successfully..."
-              value={bodyText}
-              onChange={(e) => setBodyText(e.target.value)}
-              className="w-full border rounded-xl p-3 bg-gray-50 text-xs font-mono focus:outline-none focus:bg-white focus:border-emerald-500"
-            />
-          </div>
-
-          {/* Footer Section */}
-          <div className="space-y-2 pt-4 border-t">
-            <label className="block font-bold text-gray-700">FOOTER (OPTIONAL)</label>
-            <input
-              type="text"
-              placeholder="Enter small footer text (e.g. Powered by Fortius Infocom)..."
-              value={footerText}
-              onChange={(e) => setFooterText(e.target.value)}
-              className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs focus:outline-none"
-            />
-          </div>
-
-          {/* Buttons Section */}
-          <div className="space-y-3 pt-4 border-t">
-            <label className="block font-bold text-gray-700">BUTTONS (OPTIONAL)</label>
-            <select
-              value={buttonsType}
-              onChange={(e) => setButtonsType(e.target.value)}
-              className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold text-gray-700"
-            >
-              <option value="NONE">None</option>
-              <option value="CALL_TO_ACTION">Call to Action (Phone / URL)</option>
-              <option value="QUICK_REPLY">Quick Reply</option>
-            </select>
-
-            {buttonsType !== "NONE" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-gray-50 p-3 rounded-xl border">
+          {/* STEP 2: EDIT TEMPLATE */}
+          {step === 2 && (
+            <div className="space-y-6">
+              {/* Header Info Banner */}
+              <div className="flex justify-between items-center bg-gray-50 p-3.5 rounded-xl border">
                 <div>
-                  <label className="block font-semibold text-gray-600 mb-1 text-[11px]">Button 1 Text</label>
+                  <span className="font-bold text-gray-700">Category: </span>
+                  <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[11px]">
+                    {category} ({subType})
+                  </span>
+                </div>
+                <label className="flex items-center space-x-2 cursor-pointer text-xs font-semibold text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={allowCategoryChange}
+                    onChange={(e) => setAllowCategoryChange(e.target.checked)}
+                    className="accent-emerald-600 rounded"
+                  />
+                  <span>Allow Category Change</span>
+                </label>
+              </div>
+
+              {/* BASIC DETAILS */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block font-bold text-gray-600 mb-1">TEMPLATE NAME *</label>
                   <input
                     type="text"
-                    placeholder="e.g. Call Us"
-                    value={buttonText1}
-                    onChange={(e) => setButtonText1(e.target.value)}
-                    className="w-full border rounded-lg p-2 bg-white text-xs"
+                    placeholder="e.g. order_update_v1"
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono"
+                    required
                   />
                 </div>
+
                 <div>
-                  <label className="block font-semibold text-gray-600 mb-1 text-[11px]">Button 1 Value (Phone / URL)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. +919876543210"
-                    value={buttonValue1}
-                    onChange={(e) => setButtonValue1(e.target.value)}
-                    className="w-full border rounded-lg p-2 bg-white text-xs font-mono"
-                  />
+                  <label className="block font-bold text-gray-600 mb-1">SELECT LANGUAGE *</label>
+                  <select
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value)}
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none font-semibold"
+                  >
+                    {META_LANGUAGES.map((lang) => (
+                      <option key={lang.code} value={lang.code}>
+                        {lang.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-600 mb-1">ONBOARDED WABA ACCOUNT *</label>
+                  <select
+                    value={wabaAccount}
+                    onChange={(e) => setWabaAccount(e.target.value)}
+                    className="w-full border rounded-xl p-2.5 bg-gray-50 font-mono text-gray-800 font-bold"
+                  >
+                    {loadingWabas ? (
+                      <option value="">Loading onboarded numbers...</option>
+                    ) : wabaAccounts.length === 0 ? (
+                      <option value="">No WABA accounts found</option>
+                    ) : (
+                      wabaAccounts.map((acc) => (
+                        <option key={acc.id} value={acc.wabaId}>
+                          {acc.displayPhone} — {acc.displayName || "Account"} (ID: {acc.wabaId})
+                        </option>
+                      ))
+                    )}
+                  </select>
                 </div>
               </div>
-            )}
-          </div>
 
-          <div className="flex justify-end pt-6 border-t">
-            <button
-              type="submit"
-              disabled={loading}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg cursor-pointer transition disabled:opacity-50"
-            >
-              {loading ? "⏳ Submitting to Meta..." : "🚀 Submit Template for Approval"}
-            </button>
-          </div>
-        </div>
+              {/* AUTHENTICATION SPECIFIC CONFIGURATION */}
+              {category === "Authentication" && (
+                <div className="border-2 border-emerald-200 rounded-2xl p-4 bg-emerald-50/30 space-y-4">
+                  <h3 className="font-bold text-gray-800 text-sm">🔐 Code Delivery Setup</h3>
 
-        {/* Live Preview Card */}
-        <div className="lg:col-span-4">
-          <div className="sticky top-6 bg-slate-900 p-5 rounded-3xl border-4 border-slate-700 shadow-2xl w-full max-w-sm mx-auto text-white space-y-3">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-[10px] text-slate-400 font-mono">
-              <span>WhatsApp Live Preview</span>
-              <span className="text-emerald-400 font-bold">{category}</span>
-            </div>
+                  <div className="space-y-2">
+                    {[
+                      { id: "zero_tap", label: "Zero-tap OTP", desc: "Automatically verifies code without user opening app." },
+                      { id: "one_tap", label: "One-tap auto fill", desc: "User taps one button in WhatsApp to auto fill code in your app." },
+                      { id: "copy_code", label: "Copy code", desc: "Standard copy button to copy verification code." },
+                    ].map((opt) => (
+                      <label key={opt.id} className="flex items-center space-x-3 bg-white p-2.5 rounded-xl border cursor-pointer">
+                        <input
+                          type="radio"
+                          name="codeDelivery"
+                          checked={codeDeliveryOption === opt.id}
+                          onChange={() => setCodeDeliveryOption(opt.id)}
+                          className="accent-emerald-600"
+                        />
+                        <div>
+                          <span className="font-bold text-gray-800">{opt.label}</span>
+                          <span className="text-[11px] text-gray-500 ml-2">({opt.desc})</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
 
-            <div className="bg-emerald-900/60 p-3.5 rounded-2xl space-y-2 shadow-inner border border-emerald-800/50">
-              {headerType !== "NONE" && (
-                <div className="border-b border-emerald-800/60 pb-1.5 text-xs font-semibold text-slate-200">
-                  {headerType === "TEXT" ? headerText || "Header Title" : `[Attached ${headerType} Header File]` }
+                  {/* App Setup */}
+                  <div className="space-y-3 pt-2">
+                    <label className="block font-bold text-gray-700">App Setup (Android Package & Signature)</label>
+                    {apps.map((app, idx) => (
+                      <div key={idx} className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-white p-3 rounded-xl border relative">
+                        <div>
+                          <label className="text-[10px] text-gray-400 font-bold">PACKAGE NAME</label>
+                          <input
+                            type="text"
+                            placeholder="com.example.app"
+                            value={app.packageName}
+                            onChange={(e) => {
+                              const updated = [...apps];
+                              updated[idx].packageName = e.target.value;
+                              setApps(updated);
+                            }}
+                            className="w-full border rounded-lg p-2 mt-0.5 text-xs font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 font-bold">APP SIGNATURE HASH (11 chars)</label>
+                          <input
+                            type="text"
+                            placeholder="11-char hash"
+                            value={app.signatureHash}
+                            onChange={(e) => {
+                              const updated = [...apps];
+                              updated[idx].signatureHash = e.target.value;
+                              setApps(updated);
+                            }}
+                            className="w-full border rounded-lg p-2 mt-0.5 text-xs font-mono"
+                          />
+                        </div>
+                        {apps.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveApp(idx)}
+                            className="absolute -top-2 -right-2 bg-rose-500 text-white w-5 h-5 rounded-full font-bold text-[10px]"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={handleAddApp}
+                      className="text-emerald-700 font-bold text-xs hover:underline flex items-center space-x-1"
+                    >
+                      <span>+ Add another app</span>
+                    </button>
+                  </div>
+
+                  {/* Expiry & Security Settings */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-3 rounded-xl border">
+                    <div className="flex items-center space-x-3">
+                      <label className="font-bold text-gray-700">OTP Code Expiry (Minutes):</label>
+                      <input
+                        type="number"
+                        value={otpExpiryMinutes}
+                        onChange={(e) => setOtpExpiryMinutes(Number(e.target.value))}
+                        className="border rounded-lg p-1.5 w-20 text-center font-bold"
+                      />
+                    </div>
+                    <label className="flex items-center space-x-2 cursor-pointer font-semibold text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={addSecurityRecommendation}
+                        onChange={(e) => setAddSecurityRecommendation(e.target.checked)}
+                        className="accent-emerald-600"
+                      />
+                      <span>Add security recommendation</span>
+                    </label>
+                  </div>
                 </div>
               )}
-              <div className="text-slate-100 leading-relaxed text-xs whitespace-pre-wrap">
-                {bodyText || "Your template body message will appear here..."}
+
+              {/* CAROUSEL SPECIFIC CONFIGURATION */}
+              {subType === "Carousel" && (
+                <div className="border-2 border-indigo-200 rounded-2xl p-4 bg-indigo-50/30 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-gray-800 text-sm">🎠 Carousel Cards Setup ({carouselCards.length}/10 Cards)</h3>
+                    <button
+                      type="button"
+                      onClick={handleAddCarouselCard}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-xs cursor-pointer"
+                    >
+                      + Add Carousel Card
+                    </button>
+                  </div>
+
+                  {/* Card Selector Tabs */}
+                  <div className="flex space-x-2 overflow-x-auto pb-2">
+                    {carouselCards.map((card, idx) => (
+                      <button
+                        key={card.id}
+                        type="button"
+                        onClick={() => setActiveCarouselIndex(idx)}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs border whitespace-nowrap cursor-pointer ${
+                          activeCarouselIndex === idx ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700"
+                        }`}
+                      >
+                        Card {idx + 1}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Active Card Fields */}
+                  {carouselCards[activeCarouselIndex] && (
+                    <div className="bg-white p-4 rounded-xl border space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-bold text-gray-600">CARD MEDIA</label>
+                          <select
+                            value={carouselCards[activeCarouselIndex].mediaType}
+                            onChange={(e) => {
+                              const updated = [...carouselCards];
+                              updated[activeCarouselIndex].mediaType = e.target.value;
+                              setCarouselCards(updated);
+                            }}
+                            className="w-full border rounded-lg p-2 mt-1"
+                          >
+                            <option value="Image">Image</option>
+                            <option value="Video">Video</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-bold text-gray-600">BUTTON TEXT</label>
+                          <input
+                            type="text"
+                            value={carouselCards[activeCarouselIndex].buttonText}
+                            onChange={(e) => {
+                              const updated = [...carouselCards];
+                              updated[activeCarouselIndex].buttonText = e.target.value;
+                              setCarouselCards(updated);
+                            }}
+                            className="w-full border rounded-lg p-2 mt-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-gray-600">CARD BODY TEXT</label>
+                        <input
+                          type="text"
+                          value={carouselCards[activeCarouselIndex].text}
+                          onChange={(e) => {
+                            const updated = [...carouselCards];
+                            updated[activeCarouselIndex].text = e.target.value;
+                            setCarouselCards(updated);
+                          }}
+                          className="w-full border rounded-lg p-2 mt-1"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* MEDIA HEADER (If not Auth or Carousel) */}
+              {category !== "Authentication" && subType !== "Carousel" && (
+                <div className="space-y-2 border-t pt-4">
+                  <label className="block font-bold text-gray-600">MEDIA HEADER • OPTIONAL</label>
+                  <div className="grid grid-cols-5 gap-2">
+                    {["None", "Image", "Video", "Document", "Location"].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          setMediaType(m);
+                          if (m === "None") {
+                            setMediaFile(null);
+                            setMediaPreviewUrl("");
+                          } else {
+                            setHeaderText("");
+                          }
+                        }}
+                        className={`py-2 rounded-xl font-bold text-xs border transition cursor-pointer ${
+                          mediaType === m ? "bg-emerald-600 text-white border-emerald-600" : "bg-gray-50 text-gray-700"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+
+                  {mediaType === "None" && (
+                    <div className="space-y-1 pt-2">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span className="font-bold text-gray-600">HEADER TEXT • OPTIONAL</span>
+                        <span>{headerText.length}/60</span>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Add an optional header text line..."
+                        value={headerText}
+                        onChange={(e) => setHeaderText(e.target.value)}
+                        className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none"
+                      />
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={addVariableToHeader}
+                          className="text-blue-600 font-bold hover:underline cursor-pointer"
+                        >
+                          + Add Variable
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sample Media Upload Box + Type & Size Instructions */}
+                  {(mediaType === "Image" || mediaType === "Video" || mediaType === "Document") && (
+                    <div className="border-2 border-dashed border-emerald-300 rounded-2xl p-4 bg-emerald-50/40 space-y-2.5 mt-3">
+                      {!mediaFile ? (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <div className="font-bold text-gray-800 text-xs">
+                              Upload Sample {mediaType} for Meta Template Approval *
+                            </div>
+                            <div className="text-[11px] text-gray-600 mt-0.5">
+                              {mediaType === "Image" && "Allowed Types: JPG, JPEG, PNG • Maximum Size: 5 MB"}
+                              {mediaType === "Video" && "Allowed Types: MP4, 3GP • Maximum Size: 16 MB"}
+                              {mediaType === "Document" && "Allowed Types: PDF • Maximum Size: 100 MB"}
+                            </div>
+                          </div>
+
+                          <label className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl cursor-pointer shadow-xs text-center inline-block">
+                            <span>📤 Choose {mediaType}</span>
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept={
+                                mediaType === "Image"
+                                  ? ".jpg,.jpeg,.png,image/jpeg,image/png"
+                                  : mediaType === "Video"
+                                  ? ".mp4,.3gp,video/mp4,video/3gpp"
+                                  : ".pdf,application/pdf"
+                              }
+                              onChange={handleMediaFileChange}
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-emerald-200 text-[11px]">
+                          <span className="font-semibold text-emerald-800 truncate">
+                            ✅ {mediaType} Header Uploaded: {mediaFile.name} ({(mediaFile.size / (1024 * 1024)).toFixed(2)} MB)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMediaFile(null);
+                              setMediaPreviewUrl("");
+                            }}
+                            className="text-rose-600 font-bold hover:underline ml-2 cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* BODY TEXT SECTION WITH SMART SELECTION FORMATTING */}
+              <div className="space-y-2 border-t pt-4">
+                <div className="flex justify-between items-center">
+                  <label className="block font-bold text-gray-600">MESSAGE BODY *</label>
+                  <span className="text-gray-400">{bodyText.length}/1024</span>
+                </div>
+
+                <div className="border rounded-2xl bg-gray-50 overflow-hidden focus-within:ring-1 focus-within:ring-emerald-500">
+                  <textarea
+                    ref={bodyTextareaRef}
+                    rows={4}
+                    value={bodyText}
+                    onChange={(e) => setBodyText(e.target.value)}
+                    placeholder="Enter message body content..."
+                    className="w-full p-3 text-xs bg-transparent focus:outline-none resize-y"
+                    required
+                  />
+                  <div className="flex items-center justify-between border-t bg-white px-3 py-2 text-xs">
+                    <div className="flex items-center space-x-2 border-r pr-3">
+                      <button type="button" onClick={() => applyFormatting("😊")} className="hover:bg-gray-100 p-1 rounded font-bold" title="Emoji">😊</button>
+                      <button type="button" onClick={() => applyFormatting("*")} className="hover:bg-gray-100 p-1 rounded font-bold" title="Bold (*text*)">B</button>
+                      <button type="button" onClick={() => applyFormatting("_")} className="hover:bg-gray-100 p-1 rounded italic font-bold" title="Italic (_text_)">I</button>
+                      <button type="button" onClick={() => applyFormatting("~")} className="hover:bg-gray-100 p-1 rounded line-through font-bold" title="Strikethrough (~text~)">S</button>
+                      <button type="button" onClick={() => applyFormatting("```")} className="hover:bg-gray-100 p-1 rounded font-mono font-bold" title="Monospace (```text```)">{"</>"}</button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addVariableToBody}
+                      className="text-blue-600 font-bold hover:underline cursor-pointer"
+                    >
+                      + Add Variable
+                    </button>
+                  </div>
+                </div>
+
+                {/* Variable Sample Values Input Box */}
+                {Object.keys(variableSamples).length > 0 && (
+                  <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-200 space-y-2 mt-2">
+                    <label className="block font-bold text-emerald-900 text-[11px]">
+                      🏷️ Variable Sample Values (Required for Meta Approval)
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {Object.keys(variableSamples).map((varKey) => (
+                        <div key={varKey} className="flex items-center space-x-2 bg-white p-2 rounded-lg border">
+                          <span className="font-mono font-bold text-emerald-700 text-xs">{"{{" + varKey + "}}"}</span>
+                          <input
+                            type="text"
+                            placeholder={`Sample value for {{${varKey}}}`}
+                            value={variableSamples[varKey]}
+                            onChange={(e) => {
+                              setVariableSamples({
+                                ...variableSamples,
+                                [varKey]: e.target.value,
+                              });
+                            }}
+                            className="w-full border rounded p-1 text-xs bg-gray-50 focus:bg-white"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              {footerText && <div className="text-[10px] text-slate-300 pt-1">{footerText}</div>}
+
+              {/* FOOTER SECTION */}
+              <div className="space-y-1 border-t pt-4">
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span className="font-bold text-gray-600">FOOTER TEXT • OPTIONAL</span>
+                  <span>{footerText.length}/60</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g. Reply STOP to unsubscribe"
+                  value={footerText}
+                  onChange={(e) => setFooterText(e.target.value)}
+                  className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none"
+                />
+              </div>
+
+              {/* BUTTONS SECTION */}
+              <div className="space-y-3 border-t pt-4 relative">
+                <label className="block font-bold text-gray-600">INTERACTIVE BUTTONS • OPTIONAL</label>
+
+                <div className="relative inline-block">
+                  <button
+                    type="button"
+                    onClick={() => setShowButtonMenu(!showButtonMenu)}
+                    className="bg-emerald-50 text-emerald-700 border border-emerald-300 px-4 py-2 rounded-xl font-bold cursor-pointer hover:bg-emerald-100 flex items-center space-x-1"
+                  >
+                    <span>+ Add Button</span>
+                  </button>
+
+                  {showButtonMenu && (
+                    <div className="absolute left-0 mt-2 w-60 bg-white border rounded-2xl shadow-2xl z-30 py-2 divide-y font-medium text-gray-700">
+                      {[
+                        { type: "Custom", label: "Custom (Quick Reply)" },
+                        { type: "Visit website", label: "Visit Website" },
+                        { type: "Call Phone Number", label: "Call Phone Number" },
+                        { type: "Complete flow", label: "Complete Flow" },
+                        { type: "Copy offer code", label: "Copy Offer Code" },
+                      ].map((item) => (
+                        <button
+                          key={item.type}
+                          type="button"
+                          onClick={() => handleAddButton(item.type)}
+                          className="w-full text-left px-4 py-2 hover:bg-emerald-50 cursor-pointer text-xs"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {buttons.length > 0 && (
+                  <div className="space-y-2 pt-2">
+                    {buttons.map((btn, idx) => (
+                      <div key={btn.id} className="flex flex-wrap items-center gap-2 bg-gray-50 p-2.5 rounded-xl border">
+                        <span className="font-bold text-gray-500 w-28">{btn.type}:</span>
+                        <input
+                          type="text"
+                          placeholder="Button Text"
+                          value={btn.text}
+                          onChange={(e) => {
+                            const updated = [...buttons];
+                            updated[idx].text = e.target.value;
+                            setButtons(updated);
+                          }}
+                          className="border rounded-lg p-1.5 flex-1 bg-white font-medium"
+                        />
+                        {(btn.type === "Visit website" || btn.type === "Call Phone Number" || btn.type === "Copy offer code") && (
+                          <input
+                            type="text"
+                            placeholder={
+                              btn.type === "Visit website"
+                                ? "[https://example.com](https://example.com)"
+                                : btn.type === "Call Phone Number"
+                                ? "+919876543210"
+                                : "OFFER20"
+                            }
+                            value={btn.value || ""}
+                            onChange={(e) => {
+                              const updated = [...buttons];
+                              updated[idx].value = e.target.value;
+                              setButtons(updated);
+                            }}
+                            className="border rounded-lg p-1.5 flex-1 bg-white font-mono"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeButton(btn.id)}
+                          className="text-rose-600 font-bold px-2 py-1 hover:bg-rose-50 rounded-lg cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* SUBMIT ACTIONS */}
+              <div className="flex justify-between items-center pt-6 border-t">
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="px-5 py-2.5 border rounded-xl font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+                >
+                  ⬅ Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitForReview}
+                  disabled={submitting}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-7 py-2.5 rounded-xl shadow-md cursor-pointer transition disabled:opacity-50"
+                >
+                  {submitting ? "Submitting to Meta..." : "Submit for Review to Meta 🚀"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right Live WhatsApp Phone Preview with Real-time Formatting */}
+        <div className="lg:col-span-1">
+          <div className="sticky top-6 bg-slate-900 p-4 rounded-3xl border-4 border-slate-700 shadow-2xl w-full max-w-xs mx-auto text-white space-y-3">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-[10px] text-slate-400 font-mono">
+              <span className="flex items-center space-x-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                <span>WhatsApp Business</span>
+              </span>
+              <span>12:45 PM</span>
+            </div>
+
+            <div className="bg-emerald-900/60 p-3 rounded-2xl space-y-2 shadow-inner border border-emerald-800/50">
+              {mediaType !== "None" && category !== "Authentication" && subType !== "Carousel" && (
+                <div className="h-32 bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 font-bold text-xs border border-slate-700 overflow-hidden">
+                  {mediaType === "Image" && mediaPreviewUrl ? (
+                    <img src={mediaPreviewUrl} alt="Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <span>📷 [{mediaType} Sample Header]</span>
+                  )}
+                </div>
+              )}
+
+              {mediaType === "None" && headerText && (
+                <div className="font-bold text-white text-xs border-b border-emerald-700/50 pb-1">
+                  {headerText}
+                </div>
+              )}
+
+              {/* Live Formatted Body Preview */}
+              <div className="text-slate-100 leading-relaxed text-xs whitespace-pre-wrap">
+                {renderFormattedPreview(bodyText)}
+              </div>
+
+              {footerText && (
+                <div className="text-[10px] text-slate-400 border-t border-emerald-800/80 pt-1">
+                  {footerText}
+                </div>
+              )}
+
+              {buttons.length > 0 && (
+                <div className="pt-2 space-y-1.5">
+                  {buttons.map((b) => (
+                    <div
+                      key={b.id}
+                      className="bg-white text-emerald-800 text-center py-1.5 rounded-xl font-bold text-xs shadow-xs"
+                    >
+                      {b.text || "Button"}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </form>
+      </div>
     </div>
-  );
-}
-
-export default function TemplateCreatePage() {
-  return (
-    <Suspense fallback={<div className="p-8 text-center text-gray-500 font-semibold">Loading Template Form...</div>}>
-      <TemplateCreateContent />
-    </Suspense>
   );
 }

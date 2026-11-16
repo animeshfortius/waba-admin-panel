@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-function CampaignPageContent() {
+function CampaignsContent() {
   const searchParams = useSearchParams();
   const [userId, setUserId] = useState("");
   const [step, setStep] = useState(1);
@@ -151,8 +151,9 @@ function CampaignPageContent() {
           setUserRates(data.userRates);
         }
 
-        // 🟢 Dashboard selected channel fallback check
+        // 🟢 Robust URL query param matching for channelId or wabaNumber
         const urlChannelId = searchParams?.get("channelId");
+        const urlWaba = searchParams?.get("wabaNumber");
         const urlTplId = searchParams?.get("templateId");
 
         if (accounts.length > 0) {
@@ -161,7 +162,11 @@ function CampaignPageContent() {
               (a: any) => a.id === urlChannelId || a.phoneNumberId === urlChannelId || a.wabaId === urlChannelId
             );
             setSelectedChannel(matchedAcc ? (matchedAcc.phoneNumberId || matchedAcc.wabaId) : accounts[0].phoneNumberId || accounts[0].wabaId);
+          } else if (urlWaba) {
+            const matchedAcc = accounts.find((a: any) => a.displayPhone === urlWaba || a.wabaId === urlWaba);
+            setSelectedChannel(matchedAcc ? (matchedAcc.phoneNumberId || matchedAcc.wabaId) : accounts[0].phoneNumberId || accounts[0].wabaId);
           } else {
+            // Default to configured default account or first account
             const defaultAcc = accounts.find((a: any) => a.isDefault) || accounts[0];
             setSelectedChannel(defaultAcc.phoneNumberId || defaultAcc.wabaId);
           }
@@ -900,7 +905,7 @@ function CampaignPageContent() {
 export default function CampaignsPage() {
   return (
     <Suspense fallback={<div className="p-8 text-center text-gray-500 font-semibold">Loading Campaigns...</div>}>
-      <CampaignPageContent /> {/* ✅ Yeh bilkul sahi hai */}
+      <CampaignsContent />
     </Suspense>
   );
 }

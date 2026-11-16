@@ -53,11 +53,9 @@ export default function AgentsPage() {
   const [email, setEmail] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
 
-  // Modals corresponding to Video Actions & Tools
+  // Agent Tools Modals
   const [selectedToolAgent, setSelectedToolAgent] = useState<any>(null);
   const [activeToolModal, setActiveToolModal] = useState<"config" | "assignment" | "analytics" | null>(null);
-
-  // Config Modal Tabs inside Gear icon ("Channel" vs "Keyword")
   const [configModalTab, setConfigModalTab] = useState<"channel" | "keyword">("channel");
   
   // WABA Channels State
@@ -67,8 +65,6 @@ export default function AgentsPage() {
 
   // Keywords State
   const [keywordInput, setKeywordInput] = useState("");
-  const [keywordStatus, setKeywordStatus] = useState(false);
-  const [assignedKeywords, setAssignedKeywords] = useState<any[]>([]);
 
   // Analytics State
   const [analyticsData, setAnalyticsData] = useState<any>(null);
@@ -110,7 +106,6 @@ export default function AgentsPage() {
     setActiveToolModal(mode);
     setConfigModalTab("channel");
 
-    // Load assigned channels
     let existingChannels: any[] = [];
     if (Array.isArray(agent.assignedChannelsList)) {
       existingChannels = agent.assignedChannelsList.map((ch: string) => ({ channel: ch, createdAt: new Date() }));
@@ -146,8 +141,6 @@ export default function AgentsPage() {
     const updated = [...assignedChannelsList, { channel: selectedChannelToAssign, createdAt: new Date() }];
     setAssignedChannelsList(updated);
     setSelectedChannelToAssign("");
-    
-    // Save to DB
     await saveChannelsToBackend(selectedToolAgent.id, updated.map(u => u.channel));
   };
 
@@ -303,12 +296,16 @@ export default function AgentsPage() {
       ag.phone?.includes(searchQuery)
   );
 
+  // FIXED WORKING TOGGLE COMPONENT WITH CLICK HANDLER
   const PremiumToggle = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      onChange={onChange}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange();
+      }}
       className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out focus:outline-none shadow-xs ${
         checked ? "bg-emerald-500" : "bg-slate-300"
       }`}
@@ -425,7 +422,7 @@ export default function AgentsPage() {
                       </span>
                     </td>
 
-                    {/* PERMISSIONS BOX (All Chats Access instead of All Channels) */}
+                    {/* PERMISSIONS BOX (All Chats Access, Send Template, Send Campaign) */}
                     <td className="p-4">
                       <div className="bg-[#F8F9FA] border border-slate-200/80 rounded-xl p-2.5 space-y-2 max-w-[210px] shadow-2xs">
                         <div className="flex items-center justify-between text-slate-700 font-medium">
@@ -480,7 +477,7 @@ export default function AgentsPage() {
                       </div>
                     </td>
 
-                    {/* AGENT TOOLS (⚙️ Config, 👤✓ Assignment, 📊 Analytics) */}
+                    {/* AGENT TOOLS */}
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
@@ -525,7 +522,7 @@ export default function AgentsPage() {
         </div>
       </div>
 
-      {/* 1. AGENT CHAT CONFIGURATIONS MODAL (Gear Icon) */}
+      {/* 1. AGENT CHAT CONFIGURATIONS MODAL */}
       {selectedToolAgent && activeToolModal === "config" && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 space-y-4 shadow-2xl font-sans text-xs max-h-[90vh] overflow-y-auto">
@@ -542,7 +539,6 @@ export default function AgentsPage() {
               </button>
             </div>
 
-            {/* Modal Internal Tabs: Channel vs Keyword */}
             <div className="flex items-center gap-2 border-b pb-3">
               <button
                 onClick={() => setConfigModalTab("channel")}
@@ -656,7 +652,7 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* 2. ASSIGNED CHAT LIST MODAL (👤✓ Icon) */}
+      {/* 2. ASSIGNED CHAT LIST MODAL */}
       {selectedToolAgent && activeToolModal === "assignment" && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl font-sans text-xs">
@@ -687,7 +683,7 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* 3. AGENT ANALYTICS MODAL (📊 Icon) */}
+      {/* 3. AGENT ANALYTICS MODAL */}
       {selectedToolAgent && activeToolModal === "analytics" && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl max-w-3xl w-full p-6 space-y-5 shadow-2xl font-sans text-xs max-h-[90vh] overflow-y-auto">

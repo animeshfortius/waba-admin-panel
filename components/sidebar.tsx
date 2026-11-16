@@ -11,15 +11,12 @@ export default function Sidebar() {
 
   useEffect(() => {
     const agent = localStorage.getItem("currentAgent");
-    const isAgentUrl = window.location.search.includes("agentMode=true") || pathname.includes("live-agent");
-    if (agent || isAgentUrl) {
+    if (agent) {
       setIsAgentMode(true);
-      if (agent) {
-        try {
-          setAgentData(JSON.parse(agent));
-        } catch (e) {
-          console.error("Failed to parse agent data", e);
-        }
+      try {
+        setAgentData(JSON.parse(agent));
+      } catch (e) {
+        console.error("Failed to parse agent data", e);
       }
     }
   }, [pathname]);
@@ -34,17 +31,43 @@ export default function Sidebar() {
 
         <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto text-sm font-medium">
           {isAgentMode ? (
-            /* AGENT VIEW: Only Agent Workspace & Logout */
+            /* AGENT VIEW: Live Chat + Strictly Ticked Permissions Only */
             <>
               <Link
-                href="/dashboard/live-agent?agentMode=true"
+                href="/dashboard/chat"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                  pathname.includes("live-agent") ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  pathname.includes("/dashboard/chat") ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
                 }`}
               >
-                <span>🎧</span>
-                <span>Agent Workspace</span>
+                <span>💬</span>
+                <span>Live Chat</span>
               </Link>
+
+              {/* Show Manage Template ONLY if sendTemplate is ticked */}
+              {agentData?.sendTemplate === true && (
+                <Link
+                  href="/dashboard/templates"
+                  className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+                    pathname.includes("/dashboard/templates") ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  }`}
+                >
+                  <span>📄</span>
+                  <span>Manage Template</span>
+                </Link>
+              )}
+
+              {/* Show Campaigns & Broadcast ONLY if sendCampaign is ticked */}
+              {agentData?.sendCampaign === true && (
+                <Link
+                  href="/dashboard/campaigns"
+                  className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+                    pathname.includes("/dashboard/campaigns") ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  }`}
+                >
+                  <span>📢</span>
+                  <span>Campaigns & Broadcast</span>
+                </Link>
+              )}
 
               <button
                 onClick={() => {

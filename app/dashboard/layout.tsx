@@ -20,8 +20,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         const parsedAgent = JSON.parse(agentStr);
         setAgentData(parsedAgent);
         
-        // Security Guard: If agent is logged in, restrict them strictly to live chat (/dashboard/chat)
-        if (!pathname.includes("/dashboard/chat")) {
+        // Security Guard: Restrict agent based on assigned permissions
+        const allowedPaths = ["/dashboard/chat"];
+        if (parsedAgent.sendTemplate) allowedPaths.push("/dashboard/templates");
+        if (parsedAgent.sendCampaign) allowedPaths.push("/dashboard/campaigns");
+
+        const isAllowed = allowedPaths.some((path) => pathname.startsWith(path));
+        if (!isAllowed) {
           router.push("/dashboard/chat");
         }
       } catch (e) {

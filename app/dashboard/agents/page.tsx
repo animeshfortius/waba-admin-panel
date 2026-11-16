@@ -11,7 +11,12 @@ export default function AgentsPage() {
   const [showAssignmentsModal, setShowAssignmentsModal] = useState(false);
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
 
-  // Add Agent Form State
+  // User & WABA State for Live Channels
+  const [userId, setUserId] = useState("");
+  const [wabaAccounts, setWabaAccounts] = useState<any[]>([]);
+  const [selectedConfigChannel, setSelectedConfigChannel] = useState("");
+
+  // Add Agent Form State (Cleaned - no permissions in add modal)
   const [agentName, setAgentName] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -19,13 +24,7 @@ export default function AgentsPage() {
   const [email, setEmail] = useState("");
   const [expiryDate, setExpiryDate] = useState("2026-10-30");
 
-  // Permission States in Add Modal
-  const [permAllChannels, setPermAllChannels] = useState(true);
-  const [permSendTemplate, setPermSendTemplate] = useState(false);
-  const [permSendCampaign, setPermSendCampaign] = useState(false);
-  const [permLiveChat, setPermLiveChat] = useState(true);
-
-  // Sample Agents Data
+  // Agents List State
   const [agents, setAgents] = useState([
     {
       id: 1,
@@ -38,35 +37,96 @@ export default function AgentsPage() {
       allChannelAccess: true,
       sendTemplate: false,
       sendCampaign: false,
-      liveChat: true,
     },
   ]);
 
-  const handleSaveAgent = () => {
+  // Fetch User ID & Live WABA Channels on Load
+  useEffect(() => {
+    const storedUserId = localStorage.getItem("userId") || "";
+    if (storedUserId) {
+      setUserId(storedUserId);
+      fetchWabaAndAgents(storedUserId);
+    } else {
+      fetch("/api/admin/me")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.user?.id) {
+            setUserId(data.user.id);
+            fetchWabaAndAgents(data.user.id);
+          }
+        })
+        .catch(() => fetchWabaAndAgents(""));
+    }
+  }, []);
+
+  const fetchWabaAndAgents = async (uid: string) => {
+    try {
+      // Fetch Live WABA Accounts
+      const res = await fetch(`/api/templates?userId=${uid}`);
+      const data = await res.json();
+      if (data.success && data.wabaAccounts) {
+        setWabaAccounts(data.wabaAccounts);
+      }
+
+      // Fetch Agents from backend API
+      const agentRes = await fetch(`/api/agents?userId=${uid}`);
+      const agentData = await agentRes.json();
+      if (agentData.success && agentData.agents.length > 0) {
+        setAgents(agentData.agents);
+      }
+    } catch (err) {
+      console.error("Failed to fetch WABA channels or agents:", err);
+    }
+  };
+
+  const handleSaveAgent = async () => {
     if (!agentName || !email) {
       alert("Please fill Agent Name and Email!");
       return;
     }
-    const newAgent = {
-      id: Date.now(),
+
+    const newAgentPayload = {
+      userId: userId || "default_user",
       name: agentName,
-      phone: mobile || "+91 9999999999",
-      email: email,
-      registrationDate: "16 Nov 2026 03:07 PM",
-      expiryDate: expiryDate || "30 Oct 2026",
-      status: "Valid",
-      allChannelAccess: permAllChannels,
-      sendTemplate: permSendTemplate,
-      sendCampaign: permSendCampaign,
-      liveChat: permLiveChat,
+      password,
+      phone: mobile || "",
+      email,
+      expiryDate,
+      allChannelAccess: true,
+      sendTemplate: false,
+      sendCampaign: false,
+      liveChat: true,
     };
-    setAgents([...agents, newAgent]);
-    setShowAddModal(false);
-    setAgentName("");
-    setPassword("");
-    setMobile("");
-    setEmail("");
-    alert("✅ Agent added successfully with configured permissions.");
+
+    try {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newAgentPayload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAgents((prev) => [...prev, data.agent || { ...newAgentPayload, id: Date.now(), registrationDate: "Just now", status: "Valid" }]);
+        setShowAddModal(false);
+        setAgentName("");
+        setPassword("");
+        setMobile("");
+        setEmail("");
+        alert("✅ Agent created successfully. You can manage permissions from the table below.");
+      } else {
+        alert(`❌ Failed to create agent: ${data.error}`);
+      }
+    } catch (err) {
+      console.error("Agent creation error:", err);
+      alert("❌ Network error creating agent.");
+    }
+  };
+
+  // Toggle agent permissions dynamically from the table
+  const handlePermissionToggle = (id: any, field: string, value: boolean) => {
+    setAgents((prev) =>
+      prev.map((ag) => (ag.id === id ? { ...ag, [field]: value } : ag))
+    );
   };
 
   return (
@@ -171,45 +231,71 @@ export default function AgentsPage() {
                   <th className="p-3.5">Contact Info</th>
                   <th className="p-3.5">Registration Date</th>
                   <th className="p-3.5">Account Expiry</th>
-                  <th className="p-3.5">Permissions & Access</th>
+                  <th className="p-3.5">Permissions & Access (Manage Here)</th>
                   <th className="p-3.5">Actions</th>
                   <th className="p-3.5">Agent Tools</th>
                   <th className="p-3.5">Login As</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {agents.map((ag) => (
+                {agents.map((ag: any) => (
                   <tr key={ag.id} className="hover:bg-gray-50/60 transition">
                     <td className="p-3.5 font-bold font-mono text-gray-800 text-sm">{ag.name}</td>
                     <td className="p-3.5 space-y-0.5">
-                      <div className="font-semibold text-gray-700">📞 {ag.phone}</div>
+                      <div className="font-semibold text-gray-700">📞 {ag.phone || "N/A"}</div>
                       <div className="text-gray-400 font-mono">✉️ {ag.email}</div>
                     </td>
-                    <td className="p-3.5 text-gray-500 font-mono">{ag.registrationDate}</td>
+                    <td className="p-3.5 text-gray-500 font-mono">{ag.registrationDate || "Recent"}</td>
                     <td className="p-3.5">
-                      <div className="font-semibold text-gray-700">{ag.expiryDate}</div>
+                      <div className="font-semibold text-gray-700">{ag.expiryDate ? new Date(ag.expiryDate).toLocaleDateString() : "30 Oct 2026"}</div>
                       <span className="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">
-                        {ag.status}
+                        {ag.status || "Valid"}
                       </span>
                     </td>
                     <td className="p-3.5 space-y-1">
                       <div className="flex items-center justify-between gap-3 text-[11px] bg-gray-50 px-2 py-1 rounded-lg border">
-                        <span className="text-gray-600 font-medium">All Channels</span>
-                        <input type="checkbox" defaultChecked={ag.allChannelAccess} className="accent-emerald-600 w-3.5 h-3.5" />
+                        <span className="text-gray-600 font-medium">All Channels Access</span>
+                        <input
+                          type="checkbox"
+                          checked={ag.allChannelAccess ?? true}
+                          onChange={(e) => handlePermissionToggle(ag.id, "allChannelAccess", e.target.checked)}
+                          className="accent-emerald-600 w-3.5 h-3.5 cursor-pointer"
+                        />
                       </div>
                       <div className="flex items-center justify-between gap-3 text-[11px] bg-gray-50 px-2 py-1 rounded-lg border">
-                        <span className="text-gray-600 font-medium">Send Template</span>
-                        <input type="checkbox" defaultChecked={ag.sendTemplate} className="accent-emerald-600 w-3.5 h-3.5" />
+                        <span className="text-gray-600 font-medium">Send Templates</span>
+                        <input
+                          type="checkbox"
+                          checked={ag.sendTemplate ?? false}
+                          onChange={(e) => handlePermissionToggle(ag.id, "sendTemplate", e.target.checked)}
+                          className="accent-emerald-600 w-3.5 h-3.5 cursor-pointer"
+                        />
                       </div>
                       <div className="flex items-center justify-between gap-3 text-[11px] bg-gray-50 px-2 py-1 rounded-lg border">
-                        <span className="text-gray-600 font-medium">Send Campaign</span>
-                        <input type="checkbox" defaultChecked={ag.sendCampaign} className="accent-emerald-600 w-3.5 h-3.5" />
+                        <span className="text-gray-600 font-medium">Send Campaigns</span>
+                        <input
+                          type="checkbox"
+                          checked={ag.sendCampaign ?? false}
+                          onChange={(e) => handlePermissionToggle(ag.id, "sendCampaign", e.target.checked)}
+                          className="accent-emerald-600 w-3.5 h-3.5 cursor-pointer"
+                        />
                       </div>
                     </td>
                     <td className="p-3.5">
                       <div className="flex space-x-2">
                         <button title="Edit Agent" className="p-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg cursor-pointer transition">✏️</button>
-                        <button title="Delete Agent" className="p-2 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg cursor-pointer transition">🗑️</button>
+                        <button
+                          onClick={async () => {
+                            if (confirm(`Delete agent ${ag.name}?`)) {
+                              await fetch(`/api/agents?id=${ag.id}`, { method: "DELETE" });
+                              setAgents((prev) => prev.filter((item: any) => item.id !== ag.id));
+                            }
+                          }}
+                          title="Delete Agent"
+                          className="p-2 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg cursor-pointer transition"
+                        >
+                          🗑️
+                        </button>
                       </div>
                     </td>
                     <td className="p-3.5">
@@ -254,24 +340,24 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* PROFESSIONAL ADD AGENT MODAL */}
+      {/* CLEAN ADD AGENT MODAL (No permissions here, assigned after creation) */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 border animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 border animate-in fade-in duration-200">
             <div className="flex justify-between items-center border-b pb-3">
               <div>
-                <h3 className="font-bold text-base text-gray-800">Add New Agent Account</h3>
-                <p className="text-[11px] text-gray-400">Configure credentials and specific module permissions.</p>
+                <h3 className="font-bold text-base text-gray-800">Add Agent</h3>
+                <p className="text-[11px] text-gray-400">Create agent credentials. Permissions can be managed from the list.</p>
               </div>
               <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-base cursor-pointer">✕</button>
             </div>
 
-            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+            <div className="space-y-4">
               <div>
-                <label className="block font-bold text-gray-700 mb-1">AGENT NAME *</label>
+                <label className="block font-bold text-gray-700 mb-1">Agent Name *</label>
                 <input
                   type="text"
-                  placeholder="e.g. support_john"
+                  placeholder="Enter agent name"
                   value={agentName}
                   onChange={(e) => setAgentName(e.target.value)}
                   className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono"
@@ -279,11 +365,11 @@ export default function AgentsPage() {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">PASSWORD *</label>
+                <label className="block font-bold text-gray-700 mb-1">Password *</label>
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
-                    placeholder="Enter secure password"
+                    placeholder="Enter the password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono pr-10"
@@ -298,87 +384,39 @@ export default function AgentsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">MOBILE NUMBER</label>
-                  <div className="flex border rounded-xl bg-gray-50 overflow-hidden">
-                    <span className="p-2.5 bg-gray-100 text-gray-600 border-r font-mono text-[11px]">+91</span>
-                    <input
-                      type="text"
-                      placeholder="9876543210"
-                      value={mobile}
-                      onChange={(e) => setMobile(e.target.value)}
-                      className="w-full p-2.5 bg-transparent focus:outline-none font-mono"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">EMAIL ADDRESS *</label>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Mobile Number</label>
+                <div className="flex border rounded-xl bg-gray-50 overflow-hidden">
+                  <span className="p-2.5 bg-gray-100 text-gray-600 border-r font-mono text-[11px]">+91</span>
                   <input
-                    type="email"
-                    placeholder="agent@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:outline-none font-mono"
+                    type="text"
+                    placeholder="Enter the mobile number"
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value)}
+                    className="w-full p-2.5 bg-transparent focus:outline-none font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">ACCOUNT EXPIRY DATE</label>
+                <label className="block font-bold text-gray-700 mb-1">Email Id *</label>
+                <input
+                  type="email"
+                  placeholder="Enter the email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Account Expiry Date</label>
                 <input
                   type="date"
                   value={expiryDate}
                   onChange={(e) => setExpiryDate(e.target.value)}
                   className="w-full border rounded-xl p-2.5 bg-gray-50 focus:bg-white focus:outline-none font-mono text-gray-700"
                 />
-              </div>
-
-              {/* Granular Permissions Section */}
-              <div className="bg-gray-50 p-4 rounded-2xl border space-y-3">
-                <label className="block font-bold text-gray-800 text-xs">GRANT MODULE PERMISSIONS</label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <label className="flex items-center space-x-2.5 bg-white p-2.5 rounded-xl border cursor-pointer hover:border-emerald-500 transition">
-                    <input
-                      type="checkbox"
-                      checked={permAllChannels}
-                      onChange={(e) => setPermAllChannels(e.target.checked)}
-                      className="accent-emerald-600 w-4 h-4 rounded"
-                    />
-                    <span className="font-semibold text-gray-700">All Channels Access</span>
-                  </label>
-
-                  <label className="flex items-center space-x-2.5 bg-white p-2.5 rounded-xl border cursor-pointer hover:border-emerald-500 transition">
-                    <input
-                      type="checkbox"
-                      checked={permLiveChat}
-                      onChange={(e) => setPermLiveChat(e.target.checked)}
-                      className="accent-emerald-600 w-4 h-4 rounded"
-                    />
-                    <span className="font-semibold text-gray-700">Live Chat Console</span>
-                  </label>
-
-                  <label className="flex items-center space-x-2.5 bg-white p-2.5 rounded-xl border cursor-pointer hover:border-emerald-500 transition">
-                    <input
-                      type="checkbox"
-                      checked={permSendTemplate}
-                      onChange={(e) => setPermSendTemplate(e.target.checked)}
-                      className="accent-emerald-600 w-4 h-4 rounded"
-                    />
-                    <span className="font-semibold text-gray-700">Send Templates</span>
-                  </label>
-
-                  <label className="flex items-center space-x-2.5 bg-white p-2.5 rounded-xl border cursor-pointer hover:border-emerald-500 transition">
-                    <input
-                      type="checkbox"
-                      checked={permSendCampaign}
-                      onChange={(e) => setPermSendCampaign(e.target.checked)}
-                      className="accent-emerald-600 w-4 h-4 rounded"
-                    />
-                    <span className="font-semibold text-gray-700">Send Campaigns</span>
-                  </label>
-                </div>
               </div>
             </div>
 
@@ -387,20 +425,20 @@ export default function AgentsPage() {
                 onClick={() => setShowAddModal(false)}
                 className="px-5 py-2.5 border rounded-xl font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
               >
-                Cancel
+                Close
               </button>
               <button
                 onClick={handleSaveAgent}
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg cursor-pointer transition"
               >
-                💾 Save & Create Agent
+                💾 Save
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 1. CHAT CONFIGURATIONS MODAL (⚙️) */}
+      {/* 1. CHAT CONFIGURATIONS MODAL (⚙️) - LIVE WABA CHANNELS FETCHED */}
       {showConfigModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5 border">
@@ -410,18 +448,33 @@ export default function AgentsPage() {
             </div>
 
             <div className="bg-slate-900 text-white p-4 rounded-2xl space-y-1">
-              <h4 className="font-bold text-sm">🔗 WABA CHANNEL ASSIGNMENT</h4>
-              <p className="text-[11px] text-slate-300">Map default agent channel routing and queue distribution.</p>
+              <h4 className="font-bold text-sm">🔗 LIVE WABA CHANNEL ASSIGNMENT</h4>
+              <p className="text-[11px] text-slate-300">Select from your onboarded WhatsApp business accounts.</p>
             </div>
 
             <div className="border p-4 rounded-2xl space-y-3 bg-gray-50">
-              <label className="block font-bold text-gray-700">Select WABA Phone Number / Channel</label>
-              <select className="w-full border rounded-xl p-2.5 bg-white font-mono text-gray-700 focus:outline-none">
-                <option value="">Select Channel</option>
-                <option value="15553945963">📱 +91 98765 43210 — Fortius WABA 1</option>
+              <label className="block font-bold text-gray-700">Select Channel</label>
+              <select
+                value={selectedConfigChannel}
+                onChange={(e) => setSelectedConfigChannel(e.target.value)}
+                className="w-full border rounded-xl p-2.5 bg-white font-mono text-gray-700 focus:outline-none"
+              >
+                <option value="">Select Onboarded Channel</option>
+                {wabaAccounts.length === 0 ? (
+                  <option value="" disabled>No Onboarded WABA Channels Found</option>
+                ) : (
+                  wabaAccounts.map((acc: any) => {
+                    const accKey = acc.phoneNumberId || acc.wabaId;
+                    return (
+                      <option key={acc.id} value={accKey}>
+                        📱 {acc.displayPhone || acc.phoneNumberId} — {acc.displayName || "Active WABA"}
+                      </option>
+                    );
+                  })
+                )}
               </select>
               <button
-                onClick={() => alert("✅ Channel configuration saved successfully!")}
+                onClick={() => alert(`✅ Channel ${selectedConfigChannel} configuration saved!`)}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer transition"
               >
                 💾 Save Configuration
@@ -433,7 +486,9 @@ export default function AgentsPage() {
               <p className="text-[11px] text-blue-800 bg-blue-50 p-2.5 rounded-xl border border-blue-200">
                 ℹ️ Note: Channels cannot be deleted when <b>All Channel Access</b> is enabled.
               </p>
-              <div className="text-center py-6 text-gray-400 font-medium">No custom channel restrictions found</div>
+              <div className="text-center py-6 text-gray-400 font-medium">
+                {selectedConfigChannel ? `Assigned Channel ID: ${selectedConfigChannel}` : "No channels assigned yet"}
+              </div>
             </div>
           </div>
         </div>
@@ -483,7 +538,7 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* 3. AGENT ANALYTICS MODAL (📊) */}
+      {/* 3. AGENT ANALYTICS MODAL (📊) - LIVE WABA CHANNELS FETCHED */}
       {showAnalyticsModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl space-y-5 border max-h-[90vh] overflow-y-auto">
@@ -493,9 +548,13 @@ export default function AgentsPage() {
                 <p className="text-[11px] text-gray-400">Real-time metrics and chat response breakdown.</p>
               </div>
               <div className="flex items-center space-x-3">
-                <select className="border rounded-xl px-3.5 py-2 text-xs bg-gray-50 focus:outline-none font-semibold text-gray-700">
-                  <option value="All">All Channels</option>
-                  <option value="15553945963">+91 98765 43210</option>
+                <select className="border rounded-xl px-3.5 py-2 text-xs bg-gray-50 focus:outline-none font-semibold text-gray-700 font-mono">
+                  <option value="All">All Live Channels</option>
+                  {wabaAccounts.map((acc: any) => (
+                    <option key={acc.id} value={acc.phoneNumberId || acc.wabaId}>
+                      📱 {acc.displayPhone || acc.phoneNumberId}
+                    </option>
+                  ))}
                 </select>
                 <button onClick={() => setShowAnalyticsModal(false)} className="text-gray-400 hover:text-gray-600 font-bold cursor-pointer">✕</button>
               </div>

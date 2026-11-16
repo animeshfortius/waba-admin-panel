@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 const ALL_COUNTRY_CODES = [
   { code: "+91", country: "India", flag: "🇮🇳" },
@@ -35,6 +36,7 @@ const ALL_COUNTRY_CODES = [
 ];
 
 export default function AgentsPage() {
+  const router = useRouter();
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -57,7 +59,7 @@ export default function AgentsPage() {
   const [selectedToolAgent, setSelectedToolAgent] = useState<any>(null);
   const [activeToolModal, setActiveToolModal] = useState<"config" | "assignment" | "analytics" | null>(null);
   const [configModalTab, setConfigModalTab] = useState<"channel" | "keyword">("channel");
-  
+
   // WABA Channels State
   const [wabaAccounts, setWabaAccounts] = useState<any[]>([]);
   const [selectedChannelToAssign, setSelectedChannelToAssign] = useState("");
@@ -69,10 +71,6 @@ export default function AgentsPage() {
   // Analytics State
   const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
-
-  // New Global Feature Modals State
-  const [showGlobalChatConfigModal, setShowGlobalChatConfigModal] = useState(false);
-  const [showGlobalCampaignModal, setShowGlobalCampaignModal] = useState(false);
 
   useEffect(() => {
     fetchAgents();
@@ -334,11 +332,11 @@ export default function AgentsPage() {
           </div>
           <p className="text-slate-400 mt-0.5">Manage agent accounts and permissions</p>
         </div>
-        
-        {/* ACTION BUTTONS: Chat Config & Agent Campaign added BEFORE Add Agent */}
+
+        {/* ACTION BUTTONS: Chat Config & Agent Campaign navigate directly to dedicated pages */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
-            onClick={() => setShowGlobalChatConfigModal(true)}
+            onClick={() => router.push("/dashboard/agents/chat-config")}
             className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3.5 py-2.5 rounded-xl transition cursor-pointer shadow-xs flex items-center gap-1.5"
           >
             <span>⚙️</span>
@@ -346,7 +344,7 @@ export default function AgentsPage() {
           </button>
 
           <button
-            onClick={() => setShowGlobalCampaignModal(true)}
+            onClick={() => router.push("/dashboard/agents/campaigns")}
             className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-2.5 rounded-xl transition cursor-pointer shadow-xs flex items-center gap-1.5"
           >
             <span>📢</span>
@@ -534,72 +532,6 @@ export default function AgentsPage() {
           </table>
         </div>
       </div>
-
-      {/* NEW FEATURE MODAL 1: GLOBAL CHAT CONFIG */}
-      {showGlobalChatConfigModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl font-sans text-xs">
-            <div className="flex justify-between items-center border-b pb-3">
-              <div>
-                <h3 className="font-extrabold text-sm text-slate-800">Global Chat Configuration</h3>
-                <p className="text-[11px] text-slate-400">Configure default routing and chat rules across all agents</p>
-              </div>
-              <button
-                onClick={() => setShowGlobalChatConfigModal(false)}
-                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="space-y-4 py-2">
-              <div className="p-4 bg-slate-50 rounded-2xl border text-center text-slate-500 font-medium">
-                ⚙️ Global Chat Configuration panel ready for coding logic integration.
-              </div>
-              <div className="flex justify-end pt-2">
-                <button
-                  onClick={() => setShowGlobalChatConfigModal(false)}
-                  className="px-5 py-2 bg-slate-800 text-white rounded-xl font-bold cursor-pointer"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* NEW FEATURE MODAL 2: AGENT CAMPAIGN */}
-      {showGlobalCampaignModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl font-sans text-xs">
-            <div className="flex justify-between items-center border-b pb-3">
-              <div>
-                <h3 className="font-extrabold text-sm text-slate-800">Agent Campaign Management</h3>
-                <p className="text-[11px] text-slate-400">Monitor and manage agent-level broadcast templates and campaigns</p>
-              </div>
-              <button
-                onClick={() => setShowGlobalCampaignModal(false)}
-                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="space-y-4 py-2">
-              <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 text-center text-indigo-700 font-medium">
-                📢 Agent Campaign manager ready for backend connectivity.
-              </div>
-              <div className="flex justify-end pt-2">
-                <button
-                  onClick={() => setShowGlobalCampaignModal(false)}
-                  className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold cursor-pointer"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 1. AGENT CHAT CONFIGURATIONS MODAL */}
       {selectedToolAgent && activeToolModal === "config" && (

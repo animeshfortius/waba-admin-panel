@@ -206,6 +206,7 @@ model Agent {
   expiryDate       DateTime?
   allChannelAccess Boolean   @default(true)
   assignedChannels String?   @default("[]")
+  chatConfig       String?   @default("{}")
   sendTemplate     Boolean   @default(false)
   sendCampaign     Boolean   @default(false)
   liveChat         Boolean   @default(true)

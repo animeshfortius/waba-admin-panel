@@ -26,11 +26,29 @@ export async function GET(request: Request) {
           parsedChannels = ag.assignedChannels.split(",").filter(Boolean);
         }
       }
-      return { ...ag, assignedChannelsList: parsedChannels };
+
+      let parsedChatConfig: Record<string, any> = {};
+      if (ag.chatConfig) {
+        try {
+          parsedChatConfig =
+            typeof ag.chatConfig === "string" ? JSON.parse(ag.chatConfig) : ag.chatConfig;
+        } catch {
+          parsedChatConfig = {};
+        }
+      }
+
+      return {
+        ...ag,
+        assignedChannelsList: parsedChannels,
+        parsedChatConfig,
+      };
     });
 
     return NextResponse.json({ success: true, agents: formattedAgents });
   } catch (error: any) {
+    if (error?.digest === "DYNAMIC_SERVER_USAGE" || error?.message?.includes("bail out of prerendering")) {
+      throw error;
+    }
     console.error("Fetch agents error:", error);
     return NextResponse.json({ success: true, agents: [] });
   }
@@ -50,6 +68,13 @@ export async function POST(request: Request) {
       ? body.assignedChannels
       : "[]";
 
+    const chatConfigJson =
+      body.chatConfig && typeof body.chatConfig === "object"
+        ? JSON.stringify(body.chatConfig)
+        : typeof body.chatConfig === "string"
+        ? body.chatConfig
+        : "{}";
+
     let newAgent;
     try {
       newAgent = await (prisma as any).agent.create({
@@ -62,6 +87,7 @@ export async function POST(request: Request) {
           expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
           allChannelAccess: body.allChannelAccess ?? true,
           assignedChannels: channelsJson,
+          chatConfig: chatConfigJson,
           sendTemplate: body.sendTemplate ?? false,
           sendCampaign: body.sendCampaign ?? false,
           liveChat: body.liveChat ?? true,
@@ -70,8 +96,8 @@ export async function POST(request: Request) {
         },
       });
     } catch (prismaErr: any) {
-      // Fallback if assignedChannels column is not yet pushed in live DB
-      if (prismaErr.message?.includes("assignedChannels")) {
+      // Fallback if assignedChannels or chatConfig columns are not yet pushed in live DB
+      if (prismaErr.message?.includes("assignedChannels") || prismaErr.message?.includes("chatConfig")) {
         newAgent = await (prisma as any).agent.create({
           data: {
             userId: body.userId,
@@ -117,7 +143,13 @@ export async function PATCH(request: Request) {
     if (Array.isArray(updates.assignedChannels)) {
       updates.assignedChannels = JSON.stringify(updates.assignedChannels);
     }
+
+    if (updates.chatConfig && typeof updates.chatConfig === "object") {
+      updates.chatConfig = JSON.stringify(updates.chatConfig);
+    }
+
     delete updates.assignedChannelsList;
+    delete updates.parsedChatConfig;
 
     const whereClause = { id: isNaN(Number(targetId)) ? targetId : Number(targetId) };
 
@@ -128,9 +160,9 @@ export async function PATCH(request: Request) {
         data: updates,
       });
     } catch (prismaErr: any) {
-      // Fallback if assignedChannels column doesn't exist in compiled Prisma client yet
-      if (prismaErr.message?.includes("assignedChannels")) {
-        const { assignedChannels, ...safeUpdates } = updates;
+      // Fallback if assignedChannels or chatConfig columns don't exist in compiled Prisma client yet
+      if (prismaErr.message?.includes("assignedChannels") || prismaErr.message?.includes("chatConfig")) {
+        const { assignedChannels, chatConfig, ...safeUpdates } = updates;
         updatedAgent = await (prisma as any).agent.update({
           where: whereClause,
           data: safeUpdates,

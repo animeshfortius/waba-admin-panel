@@ -24,10 +24,10 @@ export default function DashboardPage() {
     qualityRating: "N/A",
     messagingLimit: "100K/day",
     verifiedName: "Loading Default Account...",
+    trendData: [] as any[],
   });
   const [loading, setLoading] = useState(true);
 
-  // Fetch stats and accounts directly from the stats API endpoint
   useEffect(() => {
     fetchDashboardStats();
   }, [filter, selectedChannel, startDate, endDate]);
@@ -63,11 +63,13 @@ export default function DashboardPage() {
     }
   };
 
-  // Pie Chart Share Calculations
   const totalCat = (stats.marketingTotal || 0) + (stats.utilityTotal || 0) + (stats.authTotal || 0) || 1;
   const mktPercent = Math.round(((stats.marketingTotal || 0) / totalCat) * 100);
   const utiPercent = Math.round(((stats.utilityTotal || 0) / totalCat) * 100);
   const autPercent = 100 - mktPercent - utiPercent;
+
+  // Max value calculation for graph scaling height
+  const maxTrendVal = Math.max(...(stats.trendData?.map((t: any) => Math.max(t.sent, t.del, t.read)) || [10]), 10);
 
   return (
     <div className="w-full min-h-screen bg-gray-50/60 p-6 space-y-6 font-sans text-xs">
@@ -78,10 +80,9 @@ export default function DashboardPage() {
           <h1 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
             <span>📊</span> WABA Campaign Analytics & Performance Dashboard
           </h1>
-          <p className="text-gray-400 text-[11px]">Showing default configured WABA account activity, webhook stats & live Meta health</p>
+          <p className="text-gray-400 text-[11px]">Showing date-wise report trends for active WABA account</p>
         </div>
 
-        {/* DEFAULT ACCOUNT SELECTOR DROPDOWN */}
         <div>
           <select
             value={selectedChannel}
@@ -144,10 +145,8 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ROW 1: PRIMARY METRICS (Separate Read and Unread Cards) */}
+      {/* ROW 1: PRIMARY METRICS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        
-        {/* Total Sent */}
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
@@ -159,7 +158,6 @@ export default function DashboardPage() {
           <div className="mt-4 text-emerald-600 font-bold text-[11px]"><span>Live Broadcast Sync</span></div>
         </div>
 
-        {/* Total Delivered */}
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
@@ -171,7 +169,6 @@ export default function DashboardPage() {
           <div className="mt-4 text-emerald-600 font-bold text-[11px]"><span>Successfully Sent to Device</span></div>
         </div>
 
-        {/* Dedicated Read Card */}
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
@@ -183,7 +180,6 @@ export default function DashboardPage() {
           <div className="mt-4 text-purple-600 font-bold text-[11px]"><span>Webhook Read Status</span></div>
         </div>
 
-        {/* Dedicated Unread Card */}
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
@@ -195,7 +191,6 @@ export default function DashboardPage() {
           <div className="mt-4 text-amber-600 font-bold text-[11px]"><span>Delivered but Unopened</span></div>
         </div>
 
-        {/* Failed */}
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
@@ -206,12 +201,10 @@ export default function DashboardPage() {
           </div>
           <div className="mt-4 text-red-500 font-bold text-[11px]"><span>Webhook Error Tracking</span></div>
         </div>
-
       </div>
 
       {/* ROW 2: CATEGORY BREAKDOWN CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 space-y-3">
           <div className="flex justify-between items-center border-b pb-2.5">
             <span className="font-bold text-gray-800 flex items-center gap-1.5">
@@ -268,18 +261,17 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-
       </div>
 
-      {/* ROW 3: DATE-FILTERED GRAPHS & PIE CHART */}
+      {/* ROW 3: DATE-WISE GRAPHS & PIE CHART */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Line Graph (2 Cols) */}
+        {/* Date-Wise Line / Bar Trend Graph */}
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-xs border border-gray-100 space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="font-bold text-sm text-gray-900">📈 Campaign Delivery & Read Trend ({filter})</h3>
-              <p className="text-gray-400 text-[10px]">Volumetric performance graph for default account & timeframe</p>
+              <h3 className="font-bold text-sm text-gray-900">📈 Date-Wise Campaign Reports ({filter})</h3>
+              <p className="text-gray-400 text-[10px]">Daily performance breakdown across selected timeframe</p>
             </div>
             <div className="flex items-center gap-3 text-[10px] font-bold">
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Sent</span>
@@ -288,29 +280,31 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="h-64 w-full bg-gray-50/60 rounded-xl border border-dashed border-gray-200 p-4 flex flex-col justify-end">
-            <div className="w-full h-48 flex items-end justify-between gap-3 pt-6">
-              {[
-                { day: "Interval 1", sent: stats.totalSent * 0.2, del: stats.totalDelivered * 0.2, read: stats.totalRead * 0.2 },
-                { day: "Interval 2", sent: stats.totalSent * 0.4, del: stats.totalDelivered * 0.4, read: stats.totalRead * 0.4 },
-                { day: "Interval 3", sent: stats.totalSent * 0.6, del: stats.totalDelivered * 0.6, read: stats.totalRead * 0.6 },
-                { day: "Interval 4", sent: stats.totalSent * 0.8, del: stats.totalDelivered * 0.8, read: stats.totalRead * 0.8 },
-                { day: "Current", sent: stats.totalSent, del: stats.totalDelivered, read: stats.totalRead },
-              ].map((item, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
-                  <div className="w-full flex items-end justify-center gap-1 h-full">
-                    <div className="w-2.5 bg-blue-500 rounded-t" style={{ height: `${Math.max(10, Math.min(100, (item.sent / (stats.totalSent || 1)) * 100))}%` }}></div>
-                    <div className="w-2.5 bg-emerald-500 rounded-t" style={{ height: `${Math.max(10, Math.min(100, (item.del / (stats.totalDelivered || 1)) * 100))}%` }}></div>
-                    <div className="w-2.5 bg-purple-500 rounded-t" style={{ height: `${Math.max(10, Math.min(100, (item.read / (stats.totalRead || 1)) * 100))}%` }}></div>
+          <div className="h-64 w-full bg-gray-50/60 rounded-xl border border-dashed border-gray-200 p-4 flex flex-col justify-end overflow-x-auto">
+            <div className="w-full h-48 flex items-end justify-between gap-2 pt-6 min-w-[400px]">
+              {stats.trendData && stats.trendData.length > 0 ? (
+                stats.trendData.map((item: any, i: number) => (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group relative">
+                    {/* Tooltip on hover */}
+                    <div className="absolute -top-10 bg-gray-900 text-white text-[9px] px-2 py-1 rounded shadow-md opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10 pointer-events-none">
+                      {item.day}: Sent {item.sent}, Del {item.del}, Read {item.read}
+                    </div>
+                    <div className="w-full flex items-end justify-center gap-1 h-full">
+                      <div className="w-2 bg-blue-500 rounded-t" style={{ height: `${Math.max(8, Math.min(100, (item.sent / maxTrendVal) * 100))}%` }}></div>
+                      <div className="w-2 bg-emerald-500 rounded-t" style={{ height: `${Math.max(8, Math.min(100, (item.del / maxTrendVal) * 100))}%` }}></div>
+                      <div className="w-2 bg-purple-500 rounded-t" style={{ height: `${Math.max(8, Math.min(100, (item.read / maxTrendVal) * 100))}%` }}></div>
+                    </div>
+                    <span className="text-[8px] text-gray-500 font-mono mt-2 truncate w-full text-center">{item.day}</span>
                   </div>
-                  <span className="text-[9px] text-gray-500 font-mono mt-2">{item.day}</span>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div className="w-full text-center text-gray-400 my-auto">No date-wise data available for this range</div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Pie / Donut Chart (1 Col) */}
+        {/* Pie / Donut Chart */}
         <div className="bg-white p-6 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between space-y-4">
           <div>
             <h3 className="font-bold text-sm text-gray-900">📊 Category Share (Pie Report)</h3>

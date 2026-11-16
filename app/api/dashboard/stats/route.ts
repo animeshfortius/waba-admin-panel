@@ -21,14 +21,13 @@ export async function GET(req: Request) {
       );
     }
 
-    // Fallback to default or first account
     if (!targetAccount && allAccounts.length > 0) {
       targetAccount = allAccounts.find((acc: any) => acc.isDefault) || allAccounts[0];
     }
 
     const activeChannelId = targetAccount?.phoneNumberId || targetAccount?.id;
 
-    // 2. Safely resolve Quality Rating and Messaging Limit
+    // 2. Quality Rating & Limit
     let rawRating = targetAccount?.qualityRating;
     let qualityRating = "GREEN";
     
@@ -79,7 +78,7 @@ export async function GET(req: Request) {
       ? { chatSession: { channel: activeChannelId } }
       : {};
 
-    // 4. Database Metrics
+    // 4. Overall Metrics
     const totalSent = await prisma.chatMessage.count({
       where: { senderType: "AGENT", ...dateQuery, ...channelQuery },
     });
@@ -109,6 +108,33 @@ export async function GET(req: Request) {
     });
     const authTotal = Math.max(0, totalSent - marketingTotal - utilityTotal);
 
+    // 5. Generate Date-wise Graph Trends (Last N days breakdown)
+    const daysCount = filter === "TODAY" ? 1 : filter === "30DAYS" ? 30 : 7;
+    const trendData = [];
+    
+    for (let i = daysCount - 1; i >= 0; i--) {
+      const dStart = new Date();
+      dStart.setDate(now.getDate() - i);
+      dStart.setHours(0, 0, 0, 0);
+
+      const dEnd = new Date(dStart);
+      dEnd.setHours(23, 59, 59, 999);
+
+      const dayLabel = dStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+      const daySent = await prisma.chatMessage.count({
+        where: { senderType: "AGENT", createdAt: { gte: dStart, lte: dEnd }, ...channelQuery },
+      });
+      const dayDelivered = await prisma.chatMessage.count({
+        where: { status: { in: ["DELIVERED", "READ"] }, createdAt: { gte: dStart, lte: dEnd }, ...channelQuery },
+      });
+      const dayRead = await prisma.chatMessage.count({
+        where: { status: "READ", createdAt: { gte: dStart, lte: dEnd }, ...channelQuery },
+      });
+
+      trendData.push({ day: dayLabel, sent: daySent, del: dayDelivered, read: dayRead });
+    }
+
     return NextResponse.json({
       success: true,
       selectedChannelId: activeChannelId || "",
@@ -136,6 +162,7 @@ export async function GET(req: Request) {
         qualityRating: metaHealth.qualityRating,
         messagingLimit: metaHealth.messagingLimit,
         verifiedName: metaHealth.verifiedName,
+        trendData,
       },
     });
   } catch (error: any) {

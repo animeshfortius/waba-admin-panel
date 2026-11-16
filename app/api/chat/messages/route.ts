@@ -82,12 +82,14 @@ export async function POST(req: Request) {
 
       try {
         if (mediaFile && mediaFile.size > 0) {
+          // Fast upload payload handling
           const metaUploadForm = new FormData();
           metaUploadForm.append("messaging_product", "whatsapp");
           metaUploadForm.append("file", mediaFile, mediaFile.name);
 
+          // Optimized timeout controller for ultra-fast dispatch (15s limit)
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 12000);
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
 
           const uploadRes = await fetch(
             `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/media`,
@@ -114,7 +116,7 @@ export async function POST(req: Request) {
           const waMediaType = isImage ? "image" : isVideo ? "video" : "document";
           finalMsgType = waMediaType;
 
-          // Save Media ID reference or Graph API media retrieval link
+          // Save Media ID URL for proxy rendering
           savedMediaUrl = `https://graph.facebook.com/v21.0/${uploadData.id}`;
 
           metaPayload = {
@@ -148,7 +150,7 @@ export async function POST(req: Request) {
         }
 
         const sendController = new AbortController();
-        const sendTimeoutId = setTimeout(() => sendController.abort(), 12000);
+        const sendTimeoutId = setTimeout(() => sendController.abort(), 10000);
 
         const metaRes = await fetch(
           `https://graph.facebook.com/v21.0/${wabaAccount.phoneNumberId}/messages`,
@@ -173,7 +175,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Save message with mediaUrl populated in Database
     const newMessage = await prisma.chatMessage.create({
       data: {
         chatSessionId: sessionId,

@@ -37,23 +37,24 @@ export async function POST(request: Request) {
   return handleProfileUpdate(request);
 }
 
-// PUT: Frontend agar PUT request bhej raha hai toh usko bhi yahin handle karenge
+// PUT: Profile update karne ke liye (agar frontend PUT bhej raha hai)
 export async function PUT(request: Request) {
   return handleProfileUpdate(request);
 }
 
-// Common function profile update logic ke liye
+// Common function profile aur image update logic ke liye
 async function handleProfileUpdate(request: Request) {
   try {
     const body = await request.json();
     const { userId, name, phone, image } = body;
+    const targetUserId = userId || body.id || "default_user";
 
     const updatedUser = await prisma.user.update({
-      where: { id: userId || "default_user" },
+      where: { id: targetUserId },
       data: {
-        name,
-        phone,
-        image, // 👈 Ab image bhi successfully database mein save ho jayegi!
+        ...(name && { name }),
+        ...(phone && { phone }),
+        ...(image !== undefined && { image }), // 👈 Yahan image successfully save ho jayegi
       },
     });
 

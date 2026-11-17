@@ -1,33 +1,15 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { PrismaClient } from "@prisma/client";
+import crypto from "crypto";
 
+const prisma = new PrismaClient();
+
+// GET: Profile fetch karne aur apiKey auto-generate karne ke liye
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
+    const userId = searchParams.get("userId") || "default_user";
 
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "User ID missing" }, { status: 400 });
-    }
-
-    // Agar emergency admin login hai
-    if (userId === "emergency-admin-id") {
-      return NextResponse.json({
-        success: true,
-        user: {
-          id: "emergency-admin-id",
-          username: "admin",
-          name: "Fortius Admin",
-          email: "admin@admin.com",
-          role: "SUPER_ADMIN",
-          phone: "9999999999",
-          apiKey: "waba_emergency_admin_key_12345",
-          expiryDate: "2030-12-31T00:00:00.000Z"
-        }
-      });
-    }
-
-    // Normal Database User
     let user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -36,17 +18,48 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
-    // Agar user ke paas API key nahi hai, toh automatic generate karke save kar do
     if (!user.apiKey) {
-      const generatedKey = "waba_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      const generatedKey = "ft_live_" + crypto.randomBytes(24).toString("hex");
       user = await prisma.user.update({
-        where: { id: user.id },
-        data: { apiKey: generatedKey },
+        where: { id: userId },
+        data: { apiKey: generatedKey }
       });
     }
 
     return NextResponse.json({ success: true, user });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message || "Failed to fetch profile" }, { status: 500 });
+  }
+}
+
+// POST: Profile update karne ke liye
+export async function POST(request: Request) {
+  return handleProfileUpdate(request);
+}
+
+// PUT: Profile update karne ke liye (frontend PUT request bhej raha hai)
+export async function PUT(request: Request) {
+  return handleProfileUpdate(request);
+}
+
+// Common function profile aur image update logic ke liye
+async function handleProfileUpdate(request: Request) {
+  try {
+    const body = await request.json();
+    const { userId, name, phone, image } = body;
+    const targetUserId = userId || body.id || "default_user";
+
+    const updatedUser = await prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        ...(name && { name }),
+        ...(phone && { phone }),
+        ...(image !== undefined && { image }), // 👈 Yahan profile picture Base64/URL format mein save ho jayegi
+      },
+    });
+
+    return NextResponse.json({ success: true, user: updatedUser });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message || "Failed to update profile" }, { status: 500 });
   }
 }

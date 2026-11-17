@@ -10,10 +10,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [agentData, setAgentData] = useState<any>(null);
+  const [profilePic, setProfilePic] = useState("");
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
+    // Database se profile picture fetch karna
+    fetch("/api/client/profile")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.user && data.user.image) {
+          setProfilePic(data.user.image);
+        }
+      })
+      .catch((err) => console.error("Error fetching header profile:", err));
+
     const agentStr = localStorage.getItem("currentAgent");
     if (agentStr) {
       try {
@@ -78,9 +89,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 onClick={() => setDropdownOpen(!dropdownOpen)}
                 className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition select-none"
               >
-                <div className="w-9 h-9 bg-slate-900 text-white font-extrabold rounded-full flex items-center justify-center text-xs shadow tracking-wider">
-                  {agentData ? agentData.name.substring(0, 2).toUpperCase() : "FI"}
-                </div>
+                {agentData ? (
+                  <div className="w-9 h-9 bg-slate-900 text-white font-extrabold rounded-full flex items-center justify-center text-xs shadow tracking-wider">
+                    {agentData.name.substring(0, 2).toUpperCase()}
+                  </div>
+                ) : profilePic ? (
+                  <img
+                    src={profilePic}
+                    alt="Profile"
+                    className="w-9 h-9 rounded-full object-cover shadow border"
+                  />
+                ) : (
+                  <div className="w-9 h-9 bg-slate-900 text-white font-extrabold rounded-full flex items-center justify-center text-xs shadow tracking-wider">
+                    FI
+                  </div>
+                )}
 
                 <div className="text-right hidden sm:block">
                   <div className="font-bold text-gray-800 text-xs">

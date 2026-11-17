@@ -15,25 +15,35 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const userId = "admin_user";
 
     if (Array.isArray(body)) {
       let count = 0;
       for (const item of body) {
         if (item.number) {
-          await prisma.whatsAppContact.upsert({
-            where: { number: item.number },
-            update: {
-              profileName: item.profileName || "",
-              email: item.email || "",
-              contactName: item.contactName || "",
-            },
-            create: {
-              number: item.number,
-              profileName: item.profileName || "",
-              email: item.email || "",
-              contactName: item.contactName || "",
-            },
+          const existing = await prisma.whatsAppContact.findFirst({
+            where: { number: item.number, userId },
           });
+          if (existing) {
+            await prisma.whatsAppContact.update({
+              where: { id: existing.id },
+              data: {
+                profileName: item.profileName || "",
+                email: item.email || "",
+                contactName: item.contactName || "",
+              },
+            });
+          } else {
+            await prisma.whatsAppContact.create({
+              data: {
+                number: item.number,
+                profileName: item.profileName || "",
+                email: item.email || "",
+                contactName: item.contactName || "",
+                userId,
+              },
+            });
+          }
           count++;
         }
       }
@@ -45,11 +55,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Mobile number is required" }, { status: 400 });
     }
 
-    const contact = await prisma.whatsAppContact.upsert({
-      where: { number },
-      update: { profileName, email, contactName },
-      create: { number, profileName, email, contactName },
+    const existing = await prisma.whatsAppContact.findFirst({
+      where: { number, userId },
     });
+
+    let contact;
+    if (existing) {
+      contact = await prisma.whatsAppContact.update({
+        where: { id: existing.id },
+        data: { profileName, email, contactName },
+      });
+    } else {
+      contact = await prisma.whatsAppContact.create({
+        data: { number, profileName, email, contactName, userId },
+      });
+    }
 
     return NextResponse.json({ success: true, contact });
   } catch (error: any) {

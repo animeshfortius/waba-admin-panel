@@ -15,17 +15,21 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const userId = "admin_user";
 
     if (Array.isArray(body)) {
       let count = 0;
       for (const item of body) {
         if (item.number) {
-          await prisma.blacklistNumber.upsert({
-            where: { number: item.number },
-            update: {},
-            create: { number: item.number },
+          const existing = await prisma.blacklistNumber.findFirst({
+            where: { number: item.number, userId },
           });
-          count++;
+          if (!existing) {
+            await prisma.blacklistNumber.create({
+              data: { number: item.number, userId },
+            });
+            count++;
+          }
         }
       }
       return NextResponse.json({ success: true, count });
@@ -36,11 +40,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Number is required" }, { status: 400 });
     }
 
-    const blocked = await prisma.blacklistNumber.upsert({
-      where: { number },
-      update: {},
-      create: { number },
+    const existing = await prisma.blacklistNumber.findFirst({
+      where: { number, userId },
     });
+
+    let blocked;
+    if (existing) {
+      blocked = existing;
+    } else {
+      blocked = await prisma.blacklistNumber.create({
+        data: { number, userId },
+      });
+    }
 
     return NextResponse.json({ success: true, blocked });
   } catch (error: any) {

@@ -850,7 +850,7 @@ function ConfigContent() {
                 if(res.ok) {
                   alert("✅ Contact added successfully!");
                   setShowContactModal(false);
-                  setContactData({ name: "", number: "", email: "", contactName: "" });
+                  setContactData({ name: "", number: "", email: "", contactName: "", profileName: "" });
                   fetchAllData();
                 } else {
                   alert("Failed to add contact.");

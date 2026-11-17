@@ -39,14 +39,18 @@ export async function POST(request: Request) {
 
     const fileType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "document";
 
+    // Set expiresAt to 30 days from now as required by schema
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
     // Save directly to database
     const newMedia = await prisma.mediaLibrary.create({
       data: {
         mediaName: file.name,
         fileType,
-        url: base64String, // Base64 string works instantly without disk write issues on Render
+        url: base64String,
         wabaNumber,
         userId,
+        expiresAt,
       },
     });
 

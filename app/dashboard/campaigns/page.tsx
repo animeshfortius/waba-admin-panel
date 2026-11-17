@@ -59,14 +59,32 @@ function CampaignsContent() {
   }, [allTemplates, selectedTemplateId]);
 
   const filteredApprovedTemplates = useMemo(() => {
+    // Resolve selected WABA Account to get both wabaId & phoneNumberId & displayPhone
+    const activeAcc = wabaAccounts.find(
+      (a) =>
+        a.phoneNumberId === selectedChannel ||
+        a.wabaId === selectedChannel ||
+        a.id === selectedChannel
+    );
+
     return allTemplates.filter((tpl) => {
       const isApproved = tpl.status?.toUpperCase() === "APPROVED";
-      const matchesWaba = !selectedChannel || tpl.wabaId === selectedChannel || tpl.phoneNumberId === selectedChannel;
+
+      const matchesWaba =
+        !selectedChannel ||
+        tpl.wabaId === selectedChannel ||
+        tpl.phoneNumberId === selectedChannel ||
+        (activeAcc &&
+          (tpl.wabaId === activeAcc.wabaId ||
+            tpl.wabaNumber === activeAcc.displayPhone));
+
       const matchesCat =
-        !selectedCategory || tpl.category?.toUpperCase() === selectedCategory.toUpperCase();
+        !selectedCategory ||
+        tpl.category?.toUpperCase() === selectedCategory.toUpperCase();
+
       return isApproved && matchesWaba && matchesCat;
     });
-  }, [allTemplates, selectedChannel, selectedCategory]);
+  }, [allTemplates, wabaAccounts, selectedChannel, selectedCategory]);
 
   useEffect(() => {
     if (activeTemplate) {
@@ -132,6 +150,8 @@ function CampaignsContent() {
           if (data?.user?.id) {
             setUserId(data.user.id);
             fetchWabaAndTemplates(data.user.id);
+          } else {
+            fetchWabaAndTemplates("");
           }
         })
         .catch(() => fetchWabaAndTemplates(""));
@@ -143,17 +163,21 @@ function CampaignsContent() {
       const res = await fetch(`/api/templates?userId=${uid}`);
       const data = await res.json();
       if (data.success) {
-        // 🔒 Strictly filter WABA channels for logged-in Agent
-        const permittedAccounts = getAgentPermittedChannels(data.wabaAccounts || []);
-        const permittedWabaIds = permittedAccounts.map((a: any) => a.wabaId);
-        const permittedPhones = permittedAccounts.map((a: any) => a.displayPhone);
+        const rawAccounts = data.wabaAccounts || [];
+        const permittedAccounts = getAgentPermittedChannels(rawAccounts);
+        const accountsToUse = permittedAccounts.length > 0 ? permittedAccounts : rawAccounts;
+
+        const permittedWabaIds = accountsToUse.map((a: any) => a.wabaId);
+        const permittedPhones = accountsToUse.map((a: any) => a.displayPhone);
 
         const rawTpls = data.templates || [];
         const permittedTpls = rawTpls.filter(
-          (t: any) => permittedWabaIds.includes(t.wabaId) || permittedPhones.includes(t.wabaNumber)
+          (t: any) =>
+            permittedWabaIds.includes(t.wabaId) ||
+            permittedPhones.includes(t.wabaNumber)
         );
 
-        setWabaAccounts(permittedAccounts);
+        setWabaAccounts(accountsToUse);
         setAllTemplates(permittedTpls);
 
         if (data.userRates) {
@@ -164,17 +188,31 @@ function CampaignsContent() {
         const urlWaba = searchParams?.get("wabaNumber");
         const urlTplId = searchParams?.get("templateId");
 
-        if (permittedAccounts.length > 0) {
+        if (accountsToUse.length > 0) {
           if (urlChannelId) {
-            const matchedAcc = permittedAccounts.find(
-              (a: any) => a.id === urlChannelId || a.phoneNumberId === urlChannelId || a.wabaId === urlChannelId
+            const matchedAcc = accountsToUse.find(
+              (a: any) =>
+                a.id === urlChannelId ||
+                a.phoneNumberId === urlChannelId ||
+                a.wabaId === urlChannelId
             );
-            setSelectedChannel(matchedAcc ? (matchedAcc.phoneNumberId || matchedAcc.wabaId) : permittedAccounts[0].phoneNumberId || permittedAccounts[0].wabaId);
+            setSelectedChannel(
+              matchedAcc
+                ? matchedAcc.phoneNumberId || matchedAcc.wabaId
+                : accountsToUse[0].phoneNumberId || accountsToUse[0].wabaId
+            );
           } else if (urlWaba) {
-            const matchedAcc = permittedAccounts.find((a: any) => a.displayPhone === urlWaba || a.wabaId === urlWaba);
-            setSelectedChannel(matchedAcc ? (matchedAcc.phoneNumberId || matchedAcc.wabaId) : permittedAccounts[0].phoneNumberId || permittedAccounts[0].wabaId);
+            const matchedAcc = accountsToUse.find(
+              (a: any) => a.displayPhone === urlWaba || a.wabaId === urlWaba
+            );
+            setSelectedChannel(
+              matchedAcc
+                ? matchedAcc.phoneNumberId || matchedAcc.wabaId
+                : accountsToUse[0].phoneNumberId || accountsToUse[0].wabaId
+            );
           } else {
-            const defaultAcc = permittedAccounts.find((a: any) => a.isDefault) || permittedAccounts[0];
+            const defaultAcc =
+              accountsToUse.find((a: any) => a.isDefault) || accountsToUse[0];
             setSelectedChannel(defaultAcc.phoneNumberId || defaultAcc.wabaId);
           }
         } else {
@@ -184,7 +222,7 @@ function CampaignsContent() {
         if (urlTplId && permittedTpls.length > 0) {
           const matchedTpl = permittedTpls.find((t: any) => t.id === urlTplId);
           if (matchedTpl) {
-            setSelectedCategory(matchedTpl.category || "");
+            setSelectedCategory(matchedTpl.category?.toUpperCase() || "");
             setSelectedTemplateId(matchedTpl.id);
           }
         }

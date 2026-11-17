@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
 
 // GET: Fetch all media records
 export async function GET(request: Request) {
@@ -19,7 +21,7 @@ export async function GET(request: Request) {
   }
 }
 
-// POST: Upload media file as Base64 (Render cloud safe)
+// POST: Upload media file to Server local folder with 30-day expiration
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -31,23 +33,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "No file provided" }, { status: 400 });
     }
 
-    // Convert file to buffer and then to base64 data url
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const base64Flag = `data:${file.type};base64,`;
-    const base64String = base64Flag + buffer.toString("base64");
 
+    // Create unique filename to prevent overwriting
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const filename = uniqueSuffix + "-" + file.name.replace(/\s+/g, "_");
+    
+    // Save to public/uploads directory
+    const uploadDir = path.join(process.cwd(), "public", "uploads");
+    try {
+      await mkdir(uploadDir, { recursive: true });
+    } catch (e) {
+      // Directory might already exist
+    }
+
+    const filepath = path.join(uploadDir, filename);
+    await writeFile(filepath, buffer);
+
+    const fileUrl = `/uploads/${filename}`;
     const fileType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "document";
 
-    // Set expiresAt to 30 days from now as required by schema
+    // Set expiration to 30 days from now according to Meta policy
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    // Save directly to database
+    // Save record to database
     const newMedia = await prisma.mediaLibrary.create({
       data: {
         mediaName: file.name,
         fileType,
-        url: base64String,
+        url: fileUrl,
         wabaNumber,
         userId,
         expiresAt,

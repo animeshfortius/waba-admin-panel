@@ -33,38 +33,44 @@ export default function AgentChatConfigPage() {
   });
 
   useEffect(() => {
-    fetchChannelsAndConfig();
+    fetchWabaChannels();
     fetchAgentsList();
   }, []);
 
-  const fetchChannelsAndConfig = async (agentIdParam?: string) => {
+  const fetchWabaChannels = async () => {
     try {
-      const uid = localStorage.getItem("userId") || "";
-      const query = new URLSearchParams();
-      if (uid) query.set("userId", uid);
-      if (agentIdParam) query.set("agentId", agentIdParam);
-
-      const res = await fetch(`/api/agents/chat-config?${query.toString()}`);
+      const res = await fetch("/api/templates");
       const data = await res.json();
-
-      if (data.success) {
-        if (Array.isArray(data.channels)) {
-          setChannels(data.channels);
-          if (!selectedChannel && data.channels.length > 0) {
-            setSelectedChannel(data.channels[0].displayPhone || data.channels[0].phoneNumberId);
-          }
-        }
-        if (data.config) {
-          if (data.config.channel) setSelectedChannel(data.config.channel);
-          setWelcomeMsgEnabled(Boolean(data.config.welcomeMsgEnabled));
-          if (data.config.welcomeMsgText) setWelcomeMsgText(data.config.welcomeMsgText);
-          setOffHoursMsgEnabled(Boolean(data.config.offHoursMsgEnabled));
-          if (data.config.offHoursMsgText) setOffHoursMsgText(data.config.offHoursMsgText);
-          if (data.config.operationalHours) setOperationalHours(data.config.operationalHours);
+      if (data.success && Array.isArray(data.wabaAccounts)) {
+        setChannels(data.wabaAccounts);
+        if (data.wabaAccounts.length > 0) {
+          setSelectedChannel(
+            (prev) =>
+              prev ||
+              data.wabaAccounts[0].displayPhone ||
+              data.wabaAccounts[0].phoneNumberId
+          );
         }
       }
     } catch (err) {
-      console.error("Error fetching WABA channels/config:", err);
+      console.error("Error fetching WABA channels:", err);
+    }
+  };
+
+  const fetchSavedAgentConfig = async (agentIdParam: string) => {
+    try {
+      const res = await fetch(`/api/agents/chat-config?agentId=${agentIdParam}`);
+      const data = await res.json();
+      if (data.success && data.config) {
+        if (data.config.channel) setSelectedChannel(data.config.channel);
+        setWelcomeMsgEnabled(Boolean(data.config.welcomeMsgEnabled));
+        if (data.config.welcomeMsgText) setWelcomeMsgText(data.config.welcomeMsgText);
+        setOffHoursMsgEnabled(Boolean(data.config.offHoursMsgEnabled));
+        if (data.config.offHoursMsgText) setOffHoursMsgText(data.config.offHoursMsgText);
+        if (data.config.operationalHours) setOperationalHours(data.config.operationalHours);
+      }
+    } catch (err) {
+      console.error("Error fetching saved agent config:", err);
     }
   };
 
@@ -77,7 +83,7 @@ export default function AgentChatConfigPage() {
         if (data.agents.length > 0) {
           const firstAgentId = data.agents[0].id;
           setSelectedAgent(firstAgentId);
-          fetchChannelsAndConfig(firstAgentId);
+          fetchSavedAgentConfig(firstAgentId);
         }
       }
     } catch (err) {
@@ -88,7 +94,7 @@ export default function AgentChatConfigPage() {
   const handleAgentChange = (newAgentId: string) => {
     setSelectedAgent(newAgentId);
     if (newAgentId) {
-      fetchChannelsAndConfig(newAgentId);
+      fetchSavedAgentConfig(newAgentId);
     }
   };
 
@@ -153,7 +159,7 @@ export default function AgentChatConfigPage() {
             <option value="">Select Channel</option>
             {channels.map((ch: any) => (
               <option key={ch.id} value={ch.displayPhone || ch.phoneNumberId}>
-                📱 {ch.displayPhone || ch.phoneNumberId} — {ch.displayName || "WABA Channel"}
+                📱 {ch.displayName || "WABA Channel"} ({ch.displayPhone || ch.phoneNumberId})
               </option>
             ))}
           </select>

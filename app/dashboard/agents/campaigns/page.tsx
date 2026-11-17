@@ -6,6 +6,11 @@ import Link from "next/link";
 export default function AgentCampaignsPage() {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
+  const [metaStats, setMetaStats] = useState<{
+    totalSent: number;
+    totalDelivered: number;
+    totalCost: number;
+  }>({ totalSent: 0, totalDelivered: 0, totalCost: 0 });
   const [loading, setLoading] = useState(true);
   const [syncingMeta, setSyncingMeta] = useState(false);
 
@@ -47,16 +52,22 @@ export default function AgentCampaignsPage() {
   ) => {
     setLoading(true);
     try {
-      const uid = localStorage.getItem("userId") || "";
       const sDate = customStart ?? startDate;
       const eDate = customEnd ?? endDate;
 
       const res = await fetch(
-        `/api/agents/admin-campaigns?userId=${uid}&startDate=${sDate}&endDate=${eDate}&agentId=${selectedAgentFilter}&syncMeta=${syncMeta}`
+        `/api/agents/admin-campaigns?startDate=${sDate}&endDate=${eDate}&agentId=${selectedAgentFilter}&syncMeta=${syncMeta}`
       );
       const data = await res.json();
       if (data.success) {
         setCampaigns(data.campaigns || data.reports || []);
+        if (data.metaAnalytics) {
+          setMetaStats({
+            totalSent: Number(data.metaAnalytics.totalSent || 0),
+            totalDelivered: Number(data.metaAnalytics.totalDelivered || 0),
+            totalCost: Number(data.metaAnalytics.totalCost || 0),
+          });
+        }
       }
     } catch (err) {
       console.error("Error fetching agent campaigns:", err);
@@ -114,6 +125,9 @@ export default function AgentCampaignsPage() {
             <h1 className="text-xl font-extrabold text-slate-800">Agent Campaigns</h1>
             <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
               Campaigns: {filteredRecords.length} | Total Messages: {totalRecipientsCount}
+            </span>
+            <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+              Meta Live: {metaStats.totalSent} Sent · {metaStats.totalDelivered} Delivered
             </span>
           </div>
         </div>

@@ -7,6 +7,7 @@ export async function POST(req: Request) {
     const {
       campaignName,
       wabaId,
+      phoneNumberId,
       numbers,
       templateName,
       language,
@@ -17,18 +18,35 @@ export async function POST(req: Request) {
       userId,
     } = body;
 
-    if (!wabaId || !numbers || numbers.length === 0 || !templateName) {
+    const identifier = String(phoneNumberId || wabaId || "").trim();
+
+    if (!identifier || !numbers || numbers.length === 0 || !templateName) {
       return NextResponse.json(
         { success: false, error: "Missing required campaign fields (WABA, Numbers, or Template)." },
         { status: 400 }
       );
     }
 
+    // Match WABA Account by wabaId, phoneNumberId, displayPhone, or record id
     const wabaAccount = await prisma.wabaAccount.findFirst({
-      where: { wabaId },
+      where: {
+        OR: [
+          { wabaId: identifier },
+          { phoneNumberId: identifier },
+          { phoneNumberId: `PHONE_${identifier}` },
+          { displayPhone: identifier },
+          { id: identifier },
+        ],
+      },
     });
 
-    if (!wabaAccount || !wabaAccount.accessToken || !wabaAccount.phoneNumberId) {
+    const resolvedToken = (
+      wabaAccount?.accessToken ||
+      process.env.META_ACCESS_TOKEN ||
+      ""
+    ).trim();
+
+    if (!wabaAccount || !resolvedToken || !wabaAccount.phoneNumberId) {
       return NextResponse.json(
         { success: false, error: "WABA Phone Number ID or Access Token not found in database." },
         { status: 404 }
@@ -46,17 +64,23 @@ export async function POST(req: Request) {
     }
 
     const cleanPhoneId = wabaAccount.phoneNumberId.replace("PHONE_", "").trim();
-    const accessToken = wabaAccount.accessToken.trim();
-    const channelNumber = wabaAccount.displayPhone || wabaId;
+    const actualWabaId = wabaAccount.wabaId;
+    const channelNumber = wabaAccount.displayPhone || actualWabaId;
 
-    const cleanVariables = Array.isArray(variables) ? variables.filter((v) => v !== undefined && v !== null) : [];
+    const cleanVariables = Array.isArray(variables)
+      ? variables.filter((v) => v !== undefined && v !== null)
+      : [];
 
     const dbTemplate = await prisma.whatsAppTemplate.findFirst({
-      where: { name: templateName, wabaId },
+      where: {
+        name: templateName,
+        OR: [{ wabaId: actualWabaId }, { wabaId: identifier }],
+      },
     });
 
     const headerType = (dbTemplate as any)?.headerType?.toUpperCase() || "NONE";
-    const hasMediaHeader = headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT";
+    const hasMediaHeader =
+      headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT";
 
     let mediaPayloadParam: any = null;
 
@@ -65,7 +89,8 @@ export async function POST(req: Request) {
       const isMetaId = mediaValue && /^\d+$/.test(String(mediaValue).trim());
 
       if (isMetaId) {
-        const mediaKey = headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
+        const mediaKey =
+          headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
         mediaPayloadParam = {
           type: mediaKey,
           [mediaKey]: { id: String(mediaValue).trim() },
@@ -77,15 +102,18 @@ export async function POST(req: Request) {
 
         if (!mediaValue || !mediaValue.startsWith("http")) {
           if (headerType === "VIDEO") {
-            mediaValue = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+            mediaValue =
+              "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
           } else if (headerType === "DOCUMENT") {
-            mediaValue = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+            mediaValue =
+              "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
           } else {
             mediaValue = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
           }
         }
 
-        const mediaKey = headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
+        const mediaKey =
+          headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
         mediaPayloadParam = {
           type: mediaKey,
           [mediaKey]: { link: mediaValue },
@@ -147,7 +175,7 @@ export async function POST(req: Request) {
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${accessToken}`,
+              Authorization: `Bearer ${resolvedToken}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify(payload),
@@ -179,7 +207,7 @@ export async function POST(req: Request) {
         });
       }
 
-      // 🟢 Save Log to Database
+      // Save Log to Database
       try {
         const savedLog = await prisma.campaignLog.create({
           data: {
@@ -197,7 +225,9 @@ export async function POST(req: Request) {
             readAt: null,
           },
         });
-        console.log(`💾 SUCCESS CREATED LOG -> ID: ${savedLog.id} | Recipient: ${formattedNumber} | Wamid: ${metaMessageId}`);
+        console.log(
+          `💾 SUCCESS CREATED LOG -> ID: ${savedLog.id} | Recipient: ${formattedNumber} | Wamid: ${metaMessageId}`
+        );
       } catch (logErr: any) {
         console.error(`❌ DB SAVE FAILED for ${formattedNumber}:`, logErr.message);
       }

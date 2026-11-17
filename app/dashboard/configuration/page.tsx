@@ -622,7 +622,7 @@ function ConfigContent() {
                     const expiryDate = m.expiresAt ? new Date(m.expiresAt) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
                     const diffTime = expiryDate.getTime() - new Date().getTime();
                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    const resolvedUrl = m.url?.startsWith("http") || m.url?.startsWith("data:") || m.url?.startsWith("/") ? m.url : `/uploads/${m.url}`;
+                    const resolvedUrl = m.url?.startsWith("data:image") ? m.url : (m.url?.startsWith("http") || m.url?.startsWith("/") ? m.url : `/uploads/${m.url}`);
 
                     return (
                       <tr key={m.id} className="hover:bg-slate-50/60 transition">
@@ -637,9 +637,15 @@ function ConfigContent() {
                           <span className="font-bold text-gray-800 truncate max-w-xs">{m.mediaName || "Unnamed File"}</span>
                         </td>
                         <td className="p-4 font-mono">
-                          <a href={resolvedUrl} target="_blank" rel="noreferrer" className="text-blue-600 bg-blue-50 px-2.5 py-1 rounded border border-blue-100 hover:underline font-bold inline-block">
-                            👁️ View File
-                          </a>
+                          <a href={resolvedUrl} target="_blank" rel="noreferrer" onClick={(e) => {
+  if (m.url?.startsWith("data:image")) {
+    e.preventDefault();
+    const win = window.open();
+    win?.document.write(`<img src="${m.url}" style="max-width:100%;"/>`);
+  }
+}} className="text-blue-600 bg-blue-50 px-2.5 py-1 rounded border border-blue-100 hover:underline font-bold inline-block">
+  👁️ View File
+</a>
                         </td>
                         <td className="p-4 font-medium text-gray-800">
                           <span className="bg-gray-100 px-2.5 py-1 rounded text-[11px] font-mono">{m.wabaNumber || "All"}</span>

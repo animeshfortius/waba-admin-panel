@@ -12,6 +12,19 @@ export default function ClientProfileLayout({
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [profilePic, setProfilePic] = useState("");
+
+  // Top header ke liye database se profile picture fetch karna
+  useEffect(() => {
+    fetch("/api/client/profile")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.user && data.user.image) {
+          setProfilePic(data.user.image);
+        }
+      })
+      .catch((err) => console.error("Error fetching header profile:", err));
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -56,9 +69,17 @@ export default function ClientProfileLayout({
                 onClick={() => setDropdownOpen(!dropdownOpen)}
                 className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition select-none"
               >
-                <div className="w-9 h-9 bg-slate-900 text-white font-extrabold rounded-full flex items-center justify-center text-xs shadow tracking-wider">
-                  FI
-                </div>
+                {profilePic ? (
+                  <img
+                    src={profilePic}
+                    alt="Profile"
+                    className="w-9 h-9 rounded-full object-cover shadow border"
+                  />
+                ) : (
+                  <div className="w-9 h-9 bg-slate-900 text-white font-extrabold rounded-full flex items-center justify-center text-xs shadow tracking-wider">
+                    FI
+                  </div>
+                )}
 
                 <div className="text-right hidden sm:block">
                   <div className="font-bold text-gray-800 text-xs">Fortius Infocom</div>
@@ -81,12 +102,12 @@ export default function ClientProfileLayout({
                   </Link>
 
                   <Link
-  href="/Client/ChangePassword/Index"
-  onClick={() => setDropdownOpen(false)}
-  className="flex items-center gap-3 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 transition"
->
-  <span>🔑</span> Change Password
-</Link>
+                    href="/Client/ChangePassword/Index"
+                    onClick={() => setDropdownOpen(false)}
+                    className="flex items-center gap-3 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    <span>🔑</span> Change Password
+                  </Link>
 
                   <Link
                     href="#"

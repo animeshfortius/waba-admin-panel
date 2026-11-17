@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET: Fetch all contact groups
 export async function GET() {
   try {
     const groups = await prisma.contactGroup.findMany({
@@ -13,7 +12,6 @@ export async function GET() {
   }
 }
 
-// POST: Create new contact group
 export async function POST(request: Request) {
   try {
     const { groupName } = await request.json();
@@ -22,7 +20,11 @@ export async function POST(request: Request) {
     }
 
     const newGroup = await prisma.contactGroup.create({
-      data: { groupName, totalContacts: 0 },
+      data: { 
+        groupName, 
+        totalContacts: 0,
+        userId: "admin_user" // Default fallback userId matching schema requirement
+      },
     });
 
     return NextResponse.json({ success: true, group: newGroup });
@@ -31,7 +33,6 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT: Edit group name
 export async function PUT(request: Request) {
   try {
     const { id, groupName } = await request.json();
@@ -50,7 +51,6 @@ export async function PUT(request: Request) {
   }
 }
 
-// DELETE: Remove group
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);

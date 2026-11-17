@@ -9,18 +9,23 @@ export default function AgentCampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [syncingMeta, setSyncingMeta] = useState(false);
 
-  // Filters
-  const today = new Date().toISOString().split("T")[0];
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-
-  const [startDate, setStartDate] = useState(sevenDaysAgo);
-  const [endDate, setEndDate] = useState(today);
+  // Filters (Initialized empty to avoid Next.js prerender Date() error)
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [selectedAgentFilter, setSelectedAgentFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
+    const today = new Date().toISOString().split("T")[0];
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+
+    setStartDate(sevenDaysAgo);
+    setEndDate(today);
+
     fetchAgentsList();
-    fetchAgentCampaigns(false);
+    fetchAgentCampaigns(false, sevenDaysAgo, today);
   }, []);
 
   const fetchAgentsList = async () => {
@@ -35,12 +40,19 @@ export default function AgentCampaignsPage() {
     }
   };
 
-  const fetchAgentCampaigns = async (syncMeta = false) => {
+  const fetchAgentCampaigns = async (
+    syncMeta = false,
+    customStart?: string,
+    customEnd?: string
+  ) => {
     setLoading(true);
     try {
       const uid = localStorage.getItem("userId") || "";
+      const sDate = customStart ?? startDate;
+      const eDate = customEnd ?? endDate;
+
       const res = await fetch(
-        `/api/agents/admin-campaigns?userId=${uid}&startDate=${startDate}&endDate=${endDate}&agentId=${selectedAgentFilter}&syncMeta=${syncMeta}`
+        `/api/agents/admin-campaigns?userId=${uid}&startDate=${sDate}&endDate=${eDate}&agentId=${selectedAgentFilter}&syncMeta=${syncMeta}`
       );
       const data = await res.json();
       if (data.success) {
@@ -85,7 +97,6 @@ export default function AgentCampaignsPage() {
     });
   }, [campaigns, selectedAgentFilter, searchQuery]);
 
-  // Total Count Summary across filtered campaigns
   const totalRecipientsCount = useMemo(() => {
     return filteredRecords.reduce(
       (sum, item) => sum + (Number(item.totalCount) || Number(item.recipientsCount) || 0),
@@ -129,7 +140,6 @@ export default function AgentCampaignsPage() {
       {/* Filter Records Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Date Range */}
           <div className="flex items-center gap-2 bg-slate-50 border px-3.5 py-2 rounded-xl">
             <span>📅</span>
             <input
@@ -147,7 +157,6 @@ export default function AgentCampaignsPage() {
             />
           </div>
 
-          {/* Agent Name Dropdown */}
           <select
             value={selectedAgentFilter}
             onChange={(e) => setSelectedAgentFilter(e.target.value)}
@@ -161,7 +170,6 @@ export default function AgentCampaignsPage() {
             ))}
           </select>
 
-          {/* Search Input */}
           <input
             type="text"
             placeholder="Search campaign, template, channel..."

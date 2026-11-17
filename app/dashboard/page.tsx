@@ -91,6 +91,8 @@ export default function DashboardPage() {
   const maxTrendVal = Math.max(...(stats.trendData?.map((t: any) => Math.max(t.sent, t.del, t.read)) || [10]), 10);
   const maxHourVal = Math.max(...(stats.hourlyActivity?.map((h: any) => h.count) || [5]), 5);
 
+  const validQueryChannel = selectedChannel && selectedChannel !== "ALL" ? `?channelId=${selectedChannel}` : "";
+
   return (
     <div className="w-full min-h-screen bg-gray-50/60 p-6 space-y-6 font-sans text-xs">
       
@@ -104,15 +106,15 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* QUICK ACTION SHORTCUTS (Passing selectedChannel query param) */}
+          {/* QUICK ACTION SHORTCUTS */}
           <Link
-            href={`/dashboard/campaigns${selectedChannel ? `?channelId=${selectedChannel}` : ""}`}
+            href={`/dashboard/campaigns${validQueryChannel}`}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2.5 rounded-xl shadow-xs transition flex items-center gap-1.5"
           >
             <span>🚀</span> Launch Broadcast
           </Link>
           <Link
-            href={`/dashboard/templates/create${selectedChannel ? `?channelId=${selectedChannel}` : ""}`}
+            href={`/dashboard/templates/create${validQueryChannel}`}
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2.5 rounded-xl shadow-xs transition flex items-center gap-1.5"
           >
             <span>➕</span> Add Template
@@ -124,7 +126,7 @@ export default function DashboardPage() {
             <span>📥</span> Export CSV
           </button>
 
-          {/* ACCOUNT DROPDOWN */}
+          {/* ACCOUNT DROPDOWN (Includes All Accounts + Individual Onboarded WABAs) */}
           <select
             value={selectedChannel}
             onChange={(e) => setSelectedChannel(e.target.value)}
@@ -133,11 +135,16 @@ export default function DashboardPage() {
             {channels.length === 0 ? (
               <option value="">Loading Accounts...</option>
             ) : (
-              channels.map((ch: any) => (
-                <option key={ch.id} value={ch.phoneNumberId || ch.id}>
-                  📱 {ch.displayPhone || ch.phoneNumberId} — {ch.displayName || "Active WABA"} {ch.isDefault ? "⭐ (Default)" : ""}
-                </option>
-              ))
+              channels.map((ch: any) => {
+                const isAll = ch.id === "ALL" || ch.phoneNumberId === "ALL";
+                return (
+                  <option key={ch.id} value={ch.phoneNumberId || ch.id}>
+                    {isAll
+                      ? `🌐 All Accounts — ${ch.displayName || "Combined Reports"}`
+                      : `📱 ${ch.displayPhone || ch.phoneNumberId} — ${ch.displayName || "Active WABA"} ${ch.isDefault ? "⭐ (Default)" : ""}`}
+                  </option>
+                );
+              })
             )}
           </select>
         </div>

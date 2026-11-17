@@ -16,34 +16,43 @@ export async function GET(req: Request) {
       orderBy: { createdAt: "asc" },
     });
 
+    const isAllChannels = channelId === "ALL";
     let targetAccount: any = null;
-    if (channelId && channelId !== "ALL") {
-      targetAccount = allAccounts.find(
-        (acc: any) =>
-          acc.id === channelId ||
-          acc.phoneNumberId === channelId ||
-          acc.wabaId === channelId ||
-          acc.displayPhone === channelId
-      );
+
+    if (!isAllChannels) {
+      if (channelId) {
+        targetAccount = allAccounts.find(
+          (acc: any) =>
+            acc.id === channelId ||
+            acc.phoneNumberId === channelId ||
+            acc.wabaId === channelId ||
+            acc.displayPhone === channelId
+        );
+      }
+
+      if (!targetAccount && allAccounts.length > 0) {
+        targetAccount = allAccounts.find((acc: any) => acc.isDefault) || allAccounts[0];
+      }
     }
 
-    if (!targetAccount && allAccounts.length > 0) {
-      targetAccount = allAccounts.find((acc: any) => acc.isDefault) || allAccounts[0];
-    }
-
-    const activeChannelId = targetAccount?.phoneNumberId || targetAccount?.id;
+    const activeChannelId = isAllChannels
+      ? "ALL"
+      : targetAccount?.phoneNumberId || targetAccount?.id;
     const activeDisplayPhone = targetAccount?.displayPhone || "";
     const activeWabaId = targetAccount?.wabaId || "";
 
     // 2. Live Meta Graph API v21.0 Account Health & Quality Sync
-    let liveQuality = targetAccount?.qualityRating || "GREEN";
-    let liveLimit = targetAccount?.messagingLimit || "100,000 / 24 hrs";
-    let liveVerifiedName =
-      targetAccount?.displayName ||
-      targetAccount?.displayPhone ||
-      "WhatsApp Business";
+    let liveQuality = isAllChannels ? "GREEN" : targetAccount?.qualityRating || "GREEN";
+    let liveLimit = isAllChannels
+      ? `All ${allAccounts.length} WABA Channels`
+      : targetAccount?.messagingLimit || "100,000 / 24 hrs";
+    let liveVerifiedName = isAllChannels
+      ? "All Onboarded WABA Accounts"
+      : targetAccount?.displayName ||
+        targetAccount?.displayPhone ||
+        "WhatsApp Business";
 
-    if (targetAccount?.phoneNumberId && targetAccount?.accessToken) {
+    if (!isAllChannels && targetAccount?.phoneNumberId && targetAccount?.accessToken) {
       const cleanPhoneId = targetAccount.phoneNumberId.replace("PHONE_", "").trim();
       try {
         const phoneRes = await fetch(
@@ -123,7 +132,7 @@ export async function GET(req: Request) {
 
     const campaignWhere: any = {
       ...dateQuery,
-      ...(channelId !== "ALL" && campaignChannelIdentifiers.length > 0
+      ...(!isAllChannels && campaignChannelIdentifiers.length > 0
         ? { channel: { in: campaignChannelIdentifiers } }
         : {}),
     };
@@ -135,7 +144,7 @@ export async function GET(req: Request) {
 
     // Also include Live Chat Agent messages if any
     const chatChannelQuery =
-      channelId !== "ALL" && activeChannelId
+      !isAllChannels && activeChannelId
         ? { chatSession: { channel: activeChannelId } }
         : {};
 
@@ -296,19 +305,33 @@ export async function GET(req: Request) {
       }),
     }));
 
+    // Include "All WABA Accounts" option at the top of accounts list
+    const formattedAccounts = [
+      {
+        id: "ALL",
+        phoneNumberId: "ALL",
+        displayPhone: "All Accounts",
+        displayName: `Combined (${allAccounts.length} WABAs)`,
+        qualityRating: "GREEN",
+        messagingLimit: "All Channels",
+        isDefault: false,
+      },
+      ...allAccounts.map((acc: any) => ({
+        id: acc.id,
+        phoneNumberId: acc.phoneNumberId,
+        displayPhone: acc.displayPhone,
+        displayName: acc.displayName,
+        qualityRating: acc.qualityRating,
+        messagingLimit: acc.messagingLimit,
+        isDefault: acc.isDefault || false,
+      })),
+    ];
+
     return NextResponse.json(
       {
         success: true,
         selectedChannelId: activeChannelId || "",
-        accounts: allAccounts.map((acc: any) => ({
-          id: acc.id,
-          phoneNumberId: acc.phoneNumberId,
-          displayPhone: acc.displayPhone,
-          displayName: acc.displayName,
-          qualityRating: acc.qualityRating,
-          messagingLimit: acc.messagingLimit,
-          isDefault: acc.isDefault || false,
-        })),
+        accounts: formattedAccounts,
         stats: {
           totalSent,
           totalDelivered,

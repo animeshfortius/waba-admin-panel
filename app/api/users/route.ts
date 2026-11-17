@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import crypto from "crypto";
+import bcrypt from "bcryptjs"; // Agar bcrypt use hota hai toh password secure karne ke liye
 
 const prisma = new PrismaClient();
 
 // GET: Sabhi users ki list fetch karne ke liye
 export async function GET() {
   try {
-    const users = await (prisma as any).user.findMany({
-      orderBy: { id: "desc" },
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: "desc" },
     });
     return NextResponse.json({ success: true, users });
   } catch (error: any) {
@@ -20,20 +22,23 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    // 1. Automatic Unique API Key Generate karein
-    const generatedApiKey = "waba_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // 1. Automatic Secure Unique Live API Key Generate karein (ft_live_...)
+    const generatedApiKey = "ft_live_" + crypto.randomBytes(24).toString("hex");
 
-    // 2. Database mein user create karte waqt apiKey pass kar dein
-    const newUser = await (prisma as any).user.create({
+    // 2. Password ko secure hash karna (agar plain password nahi chahiye)
+    const hashedPassword = body.password ? await bcrypt.hash(body.password, 10) : body.password;
+
+    // 3. Database mein user create karte waqt apiKey pass kar dein
+    const newUser = await prisma.user.create({
       data: {
-        username: body.username,
-        name: body.name || body.username,
+        username: body.username || null,
+        name: body.name || body.username || "Fortius User",
         email: body.email,
-        password: body.password,
-        phone: body.phone,
+        password: hashedPassword,
+        phone: body.phone || null,
         role: body.role || "USER",
-        expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
-        apiKey: generatedApiKey, // 👈 Yahan automatic key assign ho jayegi
+        expiryDate: body.expiryDate ? String(body.expiryDate) : null, // Schema ke mutabiq String? handle kiya
+        apiKey: generatedApiKey, // 👈 Account bante hi automatic real API key assign ho gayi!
       },
     });
 

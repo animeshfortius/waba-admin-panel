@@ -8,34 +8,35 @@ datasource db {
 }
 
 model User {
-  id                   String              @id @default(uuid())
+  id                   String             @id @default(uuid())
   name                 String
-  username             String?             @unique
-  email                String              @unique
+  username             String?            @unique
+  email                String             @unique
   password             String
   phone                String?
+  image                String?            @db.Text // 👈 Profile picture/avatar save karne ke liye nayi field
   expiryDate           String?
-  apiKey               String?
-  role                 Role                @default(USER)
-  walletBalance        Float               @default(0.0)
-  actualBalance        Float               @default(0.0)
-  virtualBalance       Float               @default(0.0)
-  perMsgRate           Float               @default(0.8046)
-  utilityRate          Float               @default(0.1550)
-  serviceRate          Float               @default(0.1550)
-  authRate             Float               @default(0.1550)
+  apiKey               String?            @unique
+  role                 Role               @default(USER)
+  walletBalance        Float              @default(0.0)
+  actualBalance        Float              @default(0.0)
+  virtualBalance       Float              @default(0.0)
+  perMsgRate           Float              @default(0.8046)
+  utilityRate          Float              @default(0.1550)
+  serviceRate          Float              @default(0.1550)
+  authRate             Float              @default(0.1550)
   
   // 👇 WhatsApp Account Settings Toggles
-  whatsappApiEnabled   Boolean             @default(true)
-  chatbotEnabled       Boolean             @default(true)
-  secureReporting      Boolean             @default(false)
-  internationalAccount Boolean             @default(false)
+  whatsappApiEnabled   Boolean            @default(true)
+  chatbotEnabled       Boolean            @default(true)
+  secureReporting      Boolean            @default(false)
+  internationalAccount Boolean            @default(false)
 
   createdById          String?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
-  createdBy            User?               @relation("UserHierarchy", fields: [createdById], references: [id], onDelete: Cascade)
-  childUsers           User[]              @relation("UserHierarchy")
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  createdBy            User?              @relation("UserHierarchy", fields: [createdById], references: [id], onDelete: Cascade)
+  childUsers           User[]             @relation("UserHierarchy")
   wabaAccounts         WabaAccount[]
   transactions         WalletTransaction[]
 }
@@ -51,7 +52,7 @@ model WalletTransaction {
 }
 
 model WabaAccount {
-  id             String   @id @default(uuid())
+  id             String   @id @default(cuid())
   userId         String
   wabaId         String   @unique
   phoneNumberId  String
@@ -74,14 +75,14 @@ model WabaAccount {
 }
 
 model MediaLibrary {
-  id         String   @id @default(uuid())
-  userId     String
-  mediaName  String
-  url        String
-  wabaNumber String   @default("All")
-  fileType   String?  @default("image") // image, video, document
-  expiresAt  DateTime // Used for 30-day automatic cleanup
-  createdAt  DateTime @default(now())
+  id          String   @id @default(uuid())
+  userId      String
+  mediaName   String
+  url         String
+  wabaNumber  String   @default("All")
+  fileType    String?  @default("image")
+  expiresAt   DateTime 
+  createdAt   DateTime @default(now())
 }
 
 model WhatsAppContact {
@@ -123,14 +124,14 @@ model WhatsAppTemplate {
   metaTemplateId String?  @unique
   name           String
   language       String   @default("en_US")
-  category       String   // UTILITY, MARKETING, AUTHENTICATION
-  status         String   @default("PENDING") // APPROVED, PENDING, REJECTED, PAUSED
-  headerType     String?  @default("NONE") // NONE, TEXT, IMAGE, VIDEO, DOCUMENT
+  category       String   
+  status         String   @default("PENDING") 
+  headerType     String?  @default("NONE") 
   headerText     String?
   bodyText       String
   footerText     String?
   buttons        Json?
-  components     Json?    // Raw Meta components payload
+  components     Json?    
   rejectedReason String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -141,10 +142,10 @@ model CampaignLog {
   userId       String
   campaignName String
   templateName String
-  channel      String    // WABA Number / Display Phone
-  recipient    String    // Target Mobile Number
-  status       String    // SENT, DELIVERED, READ, FAILED
-  messageId    String?   // 👈 @unique hata kar index kar diya
+  channel      String    
+  recipient    String    
+  status       String    
+  messageId    String?   
   cost         Float     @default(0.0)
   errorDetails String?   @default("N/A")
   sentAt       DateTime  @default(now())
@@ -157,33 +158,33 @@ model CampaignLog {
 }
 
 model ChatSession {
-  id             String        @id @default(uuid())
-  userId         String        // Tenant / Admin ID
-  customerPhone  String        // Customer WhatsApp number
-  customerName   String?       // Customer Name
-  channel        String        // WABA phone number / channel used
-  status         String        @default("OPEN") // OPEN, PENDING, RESOLVED
-  assignedTo     String?       // Agent username or ID
-  isBotActive    Boolean       @default(true) // AiSensy style bot/human toggle
-  lastMessage    String?       
-  lastMessageAt  DateTime      @default(now())
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  messages       ChatMessage[]
-  notes          ChatNote[]    // Internal team whisper notes
+  id            String        @id @default(uuid())
+  userId        String        
+  customerPhone String        
+  customerName  String?       
+  channel       String        
+  status        String        @default("OPEN") 
+  assignedTo    String?       
+  isBotActive   Boolean       @default(true) 
+  lastMessage   String?       
+  lastMessageAt DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  messages      ChatMessage[]
+  notes         ChatNote[]    
 }
 
 model ChatMessage {
   id            String      @id @default(uuid())
   chatSessionId String
   chatSession   ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
-  senderType    String      // "CUSTOMER", "AGENT", "BOT", "AI"
-  senderName    String?     // Agent or Bot name
-  messageBody   String      // Text message body
-  messageType   String      @default("text") // text, image, template, interactive
+  senderType    String      
+  senderName    String?     
+  messageBody   String      
+  messageType   String      @default("text") 
   mediaUrl      String?     
-  status        String      @default("SENT") // SENT, DELIVERED, READ, FAILED
-  wabaMessageId String?     // Meta wamid
+  status        String      @default("SENT") 
+  wabaMessageId String?     
   createdAt     DateTime    @default(now())
 }
 
@@ -191,8 +192,8 @@ model ChatNote {
   id            String      @id @default(uuid())
   chatSessionId String
   chatSession   ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
-  agentName     String      // Who wrote the note
-  noteBody      String      // Internal whisper note content
+  agentName     String      
+  noteBody      String      
   createdAt     DateTime    @default(now())
 }
 

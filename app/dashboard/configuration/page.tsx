@@ -37,7 +37,7 @@ function ConfigContent() {
 
   const [showContactModal, setShowContactModal] = useState(false);
   const [showUploadContactModal, setShowUploadContactModal] = useState(false);
-  const [contactData, setContactData] = useState({ name: "", number: "", email: "", contactName: "" });
+  const [contactData, setContactData] = useState({ name: "", number: "", email: "", contactName: "", profileName: "" });
 
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
+const META_VERSION = "v21.0";
 
 export async function GET(request: Request) {
   try {
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
       email: channel.email || "",
       address: channel.address || "",
       website: channel.website || "",
-      category: channel.category || "PROFESSIONAL_SERVICES",
+      category: channel.category || "OTHER",
       profilePicture: channel.profilePicture || "",
     };
 
@@ -34,23 +35,22 @@ export async function GET(request: Request) {
       try {
         const cleanPhoneId = channel.phoneNumberId.replace("PHONE_", "").trim();
         const metaRes = await fetch(
-          `https://graph.facebook.com/v26.0/${cleanPhoneId}/whatsapp_business_profile?fields=about,address,description,email,websites,vertical,profile_picture_url`,
+          `https://graph.facebook.com/${META_VERSION}/${cleanPhoneId}/whatsapp_business_profile?fields=about,address,description,email,websites,vertical,profile_picture_url`,
           {
-            headers: { Authorization: `Bearer ${channel.accessToken}` },
+            headers: { Authorization: `Bearer ${channel.accessToken.trim()}` },
           }
         );
         const metaData = await metaRes.json();
         
-        // Meta returns profile data in data array or directly
         const p = metaData?.data?.[0] || metaData;
-        if (p) {
+        if (p && !p.error) {
           metaProfile = {
             displayName: channel.displayName || "",
             description: p.about || p.description || channel.description || "",
             email: p.email || channel.email || "",
             address: p.address || channel.address || "",
             website: (Array.isArray(p.websites) ? p.websites[0] : p.websites) || channel.website || "",
-            category: p.vertical || channel.category || "PROFESSIONAL_SERVICES",
+            category: p.vertical || channel.category || "OTHER",
             profilePicture: p.profile_picture_url || channel.profilePicture || "",
           };
         }
@@ -89,7 +89,16 @@ export async function POST(request: Request) {
       try {
         const cleanPhoneId = channel.phoneNumberId.replace("PHONE_", "").trim();
         
-        // Payload for Meta v26.0
+        // Clean and format vertical category for Meta API
+        let formattedVertical = String(category || "OTHER").trim().toUpperCase();
+        if (formattedVertical.includes("HOTEL") || formattedVertical.includes("LODGING")) {
+          formattedVertical = "HOTEL";
+        } else if (formattedVertical.includes("PROFESSIONAL") || formattedVertical.includes("SERVICE")) {
+          formattedVertical = "PROF_SERVICES";
+        } else if (!formattedVertical || formattedVertical === "") {
+          formattedVertical = "OTHER";
+        }
+
         const payload: any = {
           messaging_product: "whatsapp",
           about: description || "Professional Business Communication",
@@ -97,7 +106,7 @@ export async function POST(request: Request) {
           description: description || "",
           email: email || "",
           websites: website ? [website] : [],
-          vertical: category || "PROFESSIONAL_SERVICES",
+          vertical: formattedVertical,
         };
 
         if (profilePicture) {
@@ -105,11 +114,11 @@ export async function POST(request: Request) {
         }
 
         const metaRes = await fetch(
-          `https://graph.facebook.com/v26.0/${cleanPhoneId}/whatsapp_business_profile`,
+          `https://graph.facebook.com/${META_VERSION}/${cleanPhoneId}/whatsapp_business_profile`,
           {
             method: "POST",
             headers: {
-              "Authorization": `Bearer ${channel.accessToken}`,
+              "Authorization": `Bearer ${channel.accessToken.trim()}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify(payload),
@@ -117,7 +126,7 @@ export async function POST(request: Request) {
         );
 
         const metaResult = await metaRes.json();
-        if (metaRes.ok) {
+        if (metaRes.ok && metaResult.success) {
           metaSyncSuccess = true;
         } else {
           metaErrorResponse = metaResult;

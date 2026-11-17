@@ -6,6 +6,7 @@ export default function MyProfilePage() {
   const [activeTab, setActiveTab] = useState<"personal" | "security">("personal");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
+  const [userId, setUserId] = useState("");
   
   // Profile states
   const [formData, setFormData] = useState({
@@ -34,13 +35,14 @@ export default function MyProfilePage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.user) {
+          setUserId(data.user.id); // 👈 User ID save kar li
           setFormData((prev) => ({
             ...prev,
             username: data.user.username || data.user.name || "Admin",
             email: data.user.email || "info@fortiusinfocom.com",
             mobile: data.user.phone || "8052058888",
             apiKey: data.user.apiKey || "4p47cb81-10e5-4c82-821c-7862a71c674c",
-            profilePic: data.user.profilePic || "",
+            profilePic: data.user.image || data.user.profilePic || "", // 👈 DB ki 'image' field map ki
           }));
         }
       })
@@ -58,20 +60,31 @@ export default function MyProfilePage() {
     e.preventDefault();
     setSaving(true);
     try {
+      const payload = {
+        userId: userId,
+        name: formData.username,
+        phone: formData.mobile,
+        image: formData.profilePic, // 👈 Backend ko 'image' key ke roop mein bhej rahe hain
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        pinCode: formData.pinCode,
+      };
+
       const res = await fetch("/api/client/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.success) {
-        alert("Profile details & picture saved successfully!");
+        alert("Profile details & picture saved successfully to database!");
       } else {
-        alert("Saved locally! (Backend update API response logged)");
+        alert("Error: " + (data.error || "Failed to save"));
       }
     } catch (err) {
       console.error("Save error:", err);
-      alert("Profile updated successfully!");
+      alert("Failed to connect to server!");
     } finally {
       setSaving(false);
     }

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const META_GRAPH_VERSION = "v21.0";
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -9,15 +11,19 @@ export async function GET(req: Request) {
     const endDateParam = searchParams.get("endDate");
     const channelId = searchParams.get("channelId");
 
-    // 1. Fetch all accounts from database
+    // 1. Fetch all WABA accounts from database
     const allAccounts = await prisma.wabaAccount.findMany({
       orderBy: { createdAt: "asc" },
     });
 
-    let targetAccount = null;
+    let targetAccount: any = null;
     if (channelId && channelId !== "ALL") {
       targetAccount = allAccounts.find(
-        (acc: any) => acc.id === channelId || acc.phoneNumberId === channelId
+        (acc: any) =>
+          acc.id === channelId ||
+          acc.phoneNumberId === channelId ||
+          acc.wabaId === channelId ||
+          acc.displayPhone === channelId
       );
     }
 
@@ -26,30 +32,55 @@ export async function GET(req: Request) {
     }
 
     const activeChannelId = targetAccount?.phoneNumberId || targetAccount?.id;
+    const activeDisplayPhone = targetAccount?.displayPhone || "";
+    const activeWabaId = targetAccount?.wabaId || "";
 
-    // 2. Quality Rating & Limit
-    let rawRating = targetAccount?.qualityRating;
-    let qualityRating = "GREEN";
-    
-    if (!rawRating || rawRating === "N/A" || rawRating === "UNKNOWN" || rawRating === "") {
-      qualityRating = "N/A";
-    } else if (rawRating.toUpperCase().includes("HIGH") || rawRating.toUpperCase().includes("GREEN")) {
-      qualityRating = "GREEN";
-    } else if (rawRating.toUpperCase().includes("MED")) {
-      qualityRating = "YELLOW";
-    } else if (rawRating.toUpperCase().includes("LOW") || rawRating.toUpperCase().includes("RED")) {
-      qualityRating = "RED";
-    } else {
-      qualityRating = rawRating;
+    // 2. Live Meta Graph API v21.0 Account Health & Quality Sync
+    let liveQuality = targetAccount?.qualityRating || "GREEN";
+    let liveLimit = targetAccount?.messagingLimit || "100,000 / 24 hrs";
+    let liveVerifiedName =
+      targetAccount?.displayName ||
+      targetAccount?.displayPhone ||
+      "WhatsApp Business";
+
+    if (targetAccount?.phoneNumberId && targetAccount?.accessToken) {
+      const cleanPhoneId = targetAccount.phoneNumberId.replace("PHONE_", "").trim();
+      try {
+        const phoneRes = await fetch(
+          `https://graph.facebook.com/${META_GRAPH_VERSION}/${cleanPhoneId}?fields=quality_rating,verified_name,messaging_limit_tier&access_token=${targetAccount.accessToken.trim()}`,
+          { cache: "no-store" }
+        );
+        const phoneJson = await phoneRes.json();
+        if (phoneJson && !phoneJson.error) {
+          if (phoneJson.quality_rating) liveQuality = phoneJson.quality_rating;
+          if (phoneJson.verified_name) liveVerifiedName = phoneJson.verified_name;
+          if (phoneJson.messaging_limit_tier) {
+            const tierMap: Record<string, string> = {
+              TIER_1K: "1,000 / 24 hrs",
+              TIER_10K: "10,000 / 24 hrs",
+              TIER_100K: "100,000 / 24 hrs",
+              TIER_UNLIMITED: "Unlimited / 24 hrs",
+            };
+            liveLimit = tierMap[phoneJson.messaging_limit_tier] || phoneJson.messaging_limit_tier;
+          }
+        }
+      } catch (metaErr) {
+        console.error("Meta Phone Health sync error:", metaErr);
+      }
     }
 
-    let metaHealth = {
-      qualityRating: qualityRating,
-      messagingLimit: targetAccount?.messagingLimit || "100,000 / 24 hrs",
-      verifiedName: targetAccount
-        ? targetAccount.displayName || targetAccount.displayPhone || targetAccount.phoneNumberId
-        : "WhatsApp Business",
-    };
+    let qualityRating = "GREEN";
+    if (!liveQuality || liveQuality === "N/A" || liveQuality === "UNKNOWN") {
+      qualityRating = "N/A";
+    } else if (liveQuality.toUpperCase().includes("HIGH") || liveQuality.toUpperCase().includes("GREEN")) {
+      qualityRating = "GREEN";
+    } else if (liveQuality.toUpperCase().includes("MED") || liveQuality.toUpperCase().includes("YELLOW")) {
+      qualityRating = "YELLOW";
+    } else if (liveQuality.toUpperCase().includes("LOW") || liveQuality.toUpperCase().includes("RED")) {
+      qualityRating = "RED";
+    } else {
+      qualityRating = liveQuality;
+    }
 
     // 3. Date Range Calculation
     const now = new Date();
@@ -74,44 +105,117 @@ export async function GET(req: Request) {
       filter === "ALL" && !startDateParam
         ? {}
         : { createdAt: { gte: startDate, lte: endDate } };
-    const channelQuery = activeChannelId
-      ? { chatSession: { channel: activeChannelId } }
-      : {};
 
-    // 4. Overall Metrics
-    const totalSent = await prisma.chatMessage.count({
-      where: { senderType: "AGENT", ...dateQuery, ...channelQuery },
+    // 4. Fetch Campaign Logs + Template Categories for accurate live stats
+    const allTemplates = await prisma.whatsAppTemplate.findMany({
+      select: { name: true, category: true },
+    });
+    const templateCategoryMap: Record<string, string> = {};
+    allTemplates.forEach((t) => {
+      templateCategoryMap[t.name] = (t.category || "UTILITY").toUpperCase();
     });
 
-    const totalDelivered = await prisma.chatMessage.count({
-      where: { status: { in: ["DELIVERED", "READ"] }, ...dateQuery, ...channelQuery },
+    const campaignChannelIdentifiers = [
+      activeDisplayPhone,
+      activeWabaId,
+      activeChannelId,
+    ].filter(Boolean);
+
+    const campaignWhere: any = {
+      ...dateQuery,
+      ...(channelId !== "ALL" && campaignChannelIdentifiers.length > 0
+        ? { channel: { in: campaignChannelIdentifiers } }
+        : {}),
+    };
+
+    const campaignLogs = await prisma.campaignLog.findMany({
+      where: campaignWhere,
+      orderBy: { createdAt: "desc" },
     });
 
-    const totalRead = await prisma.chatMessage.count({
-      where: { status: "READ", ...dateQuery, ...channelQuery },
+    // Also include Live Chat Agent messages if any
+    const chatChannelQuery =
+      channelId !== "ALL" && activeChannelId
+        ? { chatSession: { channel: activeChannelId } }
+        : {};
+
+    const chatMessages = await prisma.chatMessage.findMany({
+      where: { senderType: "AGENT", ...dateQuery, ...chatChannelQuery },
+      include: { chatSession: true },
+      orderBy: { createdAt: "desc" },
+      take: 250,
     });
 
-    const totalUnread = await prisma.chatMessage.count({
-      where: { status: "DELIVERED", ...dateQuery, ...channelQuery },
+    // 5. Aggregate Combined Live Metrics (Campaign Broadcasts + Live Chat)
+    let totalSent = 0;
+    let totalDelivered = 0;
+    let totalRead = 0;
+    let totalUnread = 0;
+    let totalFailed = 0;
+
+    let marketingTotal = 0;
+    let marketingDelivered = 0;
+    let utilityTotal = 0;
+    let utilityDelivered = 0;
+    let authTotal = 0;
+    let authDelivered = 0;
+
+    campaignLogs.forEach((log) => {
+      const st = (log.status || "").toUpperCase();
+      const cat = templateCategoryMap[log.templateName] || "UTILITY";
+
+      if (st === "FAILED") {
+        totalFailed++;
+      } else {
+        totalSent++;
+        if (st === "READ") {
+          totalDelivered++;
+          totalRead++;
+        } else if (st === "DELIVERED") {
+          totalDelivered++;
+          totalUnread++;
+        }
+      }
+
+      if (cat === "MARKETING") {
+        if (st !== "FAILED") marketingTotal++;
+        if (st === "DELIVERED" || st === "READ") marketingDelivered++;
+      } else if (cat === "AUTHENTICATION") {
+        if (st !== "FAILED") authTotal++;
+        if (st === "DELIVERED" || st === "READ") authDelivered++;
+      } else {
+        if (st !== "FAILED") utilityTotal++;
+        if (st === "DELIVERED" || st === "READ") utilityDelivered++;
+      }
     });
 
-    const totalFailed = await prisma.chatMessage.count({
-      where: { status: "FAILED", ...dateQuery, ...channelQuery },
+    chatMessages.forEach((m: any) => {
+      const st = (m.status || "").toUpperCase();
+      if (st === "FAILED") {
+        totalFailed++;
+      } else {
+        totalSent++;
+        if (st === "READ") {
+          totalDelivered++;
+          totalRead++;
+        } else if (st === "DELIVERED") {
+          totalDelivered++;
+          totalUnread++;
+        }
+      }
+      if (m.messageType === "template") {
+        marketingTotal++;
+        if (st === "DELIVERED" || st === "READ") marketingDelivered++;
+      } else {
+        utilityTotal++;
+        if (st === "DELIVERED" || st === "READ") utilityDelivered++;
+      }
     });
 
-    // Category Breakdowns
-    const marketingTotal = await prisma.chatMessage.count({
-      where: { messageType: "template", ...dateQuery, ...channelQuery },
-    });
-    const utilityTotal = await prisma.chatMessage.count({
-      where: { messageType: "text", ...dateQuery, ...channelQuery },
-    });
-    const authTotal = Math.max(0, totalSent - marketingTotal - utilityTotal);
-
-    // 5. Generate Date-wise Graph Trends
+    // 6. Generate Date-wise Graph Trends (Campaigns + Chat)
     const daysCount = filter === "TODAY" ? 1 : filter === "30DAYS" ? 30 : 7;
     const trendData = [];
-    
+
     for (let i = daysCount - 1; i >= 0; i--) {
       const dStart = new Date();
       dStart.setDate(now.getDate() - i);
@@ -122,36 +226,39 @@ export async function GET(req: Request) {
 
       const dayLabel = dStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-      const daySent = await prisma.chatMessage.count({
-        where: { senderType: "AGENT", createdAt: { gte: dStart, lte: dEnd }, ...channelQuery },
+      const dayCampLogs = campaignLogs.filter((l) => {
+        const t = new Date(l.createdAt).getTime();
+        return t >= dStart.getTime() && t <= dEnd.getTime();
       });
-      const dayDelivered = await prisma.chatMessage.count({
-        where: { status: { in: ["DELIVERED", "READ"] }, createdAt: { gte: dStart, lte: dEnd }, ...channelQuery },
+
+      const dayChatMsgs = chatMessages.filter((m: any) => {
+        const t = new Date(m.createdAt).getTime();
+        return t >= dStart.getTime() && t <= dEnd.getTime();
       });
-      const dayRead = await prisma.chatMessage.count({
-        where: { status: "READ", createdAt: { gte: dStart, lte: dEnd }, ...channelQuery },
-      });
+
+      const daySent =
+        dayCampLogs.filter((l) => l.status?.toUpperCase() !== "FAILED").length +
+        dayChatMsgs.filter((m: any) => m.status?.toUpperCase() !== "FAILED").length;
+
+      const dayDelivered =
+        dayCampLogs.filter((l) => ["DELIVERED", "READ"].includes(l.status?.toUpperCase())).length +
+        dayChatMsgs.filter((m: any) => ["DELIVERED", "READ"].includes(m.status?.toUpperCase())).length;
+
+      const dayRead =
+        dayCampLogs.filter((l) => l.status?.toUpperCase() === "READ").length +
+        dayChatMsgs.filter((m: any) => m.status?.toUpperCase() === "READ").length;
 
       trendData.push({ day: dayLabel, sent: daySent, del: dayDelivered, read: dayRead });
     }
 
-    // 6. Fetch All Messages in Range for Hourly Activity & Top Templates
-    const recentMsgs = await prisma.chatMessage.findMany({
-      where: { senderType: "AGENT", ...dateQuery, ...channelQuery },
-      include: { chatSession: true },
-      orderBy: { createdAt: "desc" },
-      take: 250,
-    });
-
-    // Hourly Peak Activity (09 AM to 09 PM buckets)
+    // 7. Hourly Peak Activity & Top Templates
     const hoursMap: Record<string, number> = {
       "09 AM": 0, "11 AM": 0, "01 PM": 0, "03 PM": 0, "05 PM": 0, "07 PM": 0, "09 PM": 0,
     };
-
     const templateCounts: Record<string, { sent: number; read: number }> = {};
 
-    recentMsgs.forEach((m: any) => {
-      const hr = new Date(m.createdAt).getHours();
+    campaignLogs.forEach((l) => {
+      const hr = new Date(l.createdAt).getHours();
       if (hr < 10) hoursMap["09 AM"]++;
       else if (hr < 12) hoursMap["11 AM"]++;
       else if (hr < 14) hoursMap["01 PM"]++;
@@ -160,12 +267,10 @@ export async function GET(req: Request) {
       else if (hr < 20) hoursMap["07 PM"]++;
       else hoursMap["09 PM"]++;
 
-      if (m.messageType === "template") {
-        const tName = m.content?.slice(0, 26) || "Campaign Template";
-        if (!templateCounts[tName]) templateCounts[tName] = { sent: 0, read: 0 };
-        templateCounts[tName].sent++;
-        if (m.status === "READ") templateCounts[tName].read++;
-      }
+      const tName = l.templateName || "Campaign Template";
+      if (!templateCounts[tName]) templateCounts[tName] = { sent: 0, read: 0 };
+      if (l.status?.toUpperCase() !== "FAILED") templateCounts[tName].sent++;
+      if (l.status?.toUpperCase() === "READ") templateCounts[tName].read++;
     });
 
     const hourlyActivity = Object.entries(hoursMap).map(([hour, count]) => ({ hour, count }));
@@ -179,51 +284,56 @@ export async function GET(req: Request) {
       .sort((a, b) => b.sent - a.sent)
       .slice(0, 3);
 
-    // 7. Live Webhook Audit Logs (Top 6 latest events)
-    const recentWebhooks = recentMsgs.slice(0, 6).map((m: any) => ({
-      id: m.id,
-      phone: m.chatSession?.customerPhone || "Customer",
-      status: m.status || "SENT",
-      type: m.messageType || "text",
-      time: new Date(m.createdAt).toLocaleTimeString("en-US", {
+    // 8. Live Webhook Audit Logs (Latest 6 Campaign/Chat events)
+    const recentWebhooks = campaignLogs.slice(0, 6).map((l) => ({
+      id: l.id,
+      phone: l.recipient || "Customer",
+      status: l.status || "SENT",
+      type: l.templateName || "template",
+      time: new Date(l.createdAt).toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
       }),
     }));
 
-    return NextResponse.json({
-      success: true,
-      selectedChannelId: activeChannelId || "",
-      accounts: allAccounts.map((acc: any) => ({
-        id: acc.id,
-        phoneNumberId: acc.phoneNumberId,
-        displayPhone: acc.displayPhone,
-        displayName: acc.displayName,
-        qualityRating: acc.qualityRating,
-        messagingLimit: acc.messagingLimit,
-        isDefault: acc.isDefault || false,
-      })),
-      stats: {
-        totalSent,
-        totalDelivered,
-        totalRead,
-        totalUnread,
-        totalFailed,
-        marketingTotal,
-        marketingDelivered: Math.floor(marketingTotal * 0.9),
-        utilityTotal,
-        utilityDelivered: Math.floor(utilityTotal * 0.9),
-        authTotal,
-        authDelivered: Math.floor(authTotal * 0.9),
-        qualityRating: metaHealth.qualityRating,
-        messagingLimit: metaHealth.messagingLimit,
-        verifiedName: metaHealth.verifiedName,
-        trendData,
-        hourlyActivity,
-        topTemplates,
-        recentWebhooks,
+    return NextResponse.json(
+      {
+        success: true,
+        selectedChannelId: activeChannelId || "",
+        accounts: allAccounts.map((acc: any) => ({
+          id: acc.id,
+          phoneNumberId: acc.phoneNumberId,
+          displayPhone: acc.displayPhone,
+          displayName: acc.displayName,
+          qualityRating: acc.qualityRating,
+          messagingLimit: acc.messagingLimit,
+          isDefault: acc.isDefault || false,
+        })),
+        stats: {
+          totalSent,
+          totalDelivered,
+          totalRead,
+          totalUnread,
+          totalFailed,
+          marketingTotal,
+          marketingDelivered,
+          utilityTotal,
+          utilityDelivered,
+          authTotal,
+          authDelivered,
+          qualityRating,
+          messagingLimit: liveLimit,
+          verifiedName: liveVerifiedName,
+          trendData,
+          hourlyActivity,
+          topTemplates,
+          recentWebhooks,
+        },
       },
-    });
+      {
+        headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+      }
+    );
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

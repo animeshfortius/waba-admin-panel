@@ -43,6 +43,10 @@ function ConfigContent() {
   const [groupNameInput, setGroupNameInput] = useState("");
   
   const [manageGroupObj, setManageGroupObj] = useState<any>(null);
+  const [groupMembers, setGroupMembers] = useState<any[]>([]);
+  const [newMemberNumber, setNewMemberNumber] = useState("");
+  const [newMemberName, setNewMemberName] = useState("");
+
   const [importGroupObj, setImportGroupObj] = useState<any>(null);
   const [exportGroupObj, setExportGroupObj] = useState<any>(null);
   const [editGroupObj, setEditGroupObj] = useState<any>(null);
@@ -112,31 +116,26 @@ function ConfigContent() {
   const fetchAllData = () => {
     const userId = localStorage.getItem("userId") || "";
 
-    // Channels
     fetch("/api/configuration/channels")
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setChannels(data); })
       .catch(() => {});
 
-    // Media
     fetch(`/api/configuration/media?userId=${userId}`)
       .then(res => res.json())
       .then(data => { if(data.success && Array.isArray(data.media)) setMediaList(data.media); })
       .catch(() => {});
 
-    // Contacts
     fetch("/api/configuration/contacts")
       .then(res => res.json())
       .then(data => { if(Array.isArray(data)) setContacts(data); })
       .catch(() => {});
 
-    // Groups
     fetch("/api/configuration/groups")
       .then(res => res.json())
       .then(data => { if(Array.isArray(data)) setGroups(data); })
       .catch(() => {});
 
-    // Blacklist
     fetch("/api/configuration/blacklist")
       .then(res => res.json())
       .then(data => { if(Array.isArray(data)) setBlacklist(data); })
@@ -162,7 +161,7 @@ function ConfigContent() {
       } else {
         alert("Failed to delete media: " + (data.error || "Unknown error"));
       }
-    } catch (err) {
+    } catch {
       alert("Error deleting media file.");
     }
   };
@@ -180,7 +179,7 @@ function ConfigContent() {
       } else {
         alert("Failed to set default channel");
       }
-    } catch (err) {
+    } catch {
       alert("Error updating default channel.");
     }
   };
@@ -202,7 +201,7 @@ function ConfigContent() {
       } else {
         alert("Failed to update webhook URL.");
       }
-    } catch (err) {
+    } catch {
       alert("Error updating webhook URL.");
     }
   };
@@ -283,7 +282,7 @@ function ConfigContent() {
       } else {
         alert("❌ Failed to update profile on Meta");
       }
-    } catch (err) {
+    } catch {
       alert("❌ Error saving business profile.");
     } finally {
       setIsSavingProfile(false);
@@ -329,7 +328,6 @@ function ConfigContent() {
     });
   };
 
-  // CSV File parser helper for Contacts & Blacklist
   const handleFileUploadHelper = async (e: React.ChangeEvent<HTMLInputElement>, endpoint: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -506,6 +504,74 @@ function ConfigContent() {
         </div>
       )}
 
+      {/* 🟢 WHATSAPP COEXISTENCE ONBOARDING TAB (MATCHING 3RD IMAGE) */}
+      {activeSection === "onboarding" && (
+        <div className="space-y-6">
+          <div className="bg-white p-5 rounded-2xl border shadow-sm space-y-3">
+            <div className="flex items-center space-x-2 text-amber-800 bg-amber-50 border border-amber-200 p-3 rounded-xl font-medium">
+              <span>⚠️</span>
+              <span>Important Notice for WhatsApp Business App Users (Coexistence)</span>
+            </div>
+            <div className="text-gray-600 space-y-1.5 pl-1">
+              <p>If you are connecting a WhatsApp Business App number (Coexistence):</p>
+              <ul className="list-disc pl-5 space-y-1 text-gray-500">
+                <li>Messages sent from WhatsApp Business App will appear in this panel inbox.</li>
+                <li>Messages received from customers will sync to both WhatsApp App and this panel.</li>
+                <li>If your number was previously connected to another WhatsApp API provider: Please disconnect / deactivate the existing API first. Wait for 5-10 minutes. Then start Embedded Signup again from this panel.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-white p-8 rounded-3xl border shadow-sm flex flex-col items-center justify-center text-center space-y-6">
+              <div className="w-full max-w-md">
+                <img src="https://illustrations.popsy.co/amber/digital-nomad.svg" alt="Coexistence Illustration" className="w-full h-48 object-contain" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-bold text-gray-800 text-sm">WhatsApp Bridge with Facebook</h3>
+                <p className="text-gray-400 max-w-md mx-auto">Connect your WhatsApp Business API or Coexistence number to our platform via Facebook Embedded Signup.</p>
+              </div>
+              <button 
+                onClick={() => setShowFacebookModal(true)} 
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl shadow cursor-pointer transition flex items-center gap-2"
+              >
+                <span>🌐</span> Connect WhatsApp with Facebook
+              </button>
+            </div>
+
+            {/* Right Status Card */}
+            <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+              <div className="border-b pb-3">
+                <h3 className="font-bold text-gray-800">WhatsApp Business Info</h3>
+              </div>
+              <div className="space-y-3 text-xs">
+                <div>
+                  <span className="text-gray-400 block font-bold text-[10px]">WHATSAPP BUSINESS ID</span>
+                  <span className="font-mono text-gray-700">{channels[0]?.wabaId || "--"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block font-bold text-[10px]">PHONE NUMBER ID</span>
+                  <span className="font-mono text-gray-700">{channels[0]?.phoneNumberId || "--"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block font-bold text-[10px]">CONNECTION STATUS</span>
+                  <span className={`font-bold ${channels.length > 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {channels.length > 0 ? 'Connected' : 'Not Connected'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block font-bold text-[10px]">OVERALL HEALTH</span>
+                  <span className="font-bold text-emerald-600">{channels.length > 0 ? '🟢 Excellent' : '--'}</span>
+                </div>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-[11px] text-amber-800">
+                💡 Your business info will be updated automatically after successful connection.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MEDIA LIBRARY TAB */}
       {activeSection === "media_library" && (
         <div className="space-y-4">
@@ -596,7 +662,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* WHATSAPP CONTACTS TAB (FULLY FUNCTIONAL) */}
+      {/* WHATSAPP CONTACTS TAB */}
       {activeSection === "contacts" && (
         <div className="space-y-4">
           <div className="flex justify-between items-center bg-white p-5 rounded-2xl border shadow-sm">
@@ -647,7 +713,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* MANAGE GROUP TAB (FULLY FUNCTIONAL) */}
+      {/* MANAGE GROUP TAB */}
       {activeSection === "groups" && (
         <div className="space-y-4">
           <div className="flex justify-between items-center bg-white p-5 rounded-2xl border shadow-sm">
@@ -678,7 +744,16 @@ function ConfigContent() {
                         <span className="bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-full">{g.totalContacts || 0} Contacts</span>
                       </td>
                       <td className="p-4 text-right space-x-2">
-                        <button onClick={() => setManageGroupObj(g)} className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold">⚙️ Manage</button>
+                        <button onClick={async () => {
+                          setManageGroupObj(g);
+                          try {
+                            const res = await fetch(`/api/configuration/groups/contacts?groupId=${g.id}`);
+                            const data = await res.json();
+                            if (Array.isArray(data)) setGroupMembers(data);
+                          } catch (err) {
+                            console.error("Failed to fetch group members", err);
+                          }
+                        }} className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold">⚙️ Manage</button>
                         <button onClick={() => setImportGroupObj(g)} className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg font-bold">📥 Import</button>
                         <button onClick={() => {
                           const csvContent = "data:text/csv;charset=utf-8,Mobile Number,Profile Name\n919876543210,Sample User";
@@ -706,7 +781,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* BLACKLIST NUMBERS TAB (FULLY FUNCTIONAL) */}
+      {/* BLACKLIST NUMBERS TAB */}
       {activeSection === "blacklist" && (
         <div className="space-y-4">
           <div className="flex justify-between items-center bg-white p-5 rounded-2xl border shadow-sm">
@@ -753,6 +828,157 @@ function ConfigContent() {
       )}
 
       {/* --- ALL MODALS & POPUPS --- */}
+
+      {/* 🟢 REGISTER NEW WHATSAPP POPUP (MATCHING 1ST IMAGE) */}
+      {showFacebookModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans text-xs">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 relative max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h2 className="text-sm font-bold text-gray-800">Get started with WhatsApp's Business API</h2>
+              <button onClick={() => setShowFacebookModal(false)} className="text-gray-400 font-bold text-base cursor-pointer">✕</button>
+            </div>
+
+            <p className="text-gray-600 leading-relaxed text-[11px]">
+              WhatsApp is one of the most popular communication applications in the world. WhatsApp is a Facebook company and requires a Facebook account and Facebook Business Manager to set up.
+            </p>
+
+            <div className="space-y-1.5">
+              <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                <span>👉</span> What you will need
+              </h4>
+              <ul className="list-disc pl-6 space-y-1 text-gray-500 text-[11px]">
+                <li>Access to Facebook Business Manager</li>
+                <li>A viable Phone Number for WhatsApp</li>
+                <li>Your business's legal address and details</li>
+                <li>Verify your Facebook Business</li>
+                <li>Full access to the WhatsApp Business account</li>
+                <li>The ID should belong to the business you manage</li>
+                <li>FB user ID must manage templates, phone numbers, QR codes</li>
+              </ul>
+            </div>
+
+            <div className="space-y-3 bg-gray-50 p-4 rounded-2xl border">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Company Website:</label>
+                <input type="text" placeholder="Company Website" value={companyWebsite} onChange={(e) => setCompanyWebsite(e.target.value)} className="w-full border rounded-xl p-2.5 bg-white text-xs" />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Company Name:</label>
+                <input type="text" placeholder="Company Name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="w-full border rounded-xl p-2.5 bg-white text-xs" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                <span>👉</span> To continue you need access to your Facebook business account, including:
+              </h4>
+              <ul className="list-disc pl-6 space-y-1 text-gray-500 text-[11px]">
+                <li>Your company's <span className="text-emerald-600 font-semibold">legal name and address</span></li>
+                <li>A display name and short description</li>
+                <li>A valid email address</li>
+                <li>A valid mobile number</li>
+                <li>A business-owned phone number</li>
+              </ul>
+            </div>
+
+            <div className="flex justify-start items-center gap-3 pt-3 border-t">
+              <button onClick={handleFacebookSignup} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs flex items-center gap-2">
+                <span>🌐</span> Continue with Facebook
+              </button>
+              <button onClick={() => setShowFacebookModal(false)} className="bg-red-500 hover:bg-red-600 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MANAGE GROUP MEMBERS MODAL */}
+      {manageGroupObj && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto font-sans text-xs">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="font-bold text-gray-800 text-sm">Manage Members: <span className="text-emerald-600">{manageGroupObj.groupName}</span></h3>
+                <p className="text-[10px] text-gray-400">Add or remove phone numbers associated with this group.</p>
+              </div>
+              <button onClick={() => { setManageGroupObj(null); setGroupMembers([]); }} className="text-gray-400 font-bold cursor-pointer text-sm">✕</button>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-2xl border space-y-3">
+              <h4 className="font-bold text-slate-700 text-xs">Add New Member to Group</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input type="text" placeholder="Mobile Number (9198...)" value={newMemberNumber} onChange={(e) => setNewMemberNumber(e.target.value)} className="border rounded-xl p-2.5 bg-white font-mono" />
+                <input type="text" placeholder="Member Name" value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} className="border rounded-xl p-2.5 bg-white" />
+              </div>
+              <button onClick={async () => {
+                if (!newMemberNumber) return alert("Please enter mobile number!");
+                try {
+                  const res = await fetch(`/api/configuration/groups/contacts`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ groupId: manageGroupObj.id, number: newMemberNumber, name: newMemberName }),
+                  });
+                  const data = await res.json();
+                  if (res.ok) {
+                    alert("✅ Member added successfully!");
+                    setNewMemberNumber("");
+                    setNewMemberName("");
+                    const mRes = await fetch(`/api/configuration/groups/contacts?groupId=${manageGroupObj.id}`);
+                    const mData = await mRes.json();
+                    if (Array.isArray(mData)) setGroupMembers(mData);
+                    fetchAllData();
+                  } else {
+                    alert("❌ Error: " + (data.error || "Failed to add member"));
+                  }
+                } catch {
+                  alert("❌ Network error.");
+                }
+              }} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl shadow cursor-pointer transition w-full">+ Add Member</button>
+            </div>
+
+            <div className="border rounded-2xl overflow-hidden">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b text-gray-500 font-bold text-[11px]">
+                    <th className="p-3">MOBILE NUMBER</th>
+                    <th className="p-3">NAME</th>
+                    <th className="p-3 text-right">ACTION</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y text-xs">
+                  {groupMembers.length === 0 ? (
+                    <tr><td colSpan={3} className="p-6 text-center text-gray-400">No members found in this group yet. Add one above!</td></tr>
+                  ) : (
+                    groupMembers.map((m: any) => (
+                      <tr key={m.id} className="hover:bg-slate-50">
+                        <td className="p-3 font-bold font-mono text-slate-800">{m.number}</td>
+                        <td className="p-3">{m.name || "Member"}</td>
+                        <td className="p-3 text-right">
+                          <button onClick={async () => {
+                            if (!confirm("Remove this member from group?")) return;
+                            const res = await fetch(`/api/configuration/groups/contacts?id=${m.id}&groupId=${manageGroupObj.id}`, { method: "DELETE" });
+                            if (res.ok) {
+                              setGroupMembers((prev) => prev.filter((item) => item.id !== m.id));
+                              fetchAllData();
+                            } else {
+                              alert("Failed to remove member.");
+                            }
+                          }} className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold">🗑️ Remove</button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t">
+              <button onClick={() => { setManageGroupObj(null); setGroupMembers([]); }} className="px-5 py-2.5 border rounded-xl font-bold cursor-pointer hover:bg-gray-50">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MEDIA UPLOAD MODAL */}
       {showMediaModal && (
@@ -993,32 +1219,6 @@ function ConfigContent() {
             <input type="file" accept=".csv" onChange={(e) => handleFileUploadHelper(e, "blacklist")} className="w-full text-xs text-gray-500 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white cursor-pointer" />
             <div className="flex justify-end pt-3 border-t">
               <button onClick={() => setShowBlacklistExcelModal(false)} className="px-4 py-2 border rounded-xl font-bold cursor-pointer">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Facebook Signup Modal */}
-      {showFacebookModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans text-xs">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h2 className="text-base font-bold text-gray-800">Get started with WhatsApp's Business API</h2>
-              <button onClick={() => setShowFacebookModal(false)} className="text-gray-400 font-bold text-lg cursor-pointer">✕</button>
-            </div>
-            <div className="space-y-3 bg-gray-50/70 p-4 rounded-xl border">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="font-bold text-gray-700 w-36">Company Website:</label>
-                <input type="text" placeholder="Company Website" value={companyWebsite} onChange={(e) => setCompanyWebsite(e.target.value)} className="border rounded-lg px-3 py-2 w-full sm:w-80 bg-white" />
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="font-bold text-gray-700 w-36">Company Name:</label>
-                <input type="text" placeholder="Company Name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="border rounded-lg px-3 py-2 w-full sm:w-80 bg-white" />
-              </div>
-            </div>
-            <div className="flex justify-start items-center space-x-3 pt-3 border-t">
-              <button onClick={handleFacebookSignup} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs">Continue with Facebook</button>
-              <button onClick={() => setShowFacebookModal(false)} className="bg-red-500 text-white font-bold px-5 py-2.5 rounded-xl shadow cursor-pointer text-xs">Cancel</button>
             </div>
           </div>
         </div>

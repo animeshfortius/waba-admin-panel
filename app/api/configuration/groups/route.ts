@@ -1,60 +1,68 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
-const prisma = new PrismaClient();
-
+// GET: Fetch all contact groups
 export async function GET() {
   try {
-    const groups = await (prisma as any).contactGroup.findMany({
-      orderBy: { id: "desc" }
+    const groups = await prisma.contactGroup.findMany({
+      orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(groups);
-  } catch (error) {
-    return NextResponse.json([]);
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
+// POST: Create new contact group
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const newGroup = await (prisma as any).contactGroup.create({
-      data: {
-        userId: body.userId || "default_user",
-        groupName: body.groupName,
-        totalContacts: body.totalContacts || 0,
-      },
+    const { groupName } = await request.json();
+    if (!groupName) {
+      return NextResponse.json({ success: false, error: "Group name is required" }, { status: 400 });
+    }
+
+    const newGroup = await prisma.contactGroup.create({
+      data: { groupName, totalContacts: 0 },
     });
-    return NextResponse.json(newGroup);
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to create group" }, { status: 500 });
+
+    return NextResponse.json({ success: true, group: newGroup });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
+// PUT: Edit group name
 export async function PUT(request: Request) {
   try {
-    const body = await request.json();
-    const { id, groupName } = body;
-    const updatedGroup = await (prisma as any).contactGroup.update({
+    const { id, groupName } = await request.json();
+    if (!id || !groupName) {
+      return NextResponse.json({ success: false, error: "ID and Group Name required" }, { status: 400 });
+    }
+
+    const updated = await prisma.contactGroup.update({
       where: { id },
       data: { groupName },
     });
-    return NextResponse.json(updatedGroup);
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to update group" }, { status: 500 });
+
+    return NextResponse.json({ success: true, group: updated });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
+// DELETE: Remove group
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    await (prisma as any).contactGroup.delete({
-      where: { id },
-    });
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to delete group" }, { status: 500 });
+    if (!id) {
+      return NextResponse.json({ success: false, error: "Group ID required" }, { status: 400 });
+    }
+
+    await prisma.contactGroup.delete({ where: { id } });
+    return NextResponse.json({ success: true, message: "Group deleted successfully" });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

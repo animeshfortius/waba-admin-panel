@@ -1,47 +1,76 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
-const prisma = new PrismaClient();
-
-export async function GET() {
+// GET: Fetch all media records
+export async function GET(request: Request) {
   try {
-    const media = await (prisma as any).mediaAsset.findMany({
-      orderBy: { id: "desc" }
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("userId") || "";
+
+    const media = await prisma.mediaLibrary.findMany({
+      where: userId ? { userId } : {},
+      orderBy: { createdAt: "desc" },
     });
-    return NextResponse.json(media);
-  } catch (error) {
-    return NextResponse.json([]);
+
+    return NextResponse.json({ success: true, media });
+  } catch (error: any) {
+    console.error("GET Media Error:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
+// POST: Upload media file as Base64 (Render cloud safe)
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const newMedia = await (prisma as any).mediaAsset.create({
+    const formData = await request.formData();
+    const file = formData.get("file") as File;
+    const userId = (formData.get("userId") as string) || "admin_user";
+    const wabaNumber = (formData.get("wabaNumber") as string) || "All";
+
+    if (!file) {
+      return NextResponse.json({ success: false, error: "No file provided" }, { status: 400 });
+    }
+
+    // Convert file to buffer and then to base64 data url
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    const base64Flag = `data:${file.type};base64,`;
+    const base64String = base64Flag + buffer.toString("base64");
+
+    const fileType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "document";
+
+    // Save directly to database
+    const newMedia = await prisma.mediaLibrary.create({
       data: {
-        userId: body.userId || "default_user",
-        mediaName: body.mediaName,
-        mediaUrl: body.mediaUrl,
-        wabaNumber: body.wabaNumber || "15553945963",
+        mediaName: file.name,
+        fileType,
+        url: base64String, // Base64 string works instantly without disk write issues on Render
+        wabaNumber,
+        userId,
       },
     });
-    return NextResponse.json(newMedia);
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to upload media" }, { status: 500 });
+
+    return NextResponse.json({ success: true, media: newMedia });
+  } catch (error: any) {
+    console.error("POST Media Error:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
+// DELETE: Remove media record by ID
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    await (prisma as any).mediaAsset.delete({
-      where: { id },
-    });
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to delete media" }, { status: 500 });
+    if (!id) {
+      return NextResponse.json({ success: false, error: "Media ID required" }, { status: 400 });
+    }
+
+    await prisma.mediaLibrary.delete({ where: { id } });
+    return NextResponse.json({ success: true, message: "Media deleted successfully" });
+  } catch (error: any) {
+    console.error("DELETE Media Error:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

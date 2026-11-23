@@ -655,7 +655,20 @@ function ConfigContent() {
                           <div className={`text-[10px] font-bold ${diffDays <= 5 ? 'text-red-600' : 'text-emerald-600'}`}>{diffDays > 0 ? `${diffDays} days left` : 'Expired'}</div>
                         </td>
                         <td className="p-4 text-right space-x-2">
-                          <button onClick={() => { navigator.clipboard.writeText(resolvedUrl); alert("🔗 URL copied to clipboard!"); }} className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-[11px] cursor-pointer shadow-xs transition">📋 Copy</button>
+                          <button
+  onClick={() => {
+    const raw = String(resolvedUrl || "").trim();
+    if (!raw) return;
+    const fullUrl = raw.startsWith("/")
+      ? `${window.location.origin}${raw}`
+      : raw;
+    navigator.clipboard.writeText(fullUrl);
+    alert("🔗 URL copied to clipboard!");
+  }}
+  className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-[11px] cursor-pointer shadow-xs transition"
+>
+  📋 Copy URL
+</button>
                           <button onClick={() => handleDeleteMedia(m.id)} className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold text-[11px] cursor-pointer shadow-xs transition">🗑️ Delete</button>
                         </td>
                       </tr>

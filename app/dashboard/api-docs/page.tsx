@@ -272,9 +272,28 @@ const ENDPOINTS: ApiEndpointItem[] = [
   },
 ];
 
-function extractErrorMessage(payload: unknown, fallbackStatus?: number | null): string {
+function normalizePublicUrl(raw: string): string {
+  const val = (raw || "").trim();
+  if (!val) return "";
+  if (/^https?:\/\//i.test(val)) return val;
+  if (val.startsWith("/")) {
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://waba-admin-panel.onrender.com";
+    return `${origin}${val}`;
+  }
+  return val;
+}
+
+function extractErrorMessage(
+  payload: unknown,
+  fallbackStatus?: number | null
+): string {
   if (!payload) {
-    return fallbackStatus ? `Request failed with HTTP ${fallbackStatus}` : "Request failed";
+    return fallbackStatus
+      ? `Request failed with HTTP ${fallbackStatus}`
+      : "Request failed";
   }
   if (typeof payload === "string") {
     return payload.trim() || "Request failed";
@@ -303,7 +322,9 @@ function extractErrorMessage(payload: unknown, fallbackStatus?: number | null): 
       return obj.message.trim();
     }
   }
-  return fallbackStatus ? `Request failed with HTTP ${fallbackStatus}` : "Request failed";
+  return fallbackStatus
+    ? `Request failed with HTTP ${fallbackStatus}`
+    : "Request failed";
 }
 
 function buildTemplatePayload(
@@ -316,13 +337,14 @@ function buildTemplatePayload(
   const components: Array<Record<string, unknown>> = [];
 
   if (tpl.headerVariableCount > 0) {
+    const normalizedHeader = normalizePublicUrl(headerValue);
     if (tpl.headerType === "IMAGE") {
       components.push({
         type: "header",
         parameters: [
           {
             type: "image",
-            image: { link: headerValue.trim() || "{{header_image_url}}" },
+            image: { link: normalizedHeader || "{{header_image_url}}" },
           },
         ],
       });
@@ -332,7 +354,7 @@ function buildTemplatePayload(
         parameters: [
           {
             type: "video",
-            video: { link: headerValue.trim() || "{{header_video_url}}" },
+            video: { link: normalizedHeader || "{{header_video_url}}" },
           },
         ],
       });
@@ -342,7 +364,7 @@ function buildTemplatePayload(
         parameters: [
           {
             type: "document",
-            document: { link: headerValue.trim() || "{{header_document_url}}" },
+            document: { link: normalizedHeader || "{{header_document_url}}" },
           },
         ],
       });
@@ -600,7 +622,8 @@ export default function ApiDocsPage() {
       if (f.location === "body") {
         const val = (currentValues[f.key] ?? "").trim();
         if (val !== "") {
-          payload[f.key] = val;
+          payload[f.key] =
+            f.key === "mediaUrl" ? normalizePublicUrl(val) : val;
         }
       }
     }
@@ -1029,7 +1052,6 @@ export default function ApiDocsPage() {
                     )}
                 </div>
 
-                {/* Selected Template Category, Status & Body Preview */}
                 {activeTemplateObj &&
                   (selectedEndpoint.supportsAutoTemplate ||
                     selectedEndpoint.id === "clevertap" ||
@@ -1063,7 +1085,6 @@ export default function ApiDocsPage() {
               </div>
             )}
 
-            {/* Dynamic Template Variable Inputs (Header, Body & Button URL) */}
             {hasAnyTemplateInputs && activeTemplateObj && (
               <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3.5">
                 <div className="mb-2.5 flex items-center justify-between">

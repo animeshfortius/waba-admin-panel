@@ -10,6 +10,20 @@ const MIME_TO_EXT: Record<string, string> = {
   "application/pdf": "pdf",
 };
 
+function resolveMetaUploadType(mediaTypeInput: string, detectedMime: string): string {
+  const cleanInput = (mediaTypeInput || "").trim().toLowerCase();
+  if (cleanInput.includes("/")) {
+    return cleanInput;
+  }
+  if (detectedMime && detectedMime !== "application/octet-stream") {
+    return detectedMime.split(";")[0].trim();
+  }
+  if (cleanInput === "image") return "image/jpeg";
+  if (cleanInput === "video") return "video/mp4";
+  if (cleanInput === "document") return "application/pdf";
+  return detectedMime || "application/octet-stream";
+}
+
 export async function POST(request: NextRequest) {
   const auth = await authenticateApiRequest(request);
 
@@ -94,16 +108,18 @@ export async function POST(request: NextRequest) {
       ? rawName
       : `${rawName}.${extFromMime || "bin"}`;
 
+    const metaUploadType = resolveMetaUploadType(mediaType, contentType);
+
     const formData = new FormData();
     formData.append("messaging_product", "whatsapp");
-    formData.append("type", mediaType || contentType);
+    formData.append("type", metaUploadType);
     formData.append(
       "file",
       new Blob([arrayBuffer], { type: contentType }),
       fileName
     );
 
-    const graphVersion = "v21.0";
+    const graphVersion = "v23.0";
     const metaResponse = await fetch(
       `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(
         targetPhoneId

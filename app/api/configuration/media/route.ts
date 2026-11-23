@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     const filepath = path.join(uploadDir, filename);
     await writeFile(filepath, buffer);
 
-    const fileUrl = `/uploads/${filename}`;
+    const fileUrl = `/api/uploads/${filename}`;
     const fileType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "document";
 
     // Set expiration to 30 days from now according to Meta policy

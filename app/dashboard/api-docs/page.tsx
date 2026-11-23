@@ -323,10 +323,11 @@ const ENDPOINTS: ApiEndpointItem[] = [
     group: "Account & Webhooks",
     title: "Get Wallet Balance",
     description:
-      "Fetch authenticated userId and walletBalance (INR) for the active Bearer token.",
+      "Fetch authenticated user name, user ID, and wallet balance (INR) for the active Bearer token.",
     method: "GET",
     pathTemplate: "/api/v1/user/balance",
-    usesChannelContext: true,
+    usesChannelContext: false,
+    usesWabaContext: false,
     fields: [],
   },
   {
@@ -616,6 +617,12 @@ export default function ApiDocsPage() {
   const [selectedId, setSelectedId] = useState<string>(ENDPOINTS[0].id);
 
   const [graphVersion, setGraphVersion] = useState("v21.0");
+  const [userName, setUserName] = useState("");
+  const [userId, setUserId] = useState("");
+  const [walletBalance, setWalletBalance] = useState<string | number | null>(
+    null
+  );
+
   const [channels, setChannels] = useState<ChannelOption[]>([]);
   const [selectedPhoneId, setSelectedPhoneId] = useState("");
   const [selectedWabaId, setSelectedWabaId] = useState("");
@@ -667,6 +674,8 @@ export default function ApiDocsPage() {
   const selectedEndpoint =
     ENDPOINTS.find((ep) => ep.id === selectedId) || ENDPOINTS[0];
 
+  const isWalletEndpoint = selectedEndpoint.id === "wallet-balance";
+
   const currentValues = formValues[selectedEndpoint.id] || {};
   const activeCategory = (
     currentValues.category || "UTILITY"
@@ -714,6 +723,19 @@ export default function ApiDocsPage() {
         if (!res.ok || !json?.success) {
           setContextNotice(json?.error || "Could not auto-load WABA/templates.");
           return;
+        }
+
+        const detectedName =
+          json.userName ||
+          json.name ||
+          json.user?.name ||
+          json.user?.userName ||
+          "";
+        if (detectedName) {
+          setUserName(String(detectedName));
+        }
+        if (json.userId || json.user?.id) {
+          setUserId(String(json.userId || json.user?.id));
         }
 
         const fetchedChannels: ChannelOption[] = Array.isArray(json.channels)
@@ -770,7 +792,7 @@ export default function ApiDocsPage() {
           setContextNotice(String(json.templateFetchError));
         }
       } catch {
-        setContextNotice("Network error while loading WABA and templates.");
+        setContextNotice("Network error while loading account context.");
       } finally {
         setLoadingContext(false);
       }
@@ -1002,12 +1024,14 @@ export default function ApiDocsPage() {
     const authPart = activeToken
       ? ` \\\n  -H "Authorization: Bearer ${activeToken}"`
       : ` \\\n  -H "Authorization: Bearer YOUR_API_TOKEN"`;
-    const phoneHdr = selectedPhoneId
-      ? ` \\\n  -H "x-phone-number-id: ${selectedPhoneId}"`
-      : "";
-    const wabaHdr = selectedWabaId
-      ? ` \\\n  -H "x-waba-id: ${selectedWabaId}"`
-      : "";
+    const phoneHdr =
+      !isWalletEndpoint && selectedPhoneId
+        ? ` \\\n  -H "x-phone-number-id: ${selectedPhoneId}"`
+        : "";
+    const wabaHdr =
+      !isWalletEndpoint && selectedWabaId
+        ? ` \\\n  -H "x-waba-id: ${selectedWabaId}"`
+        : "";
 
     if (selectedEndpoint.method === "GET") {
       return `curl -X GET "${fullUrl}"${authPart}${phoneHdr}${wabaHdr}`;
@@ -1017,6 +1041,7 @@ export default function ApiDocsPage() {
   }, [
     resolvedPath,
     activeToken,
+    isWalletEndpoint,
     selectedPhoneId,
     selectedWabaId,
     selectedEndpoint.method,
@@ -1171,10 +1196,10 @@ export default function ApiDocsPage() {
       if (activeToken) {
         headers.Authorization = `Bearer ${activeToken}`;
       }
-      if (selectedPhoneId) {
+      if (!isWalletEndpoint && selectedPhoneId) {
         headers["x-phone-number-id"] = selectedPhoneId;
       }
-      if (selectedWabaId) {
+      if (!isWalletEndpoint && selectedWabaId) {
         headers["x-waba-id"] = selectedWabaId;
       }
 
@@ -1188,6 +1213,26 @@ export default function ApiDocsPage() {
       const parsed = contentType.includes("application/json")
         ? await res.json()
         : await res.text();
+
+      if (isWalletEndpoint && typeof parsed === "object" && parsed !== null) {
+        const obj = parsed as Record<string, unknown>;
+        const fetchedUserName =
+          obj.userName ||
+          obj.name ||
+          (obj.user && typeof obj.user === "object"
+            ? (obj.user as Record<string, unknown>).name ||
+              (obj.user as Record<string, unknown>).userName
+            : "");
+        if (fetchedUserName) {
+          setUserName(String(fetchedUserName));
+        }
+        if (obj.userId) {
+          setUserId(String(obj.userId));
+        }
+        if (obj.walletBalance !== undefined && obj.walletBalance !== null) {
+          setWalletBalance(obj.walletBalance as string | number);
+        }
+      }
 
       const payloadSuccess =
         typeof parsed === "object" &&
@@ -1250,6 +1295,7 @@ export default function ApiDocsPage() {
       activeTemplateObj.hasDynamicUrlButton);
 
   const showContextBar =
+    !isWalletEndpoint &&
     Boolean(
       selectedEndpoint.usesChannelContext || selectedEndpoint.usesWabaContext
     ) &&
@@ -1410,6 +1456,35 @@ export default function ApiDocsPage() {
                 {loading ? "Sending..." : "Send Request"}
               </button>
             </div>
+
+            {isWalletEndpoint && (
+              <div className="mt-4 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3.5 sm:grid-cols-3">
+                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    User Name
+                  </div>
+                  <div className="mt-0.5 text-sm font-bold text-slate-900">
+                    {userName || "Fetch via Send Request"}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    User ID
+                  </div>
+                  <div className="mt-0.5 font-mono text-xs font-semibold text-slate-800">
+                    {userId || "—"}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Wallet Balance
+                  </div>
+                  <div className="mt-0.5 text-sm font-bold text-emerald-700">
+                    {walletBalance !== null ? `₹ ${walletBalance} INR` : "—"}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {showContextBar && (
               <div className="mt-4 space-y-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3.5">
@@ -1831,7 +1906,7 @@ export default function ApiDocsPage() {
                           setJsonEditedManually(false);
                           setTplMediaUrl(e.target.value);
                         }}
-                        placeholder={`Media URL (https://...)`}
+                        placeholder="Media URL (https://...)"
                         className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900"
                       />
 

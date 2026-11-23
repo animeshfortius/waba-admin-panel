@@ -657,10 +657,13 @@ export default function ApiDocsPage() {
 
     for (const f of selectedEndpoint.fields) {
       if (f.location === "body") {
-        const val = (currentValues[f.key] ?? "").trim();
-        if (val !== "") {
+        const rawVal =
+          f.key === "mediaType"
+            ? (currentValues[f.key] ?? "image").trim() || "image"
+            : (currentValues[f.key] ?? "").trim();
+        if (rawVal !== "") {
           payload[f.key] =
-            f.key === "mediaUrl" ? normalizePublicUrl(val) : val;
+            f.key === "mediaUrl" ? normalizePublicUrl(rawVal) : rawVal;
         }
       }
     }
@@ -1240,15 +1243,29 @@ export default function ApiDocsPage() {
                     <label className="mb-1.5 block text-xs font-medium text-slate-700">
                       {field.label}
                     </label>
-                    <input
-                      type="text"
-                      value={currentValues[field.key] ?? ""}
-                      onChange={(e) =>
-                        handleFieldChange(field.key, e.target.value)
-                      }
-                      placeholder={field.placeholder}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                    />
+                    {field.key === "mediaType" ? (
+                      <select
+                        value={currentValues[field.key] ?? "image"}
+                        onChange={(e) =>
+                          handleFieldChange(field.key, e.target.value)
+                        }
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      >
+                        <option value="image">image</option>
+                        <option value="video">video</option>
+                        <option value="document">document</option>
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={currentValues[field.key] ?? ""}
+                        onChange={(e) =>
+                          handleFieldChange(field.key, e.target.value)
+                        }
+                        placeholder={field.placeholder}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      />
+                    )}
                   </div>
                 ))}
               </div>

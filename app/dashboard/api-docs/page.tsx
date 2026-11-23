@@ -128,7 +128,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
     id: "upload-media",
     group: "Messaging & Media",
     title: "Upload WhatsApp Media",
-    description: "Upload media from a URL or file to Meta WhatsApp Media API.",
+    description: "Upload media from a URL to Meta WhatsApp Media API.",
     method: "POST",
     pathTemplate: "/api/v1/media/upload",
     usesChannelContext: true,
@@ -164,7 +164,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
     group: "Templates & Marketing",
     title: "Create Message Template",
     description:
-      "Configure category, language, media header/file, body, footer, and buttons to submit a template to Meta WABA.",
+      "Submit a new message template to Meta WABA with category, language, media, body, footer, and buttons.",
     method: "POST",
     pathTemplate: "/api/v1/meta/templates",
     usesChannelContext: true,
@@ -322,7 +322,8 @@ const ENDPOINTS: ApiEndpointItem[] = [
     id: "wallet-balance",
     group: "Account & Webhooks",
     title: "Get Wallet Balance",
-    description: "Check wallet balance for the active token.",
+    description:
+      "Fetch authenticated userId and walletBalance (INR) for the active Bearer token.",
     method: "GET",
     pathTemplate: "/api/v1/user/balance",
     usesChannelContext: true,
@@ -331,26 +332,13 @@ const ENDPOINTS: ApiEndpointItem[] = [
   {
     id: "webhook-test",
     group: "Account & Webhooks",
-    title: "Webhook Event",
-    description: "Send a test event to /api/v1/webhook.",
+    title: "Webhook",
+    description: "Send a webhook payload to /api/v1/meta/webhook.",
     method: "POST",
-    pathTemplate: "/api/v1/webhook",
+    pathTemplate: "/api/v1/meta/webhook",
     usesChannelContext: true,
     usesWabaContext: true,
-    fields: [
-      {
-        key: "to",
-        label: "Recipient Number",
-        placeholder: "91XXXXXXXXXX",
-        location: "body",
-      },
-      {
-        key: "eventType",
-        label: "Event Type",
-        placeholder: "Enter event type",
-        location: "body",
-      },
-    ],
+    fields: [],
   },
 ];
 
@@ -362,7 +350,7 @@ function normalizePublicUrl(raw: string): string {
     const origin =
       typeof window !== "undefined"
         ? window.location.origin
-        : "https://waba-admin-panel.onrender.com";
+        : "https://waba.fortius.in.net";
     return `${origin}${val}`;
   }
   return val;
@@ -521,13 +509,113 @@ function mapButtonTypeToApi(type: TemplateBuilderButtonType): string {
   return "QUICK_REPLY";
 }
 
+function buildMetaComponentsPreview(params: {
+  headerType: string;
+  headerText: string;
+  mediaUrl: string;
+  bodyText: string;
+  footerText: string;
+  variableSamples: Record<string, string>;
+  buttons: TemplateBuilderButton[];
+}) {
+  const components: Array<Record<string, unknown>> = [];
+
+  if (params.headerType === "TEXT" && params.headerText.trim()) {
+    components.push({
+      type: "HEADER",
+      format: "TEXT",
+      text: params.headerText.trim(),
+    });
+  } else if (
+    params.headerType === "IMAGE" ||
+    params.headerType === "VIDEO" ||
+    params.headerType === "DOCUMENT"
+  ) {
+    const comp: Record<string, unknown> = {
+      type: "HEADER",
+      format: params.headerType,
+    };
+    if (params.mediaUrl.trim()) {
+      comp.example = { header_handle: [normalizePublicUrl(params.mediaUrl)] };
+    }
+    components.push(comp);
+  } else if (params.headerType === "LOCATION") {
+    components.push({
+      type: "HEADER",
+      format: "LOCATION",
+    });
+  }
+
+  const bodyComp: Record<string, unknown> = {
+    type: "BODY",
+    text: params.bodyText.trim(),
+  };
+  const bodyVars = params.bodyText.match(/\{\{(\d+)\}\}/g);
+  if (bodyVars && bodyVars.length > 0) {
+    bodyComp.example = {
+      body_text: [
+        bodyVars.map((m, i) => {
+          const num = m.replace(/[{}]/g, "");
+          return (params.variableSamples[num] || "").trim() || `Sample${i + 1}`;
+        }),
+      ],
+    };
+  }
+  components.push(bodyComp);
+
+  if (params.footerText.trim()) {
+    components.push({
+      type: "FOOTER",
+      text: params.footerText.trim(),
+    });
+  }
+
+  if (params.buttons.length > 0) {
+    components.push({
+      type: "BUTTONS",
+      buttons: params.buttons
+        .filter((b) => b.text.trim())
+        .map((b) => {
+          const apiType = mapButtonTypeToApi(b.type);
+          if (apiType === "URL") {
+            return {
+              type: "URL",
+              text: b.text.trim(),
+              url: (b.value || "").trim() || "https://example.com/{{1}}",
+            };
+          }
+          if (apiType === "PHONE_NUMBER") {
+            return {
+              type: "PHONE_NUMBER",
+              text: b.text.trim(),
+              phone_number: (b.value || "").trim() || "+919876543210",
+            };
+          }
+          if (apiType === "COPY_CODE") {
+            return {
+              type: "COPY_CODE",
+              text: b.text.trim(),
+              example: [(b.value || "").trim() || "OFFER20"],
+            };
+          }
+          return {
+            type: "QUICK_REPLY",
+            text: b.text.trim(),
+          };
+        }),
+    });
+  }
+
+  return components;
+}
+
 export default function ApiDocsPage() {
   const [tokenInput, setTokenInput] = useState("");
   const [activeToken, setActiveToken] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string>(ENDPOINTS[0].id);
 
-  const [graphVersion, setGraphVersion] = useState("v23.0");
+  const [graphVersion, setGraphVersion] = useState("v21.0");
   const [channels, setChannels] = useState<ChannelOption[]>([]);
   const [selectedPhoneId, setSelectedPhoneId] = useState("");
   const [selectedWabaId, setSelectedWabaId] = useState("");
@@ -538,7 +626,6 @@ export default function ApiDocsPage() {
   const [templateVarValues, setTemplateVarValues] = useState<string[]>([]);
   const [buttonVarValue, setButtonVarValue] = useState("");
 
-  // Create Message Template rich builder states
   const [tplSubType, setTplSubType] = useState("Default");
   const [allowCategoryChange, setAllowCategoryChange] = useState(false);
   const [tplMediaType, setTplMediaType] = useState<
@@ -554,34 +641,6 @@ export default function ApiDocsPage() {
   >({ "1": "Animesh" });
   const [tplButtons, setTplButtons] = useState<TemplateBuilderButton[]>([]);
   const [showTplButtonMenu, setShowTplButtonMenu] = useState(false);
-
-  // Authentication template builder states
-  const [codeDeliveryOption, setCodeDeliveryOption] = useState("zero_tap");
-  const [authApps, setAuthApps] = useState<
-    Array<{ packageName: string; signatureHash: string }>
-  >([{ packageName: "com.example.myapp", signatureHash: "12345678901" }]);
-  const [otpExpiryMinutes, setOtpExpiryMinutes] = useState(10);
-  const [addSecurityRecommendation, setAddSecurityRecommendation] =
-    useState(true);
-
-  // Carousel template builder states
-  const [carouselCards, setCarouselCards] = useState([
-    {
-      id: 1,
-      mediaType: "Image",
-      mediaUrl: "",
-      text: "Card 1 Offer Details",
-      buttonText: "View Item",
-    },
-    {
-      id: 2,
-      mediaType: "Image",
-      mediaUrl: "",
-      text: "Card 2 Offer Details",
-      buttonText: "View Item",
-    },
-  ]);
-  const [activeCarouselIndex, setActiveCarouselIndex] = useState(0);
 
   const bodyFieldRef = useRef<HTMLInputElement | null>(null);
 
@@ -672,7 +731,7 @@ export default function ApiDocsPage() {
             ? json.graphVersion.trim()
             : typeof json.apiVersion === "string" && json.apiVersion.trim()
             ? json.apiVersion.trim()
-            : "v23.0";
+            : "v21.0";
         setGraphVersion(detectedVersion);
 
         const defaultPhone =
@@ -696,7 +755,8 @@ export default function ApiDocsPage() {
             ...prev,
             "send-message": {
               ...(prev["send-message"] || {}),
-              language: firstTpl.language || prev["send-message"]?.language || "en_US",
+              language:
+                firstTpl.language || prev["send-message"]?.language || "en_US",
             },
           }));
         } else {
@@ -767,6 +827,28 @@ export default function ApiDocsPage() {
   const generatedPayload = useMemo(() => {
     if (selectedEndpoint.method === "GET") return null;
 
+    if (selectedEndpoint.id === "webhook-test") {
+      return {
+        object: "whatsapp_business_account",
+        entry: [
+          {
+            id: selectedWabaId || "waba_id",
+            changes: [
+              {
+                field: "messages",
+                value: {
+                  messaging_product: "whatsapp",
+                  metadata: {
+                    phone_number_id: selectedPhoneId || "phone_number_id",
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      };
+    }
+
     if (selectedEndpoint.id === "send-message") {
       const toVal = (currentValues.to || "").trim();
       const langVal = (
@@ -806,8 +888,7 @@ export default function ApiDocsPage() {
       selectedWabaId &&
       (selectedEndpoint.id === "upload-media" ||
         selectedEndpoint.id === "create-template" ||
-        selectedEndpoint.id === "sync-templates" ||
-        selectedEndpoint.id === "webhook-test")
+        selectedEndpoint.id === "sync-templates")
     ) {
       payload.wabaId = selectedWabaId;
     }
@@ -815,8 +896,7 @@ export default function ApiDocsPage() {
       selectedPhoneId &&
       (selectedEndpoint.id === "clevertap" ||
         selectedEndpoint.id === "moengage" ||
-        selectedEndpoint.id === "webengage" ||
-        selectedEndpoint.id === "webhook-test")
+        selectedEndpoint.id === "webengage")
     ) {
       payload.phoneNumberId = selectedPhoneId;
     }
@@ -841,6 +921,7 @@ export default function ApiDocsPage() {
     }
 
     if (selectedEndpoint.id === "create-template") {
+      const normalizedUrl = normalizePublicUrl(tplMediaUrl);
       payload.category = activeCategory;
       payload.language = (currentValues.language || "en_US").trim() || "en_US";
       payload.subType = tplSubType;
@@ -848,23 +929,12 @@ export default function ApiDocsPage() {
       payload.headerType = computedHeaderType;
       payload.headerText =
         computedHeaderType === "TEXT" ? tplHeaderText.trim() : "";
-
-      const normalizedMediaUrl = normalizePublicUrl(tplMediaUrl);
-      if (
-        computedHeaderType === "IMAGE" ||
-        computedHeaderType === "VIDEO" ||
-        computedHeaderType === "DOCUMENT"
-      ) {
-        if (tplMediaFile) {
-          payload.mediaFileName = tplMediaFile.name;
-          payload.mediaMimeType = tplMediaFile.type || undefined;
-          payload.mediaSizeBytes = tplMediaFile.size;
-        }
-        if (normalizedMediaUrl) {
-          payload.mediaUrl = normalizedMediaUrl;
-        }
+      if (normalizedUrl) {
+        payload.mediaUrl = normalizedUrl;
       }
-
+      if (tplMediaFile) {
+        payload.mediaFileName = tplMediaFile.name;
+      }
       payload.footerText = tplFooterText.trim();
       payload.variableSamples = Object.values(tplVariableSamples);
       payload.buttons = tplButtons.map((b) => ({
@@ -872,22 +942,15 @@ export default function ApiDocsPage() {
         text: b.text,
         value: b.value || "",
       }));
-
-      if (activeCategory === "AUTHENTICATION") {
-        payload.authConfig = {
-          codeDeliveryOption,
-          apps: authApps,
-          otpExpiryMinutes,
-          addSecurityRecommendation,
-        };
-      }
-
-      if (tplSubType === "Carousel") {
-        payload.carouselCards = carouselCards.map((c) => ({
-          ...c,
-          mediaUrl: normalizePublicUrl(c.mediaUrl),
-        }));
-      }
+      payload.components = buildMetaComponentsPreview({
+        headerType: computedHeaderType,
+        headerText: tplHeaderText,
+        mediaUrl: normalizedUrl,
+        bodyText: activeBodyText,
+        footerText: tplFooterText,
+        variableSamples: tplVariableSamples,
+        buttons: tplButtons,
+      });
     }
 
     if (
@@ -922,11 +985,6 @@ export default function ApiDocsPage() {
     tplFooterText,
     tplVariableSamples,
     tplButtons,
-    codeDeliveryOption,
-    authApps,
-    otpExpiryMinutes,
-    addSecurityRecommendation,
-    carouselCards,
   ]);
 
   useEffect(() => {
@@ -939,7 +997,7 @@ export default function ApiDocsPage() {
     const origin =
       typeof window !== "undefined"
         ? window.location.origin
-        : "http://localhost:3000";
+        : "https://waba.fortius.in.net";
     const fullUrl = `${origin}${resolvedPath}`;
     const authPart = activeToken
       ? ` \\\n  -H "Authorization: Bearer ${activeToken}"`
@@ -955,10 +1013,6 @@ export default function ApiDocsPage() {
       return `curl -X GET "${fullUrl}"${authPart}${phoneHdr}${wabaHdr}`;
     }
 
-    if (selectedEndpoint.id === "create-template" && tplMediaFile) {
-      return `curl -X POST "${fullUrl}"${authPart}${phoneHdr}${wabaHdr} \\\n  -F "mediaFile=@${tplMediaFile.name}" \\\n  -F 'payload=${rawJsonText}'`;
-    }
-
     return `curl -X POST "${fullUrl}"${authPart}${phoneHdr}${wabaHdr} \\\n  -H "Content-Type: application/json" \\\n  -d '${rawJsonText}'`;
   }, [
     resolvedPath,
@@ -966,8 +1020,6 @@ export default function ApiDocsPage() {
     selectedPhoneId,
     selectedWabaId,
     selectedEndpoint.method,
-    selectedEndpoint.id,
-    tplMediaFile,
     rawJsonText,
   ]);
 
@@ -1005,30 +1057,12 @@ export default function ApiDocsPage() {
     }));
   }
 
-  function handleCategoryChange(nextCategory: "UTILITY" | "MARKETING" | "AUTHENTICATION") {
-    handleFieldChange("category", nextCategory);
-    if (nextCategory === "MARKETING") {
-      setTplSubType("Default");
-    } else if (nextCategory === "UTILITY") {
-      setTplSubType("None");
-    } else {
-      setTplSubType("Zero-tap OTP");
-    }
-  }
-
   function handleAddBodyVariable() {
     const matches = activeBodyText.match(/\{\{(\d+)\}\}/g);
     const nextNum = matches ? matches.length + 1 : 1;
     const nextText = `${activeBodyText} {{${nextNum}}}`.trim();
     handleFieldChange("bodyText", nextText);
     setTimeout(() => bodyFieldRef.current?.focus(), 0);
-  }
-
-  function handleAddHeaderVariable() {
-    const matches = tplHeaderText.match(/\{\{(\d+)\}\}/g);
-    const nextNum = matches ? matches.length + 1 : 1;
-    setJsonEditedManually(false);
-    setTplHeaderText((prev) => `${prev} {{${nextNum}}}`.trim());
   }
 
   function handleTplMediaFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1113,7 +1147,8 @@ export default function ApiDocsPage() {
         [selectedEndpoint.id]: {
           ...(prev[selectedEndpoint.id] || {}),
           templateName: tpl.name,
-          language: tpl.language || prev[selectedEndpoint.id]?.language || "en_US",
+          language:
+            tpl.language || prev[selectedEndpoint.id]?.language || "en_US",
         },
       }));
     }
@@ -1124,33 +1159,15 @@ export default function ApiDocsPage() {
     const started = performance.now();
 
     try {
-      let bodyToSend: BodyInit | undefined;
-      const headers: Record<string, string> = {};
-
+      let bodyToSend: string | undefined;
       if (selectedEndpoint.method === "POST") {
-        const parsedJson = JSON.parse(rawJsonText);
-
-        if (selectedEndpoint.id === "create-template" && tplMediaFile) {
-          const fd = new FormData();
-          fd.append("mediaFile", tplMediaFile);
-          fd.append("payload", rawJsonText);
-          Object.entries(parsedJson as Record<string, unknown>).forEach(
-            ([k, v]) => {
-              if (v !== undefined && v !== null) {
-                fd.append(
-                  k,
-                  typeof v === "object" ? JSON.stringify(v) : String(v)
-                );
-              }
-            }
-          );
-          bodyToSend = fd;
-        } else {
-          headers["Content-Type"] = "application/json";
-          bodyToSend = rawJsonText;
-        }
+        JSON.parse(rawJsonText);
+        bodyToSend = rawJsonText;
       }
 
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
       if (activeToken) {
         headers.Authorization = `Bearer ${activeToken}`;
       }
@@ -1233,7 +1250,9 @@ export default function ApiDocsPage() {
       activeTemplateObj.hasDynamicUrlButton);
 
   const showContextBar =
-    Boolean(selectedEndpoint.usesChannelContext || selectedEndpoint.usesWabaContext) &&
+    Boolean(
+      selectedEndpoint.usesChannelContext || selectedEndpoint.usesWabaContext
+    ) &&
     (channels.length > 0 ||
       (templates.length > 0 &&
         (selectedEndpoint.supportsAutoTemplate ||
@@ -1441,7 +1460,10 @@ export default function ApiDocsPage() {
                           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
                         >
                           {templates.map((tpl) => (
-                            <option key={`${tpl.id}-${tpl.name}`} value={tpl.name}>
+                            <option
+                              key={`${tpl.id}-${tpl.name}`}
+                              value={tpl.name}
+                            >
                               {`${tpl.name} (${tpl.language}) — [${
                                 tpl.category || "GENERAL"
                               }]`}
@@ -1614,12 +1636,7 @@ export default function ApiDocsPage() {
                       <select
                         value={activeCategory}
                         onChange={(e) =>
-                          handleCategoryChange(
-                            e.target.value as
-                              | "UTILITY"
-                              | "MARKETING"
-                              | "AUTHENTICATION"
-                          )
+                          handleFieldChange("category", e.target.value)
                         }
                         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                       >
@@ -1647,9 +1664,7 @@ export default function ApiDocsPage() {
                       </select>
                     ) : (
                       <input
-                        ref={
-                          field.key === "bodyText" ? bodyFieldRef : undefined
-                        }
+                        ref={field.key === "bodyText" ? bodyFieldRef : undefined}
                         type="text"
                         value={
                           field.key === "bodyText" &&
@@ -1674,11 +1689,10 @@ export default function ApiDocsPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Template Format, Media, Footer & Buttons
+                      Template Media, Footer & Buttons
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Category: {activeCategory} ({tplSubType}) • Header:{" "}
-                      {computedHeaderType}
+                      Header: {computedHeaderType}
                     </p>
                   </div>
                   <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
@@ -1695,10 +1709,9 @@ export default function ApiDocsPage() {
                   </label>
                 </div>
 
-                {/* Sub-type selector based on Category */}
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-700">
-                    Template Sub-Type ({activeCategory})
+                    Sub-Type
                   </label>
                   <select
                     value={tplSubType}
@@ -1706,399 +1719,158 @@ export default function ApiDocsPage() {
                       setJsonEditedManually(false);
                       setTplSubType(e.target.value);
                     }}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                   >
-                    {activeCategory === "MARKETING" && (
-                      <>
-                        <option value="Default">Default</option>
-                        <option value="Catalogue">Catalogue</option>
-                        <option value="Flows">Flows</option>
-                        <option value="Calling permissions request">
-                          Calling permissions request
-                        </option>
-                        <option value="Limited Time Offer (LTO)">
-                          Limited Time Offer (LTO)
-                        </option>
-                        <option value="Carousel">Carousel</option>
-                      </>
-                    )}
-                    {activeCategory === "UTILITY" && (
-                      <>
-                        <option value="None">Default Utility</option>
-                        <option value="Order status">Order status</option>
-                        <option value="Order details">Order details</option>
-                      </>
-                    )}
-                    {activeCategory === "AUTHENTICATION" && (
-                      <>
-                        <option value="Zero-tap OTP">Zero-tap OTP</option>
-                        <option value="One-tap auto fill">
-                          One-tap auto fill
-                        </option>
-                        <option value="Copy code">Copy code</option>
-                      </>
-                    )}
+                    <option value="Default">Default</option>
+                    <option value="Catalogue">Catalogue</option>
+                    <option value="Flows">Flows</option>
+                    <option value="Limited Time Offer (LTO)">
+                      Limited Time Offer (LTO)
+                    </option>
+                    <option value="Carousel">Carousel</option>
                   </select>
                 </div>
 
-                {/* Authentication options */}
-                {activeCategory === "AUTHENTICATION" && (
-                  <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3.5">
-                    <div className="text-xs font-bold text-slate-800">
-                      Authentication Code Delivery & App Setup
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-700">
-                          Code Delivery Option
-                        </label>
-                        <select
-                          value={codeDeliveryOption}
-                          onChange={(e) => {
-                            setJsonEditedManually(false);
-                            setCodeDeliveryOption(e.target.value);
-                          }}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs text-slate-900"
-                        >
-                          <option value="zero_tap">Zero-tap OTP</option>
-                          <option value="one_tap">One-tap auto fill</option>
-                          <option value="copy_code">Copy code</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-700">
-                          OTP Expiry (Minutes)
-                        </label>
-                        <input
-                          type="number"
-                          value={otpExpiryMinutes}
-                          onChange={(e) => {
-                            setJsonEditedManually(false);
-                            setOtpExpiryMinutes(Number(e.target.value) || 10);
-                          }}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs text-slate-900"
-                        />
-                      </div>
-                      <div className="flex items-end pb-1">
-                        <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
-                          <input
-                            type="checkbox"
-                            checked={addSecurityRecommendation}
-                            onChange={(e) => {
-                              setJsonEditedManually(false);
-                              setAddSecurityRecommendation(e.target.checked);
-                            }}
-                            className="rounded accent-emerald-600"
-                          />
-                          <span>Security Recommendation</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      {authApps.map((app, idx) => (
-                        <div
-                          key={idx}
-                          className="grid grid-cols-1 gap-2 sm:grid-cols-2"
-                        >
-                          <input
-                            type="text"
-                            value={app.packageName}
-                            onChange={(e) => {
-                              setJsonEditedManually(false);
-                              const next = [...authApps];
-                              next[idx].packageName = e.target.value;
-                              setAuthApps(next);
-                            }}
-                            placeholder="Android Package (com.example.app)"
-                            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs"
-                          />
-                          <input
-                            type="text"
-                            value={app.signatureHash}
-                            onChange={(e) => {
-                              setJsonEditedManually(false);
-                              const next = [...authApps];
-                              next[idx].signatureHash = e.target.value;
-                              setAuthApps(next);
-                            }}
-                            placeholder="Signature Hash (11 chars)"
-                            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs"
-                          />
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setJsonEditedManually(false);
-                          setAuthApps((prev) => [
-                            ...prev,
-                            { packageName: "", signatureHash: "" },
-                          ]);
-                        }}
-                        className="text-xs font-semibold text-emerald-700 hover:underline"
-                      >
-                        + Add another app
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Carousel options */}
-                {tplSubType === "Carousel" && (
-                  <div className="space-y-3 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800">
-                        Carousel Cards ({carouselCards.length}/10)
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (carouselCards.length >= 10) return;
-                          setJsonEditedManually(false);
-                          setCarouselCards((prev) => [
-                            ...prev,
-                            {
-                              id: Date.now(),
-                              mediaType: "Image",
-                              mediaUrl: "",
-                              text: `Card ${prev.length + 1} Offer Details`,
-                              buttonText: "View Item",
-                            },
-                          ]);
-                        }}
-                        className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700"
-                      >
-                        + Add Card
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {carouselCards.map((c, idx) => (
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Media Header
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                      {(
+                        [
+                          "None",
+                          "Image",
+                          "Video",
+                          "Document",
+                          "Location",
+                        ] as const
+                      ).map((m) => (
                         <button
-                          key={c.id}
+                          key={m}
                           type="button"
-                          onClick={() => setActiveCarouselIndex(idx)}
-                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${
-                            activeCarouselIndex === idx
+                          onClick={() => {
+                            setJsonEditedManually(false);
+                            setTplMediaType(m);
+                            if (m === "None") {
+                              setTplMediaFile(null);
+                              setTplMediaPreviewUrl("");
+                              setTplMediaUrl("");
+                            } else {
+                              setTplHeaderText("");
+                            }
+                          }}
+                          className={`rounded-lg border py-1.5 text-xs font-semibold transition ${
+                            tplMediaType === m
                               ? "border-indigo-600 bg-indigo-600 text-white"
-                              : "border-slate-300 bg-white text-slate-700"
+                              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
                           }`}
                         >
-                          Card {idx + 1}
+                          {m}
                         </button>
                       ))}
                     </div>
-                    {carouselCards[activeCarouselIndex] && (
-                      <div className="grid grid-cols-1 gap-2.5 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-2">
-                        <select
-                          value={carouselCards[activeCarouselIndex].mediaType}
-                          onChange={(e) => {
-                            setJsonEditedManually(false);
-                            const next = [...carouselCards];
-                            next[activeCarouselIndex].mediaType = e.target.value;
-                            setCarouselCards(next);
-                          }}
-                          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
-                        >
-                          <option value="Image">Image</option>
-                          <option value="Video">Video</option>
-                        </select>
-                        <input
-                          type="text"
-                          value={carouselCards[activeCarouselIndex].buttonText}
-                          onChange={(e) => {
-                            setJsonEditedManually(false);
-                            const next = [...carouselCards];
-                            next[activeCarouselIndex].buttonText =
-                              e.target.value;
-                            setCarouselCards(next);
-                          }}
-                          placeholder="Button Text"
-                          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={carouselCards[activeCarouselIndex].mediaUrl}
-                          onChange={(e) => {
-                            setJsonEditedManually(false);
-                            const next = [...carouselCards];
-                            next[activeCarouselIndex].mediaUrl = e.target.value;
-                            setCarouselCards(next);
-                          }}
-                          placeholder="Card Media URL (https://...)"
-                          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={carouselCards[activeCarouselIndex].text}
-                          onChange={(e) => {
-                            setJsonEditedManually(false);
-                            const next = [...carouselCards];
-                            next[activeCarouselIndex].text = e.target.value;
-                            setCarouselCards(next);
-                          }}
-                          placeholder="Card Body Text"
-                          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
-                        />
-                      </div>
-                    )}
                   </div>
-                )}
 
-                {/* Media Header & File Upload */}
-                {activeCategory !== "AUTHENTICATION" && tplSubType !== "Carousel" && (
-                  <div className="space-y-3">
+                  {tplMediaType === "None" && (
                     <div>
-                      <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                        Media Header Type
+                      <label className="mb-1 block text-xs font-medium text-slate-700">
+                        Header Text (Optional)
                       </label>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                        {(
-                          [
-                            "None",
-                            "Image",
-                            "Video",
-                            "Document",
-                            "Location",
-                          ] as const
-                        ).map((m) => (
+                      <input
+                        type="text"
+                        value={tplHeaderText}
+                        onChange={(e) => {
+                          setJsonEditedManually(false);
+                          setTplHeaderText(e.target.value);
+                        }}
+                        placeholder="Optional header text..."
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                      />
+                    </div>
+                  )}
+
+                  {(tplMediaType === "Image" ||
+                    tplMediaType === "Video" ||
+                    tplMediaType === "Document") && (
+                    <div className="space-y-2.5 rounded-lg border border-dashed border-indigo-300 bg-white p-3.5">
+                      <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                        <div>
+                          <div className="text-xs font-semibold text-slate-800">
+                            {tplMediaType} Media File / URL
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {tplMediaType === "Image" &&
+                              "JPG, JPEG, PNG • Max 5 MB"}
+                            {tplMediaType === "Video" && "MP4, 3GP • Max 16 MB"}
+                            {tplMediaType === "Document" && "PDF • Max 100 MB"}
+                          </div>
+                        </div>
+
+                        <label className="inline-flex cursor-pointer items-center rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
+                          <span>Choose {tplMediaType} File</span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept={
+                              tplMediaType === "Image"
+                                ? ".jpg,.jpeg,.png,image/jpeg,image/png"
+                                : tplMediaType === "Video"
+                                ? ".mp4,.3gp,video/mp4,video/3gpp"
+                                : ".pdf,application/pdf"
+                            }
+                            onChange={handleTplMediaFileChange}
+                          />
+                        </label>
+                      </div>
+
+                      <input
+                        type="text"
+                        value={tplMediaUrl}
+                        onChange={(e) => {
+                          setJsonEditedManually(false);
+                          setTplMediaUrl(e.target.value);
+                        }}
+                        placeholder={`Media URL (https://...)`}
+                        className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900"
+                      />
+
+                      {tplMediaFile && (
+                        <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                          <span className="truncate font-medium">
+                            {tplMediaFile.name} (
+                            {(tplMediaFile.size / (1024 * 1024)).toFixed(2)}{" "}
+                            MB)
+                          </span>
                           <button
-                            key={m}
                             type="button"
                             onClick={() => {
                               setJsonEditedManually(false);
-                              setTplMediaType(m);
-                              if (m === "None") {
-                                setTplMediaFile(null);
-                                setTplMediaPreviewUrl("");
-                                setTplMediaUrl("");
-                              } else {
-                                setTplHeaderText("");
-                              }
+                              setTplMediaFile(null);
+                              setTplMediaPreviewUrl("");
                             }}
-                            className={`rounded-lg border py-1.5 text-xs font-semibold transition ${
-                              tplMediaType === m
-                                ? "border-indigo-600 bg-indigo-600 text-white"
-                                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                            }`}
+                            className="ml-2 font-semibold text-rose-600 hover:underline"
                           >
-                            {m}
+                            Remove
                           </button>
-                        ))}
-                      </div>
+                        </div>
+                      )}
+
+                      {tplMediaType === "Image" && tplMediaPreviewUrl && (
+                        <img
+                          src={tplMediaPreviewUrl}
+                          alt="Selected media preview"
+                          className="h-28 w-auto rounded-lg border border-slate-200 object-cover"
+                        />
+                      )}
                     </div>
+                  )}
+                </div>
 
-                    {tplMediaType === "None" && (
-                      <div>
-                        <div className="mb-1 flex items-center justify-between">
-                          <label className="text-xs font-medium text-slate-700">
-                            Header Text (Optional)
-                          </label>
-                          <button
-                            type="button"
-                            onClick={handleAddHeaderVariable}
-                            className="text-xs font-semibold text-indigo-600 hover:underline"
-                          >
-                            + Add Variable
-                          </button>
-                        </div>
-                        <input
-                          type="text"
-                          value={tplHeaderText}
-                          onChange={(e) => {
-                            setJsonEditedManually(false);
-                            setTplHeaderText(e.target.value);
-                          }}
-                          placeholder="Optional header text..."
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                        />
-                      </div>
-                    )}
-
-                    {(tplMediaType === "Image" ||
-                      tplMediaType === "Video" ||
-                      tplMediaType === "Document") && (
-                      <div className="space-y-2.5 rounded-lg border border-dashed border-indigo-300 bg-white p-3.5">
-                        <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-                          <div>
-                            <div className="text-xs font-semibold text-slate-800">
-                              {tplMediaType} File / Sample Media
-                            </div>
-                            <div className="text-[11px] text-slate-500">
-                              {tplMediaType === "Image" &&
-                                "JPG, JPEG, PNG • Max 5 MB"}
-                              {tplMediaType === "Video" &&
-                                "MP4, 3GP • Max 16 MB"}
-                              {tplMediaType === "Document" && "PDF • Max 100 MB"}
-                            </div>
-                          </div>
-
-                          <label className="inline-flex cursor-pointer items-center rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
-                            <span>Choose {tplMediaType} File</span>
-                            <input
-                              type="file"
-                              className="hidden"
-                              accept={
-                                tplMediaType === "Image"
-                                  ? ".jpg,.jpeg,.png,image/jpeg,image/png"
-                                  : tplMediaType === "Video"
-                                  ? ".mp4,.3gp,video/mp4,video/3gpp"
-                                  : ".pdf,application/pdf"
-                              }
-                              onChange={handleTplMediaFileChange}
-                            />
-                          </label>
-                        </div>
-
-                        <input
-                          type="text"
-                          value={tplMediaUrl}
-                          onChange={(e) => {
-                            setJsonEditedManually(false);
-                            setTplMediaUrl(e.target.value);
-                          }}
-                          placeholder={`Or paste ${tplMediaType.toLowerCase()} URL (https://...)`}
-                          className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900"
-                        />
-
-                        {tplMediaFile && (
-                          <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-                            <span className="truncate font-medium">
-                              {tplMediaFile.name} (
-                              {(tplMediaFile.size / (1024 * 1024)).toFixed(2)}{" "}
-                              MB)
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setJsonEditedManually(false);
-                                setTplMediaFile(null);
-                                setTplMediaPreviewUrl("");
-                              }}
-                              className="ml-2 font-semibold text-rose-600 hover:underline"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        )}
-
-                        {tplMediaType === "Image" && tplMediaPreviewUrl && (
-                          <img
-                            src={tplMediaPreviewUrl}
-                            alt="Selected media preview"
-                            className="h-28 w-auto rounded-lg border border-slate-200 object-cover"
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Variable Sample Values */}
                 {Object.keys(tplVariableSamples).length > 0 && (
                   <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
                     <div className="text-xs font-semibold text-slate-700">
-                      Body Variable Samples
+                      Variable Sample Values
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {Object.keys(tplVariableSamples).map((varKey) => (
@@ -2128,7 +1900,6 @@ export default function ApiDocsPage() {
                   </div>
                 )}
 
-                {/* Footer Text */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-700">
                     Footer Text (Optional)
@@ -2145,7 +1916,6 @@ export default function ApiDocsPage() {
                   />
                 </div>
 
-                {/* Interactive Buttons */}
                 <div className="relative space-y-2.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-semibold text-slate-700">

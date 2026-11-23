@@ -1,6 +1,144 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateApiRequest } from "@/lib/api-auth";
 
+type TemplateButtonInput = {
+  type?: string;
+  text?: string;
+  value?: string;
+  url?: string;
+  phone_number?: string;
+  example?: string[];
+};
+
+function buildMetaComponentsFromBody(body: Record<string, unknown>) {
+  if (Array.isArray(body.components) && body.components.length > 0) {
+    return body.components;
+  }
+
+  const components: Array<Record<string, unknown>> = [];
+  const headerType = String(body.headerType || "NONE").toUpperCase();
+  const headerText = String(body.headerText || "").trim();
+  const mediaUrl = String(body.mediaUrl || "").trim();
+  const bodyText = String(body.bodyText || "").trim();
+  const footerText = String(body.footerText || "").trim();
+  const variableSamples = Array.isArray(body.variableSamples)
+    ? body.variableSamples.map((v) => String(v ?? ""))
+    : [];
+  const buttonsInput = Array.isArray(body.buttons)
+    ? (body.buttons as TemplateButtonInput[])
+    : [];
+
+  if (headerType === "TEXT" && headerText) {
+    const headerComp: Record<string, unknown> = {
+      type: "HEADER",
+      format: "TEXT",
+      text: headerText,
+    };
+    const headerVars = headerText.match(/\{\{\d+\}\}/g);
+    if (headerVars && headerVars.length > 0) {
+      headerComp.example = {
+        header_text: headerVars.map((_, i) => `SampleHeader${i + 1}`),
+      };
+    }
+    components.push(headerComp);
+  } else if (
+    headerType === "IMAGE" ||
+    headerType === "VIDEO" ||
+    headerType === "DOCUMENT"
+  ) {
+    const headerComp: Record<string, unknown> = {
+      type: "HEADER",
+      format: headerType,
+    };
+    if (mediaUrl) {
+      headerComp.example = {
+        header_handle: [mediaUrl],
+      };
+    }
+    components.push(headerComp);
+  } else if (headerType === "LOCATION") {
+    components.push({
+      type: "HEADER",
+      format: "LOCATION",
+    });
+  }
+
+  const bodyComp: Record<string, unknown> = {
+    type: "BODY",
+    text: bodyText,
+  };
+  const bodyVarMatches = bodyText.match(/\{\{\d+\}\}/g);
+  if (bodyVarMatches && bodyVarMatches.length > 0) {
+    const samples = bodyVarMatches.map((_, idx) => {
+      const val = (variableSamples[idx] || "").trim();
+      return val || `Sample${idx + 1}`;
+    });
+    bodyComp.example = {
+      body_text: [samples],
+    };
+  }
+  components.push(bodyComp);
+
+  if (footerText) {
+    components.push({
+      type: "FOOTER",
+      text: footerText,
+    });
+  }
+
+  if (buttonsInput.length > 0) {
+    const metaButtons = buttonsInput
+      .filter((b) => String(b?.text || "").trim())
+      .map((b) => {
+        const rawType = String(b.type || "QUICK_REPLY").toUpperCase();
+        const text = String(b.text || "").trim();
+        const value = String(b.value || b.url || b.phone_number || "").trim();
+
+        if (rawType === "URL" || rawType === "VISIT WEBSITE") {
+          const btn: Record<string, unknown> = {
+            type: "URL",
+            text,
+            url: value || "https://example.com/{{1}}",
+          };
+          if ((value || "").includes("{{1}}")) {
+            btn.example = [b.example?.[0] || "https://example.com/offer"];
+          }
+          return btn;
+        }
+
+        if (rawType === "PHONE_NUMBER" || rawType === "CALL PHONE NUMBER") {
+          return {
+            type: "PHONE_NUMBER",
+            text,
+            phone_number: value || "+919876543210",
+          };
+        }
+
+        if (rawType === "COPY_CODE" || rawType === "COPY OFFER CODE") {
+          return {
+            type: "COPY_CODE",
+            text,
+            example: [value || "OFFER20"],
+          };
+        }
+
+        return {
+          type: "QUICK_REPLY",
+          text,
+        };
+      });
+
+    if (metaButtons.length > 0) {
+      components.push({
+        type: "BUTTONS",
+        buttons: metaButtons,
+      });
+    }
+  }
+
+  return components;
+}
+
 export async function GET(request: NextRequest) {
   const auth = await authenticateApiRequest(request);
 
@@ -91,7 +229,37 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    const contentType = request.headers.get("content-type") || "";
+    let body: Record<string, unknown> = {};
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      for (const [key, value] of formData.entries()) {
+        if (typeof value === "string") {
+          if (
+            key === "components" ||
+            key === "variableSamples" ||
+            key === "buttons" ||
+            key === "authConfig" ||
+            key === "carouselCards"
+          ) {
+            try {
+              body[key] = JSON.parse(value);
+            } catch {
+              body[key] = value;
+            }
+          } else {
+            body[key] = value;
+          }
+        } else if (value && typeof value === "object" && "name" in value) {
+          body.mediaFileName = (value as File).name;
+          body.mediaMimeType = (value as File).type;
+        }
+      }
+    } else {
+      body = (await request.json()) as Record<string, unknown>;
+    }
+
     const metaToken =
       auth.context.metaAccessToken || process.env.META_ACCESS_TOKEN;
     const wabaId = String(
@@ -118,9 +286,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const name = String(body?.name || "").trim();
+    const name = String(body?.name || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, "_");
     const language = String(body?.language || "en_US").trim();
-    const category = String(body?.category || "UTILITY").trim();
+    const category = String(body?.category || "UTILITY")
+      .trim()
+      .toUpperCase();
     const bodyText = String(body?.bodyText || "").trim();
 
     if (!name || !bodyText) {
@@ -133,24 +306,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const metaPayload = Array.isArray(body?.components)
-      ? {
-          name,
-          language,
-          category,
-          components: body.components,
-        }
-      : {
-          name,
-          language,
-          category,
-          components: [
-            {
-              type: "BODY",
-              text: bodyText,
-            },
-          ],
-        };
+    const metaPayload: Record<string, unknown> = {
+      name,
+      language,
+      category,
+      components: buildMetaComponentsFromBody(body),
+    };
+
+    if (typeof body?.allowCategoryChange === "boolean") {
+      metaPayload.allow_category_change = body.allowCategoryChange;
+    }
 
     const graphVersion = "v21.0";
     const metaResponse = await fetch(

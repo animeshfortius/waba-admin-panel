@@ -12,24 +12,54 @@ export interface AuthenticatedApiContext {
 
 type PrismaLikeRecord = Record<string, unknown>;
 
-async function findFirstChannelSafe(userId?: string): Promise<PrismaLikeRecord | null> {
+function pickFirstString(
+  records: Array<PrismaLikeRecord | null | undefined>,
+  keys: string[],
+  fallback?: string
+): string | undefined {
+  for (const rec of records) {
+    if (!rec) continue;
+    for (const key of keys) {
+      const val = rec[key];
+      if (typeof val === "string" && val.trim().length > 0) {
+        return val.trim();
+      }
+    }
+  }
+  return fallback && fallback.trim().length > 0 ? fallback.trim() : undefined;
+}
+
+async function findChannelsSafe(
+  userId?: string,
+  phoneNumberId?: string
+): Promise<PrismaLikeRecord[]> {
   const client = prisma as unknown as {
     channel?: {
-      findFirst: (args: unknown) => Promise<PrismaLikeRecord | null>;
+      findMany: (args?: unknown) => Promise<PrismaLikeRecord[]>;
     };
   };
 
-  if (!client.channel?.findFirst) {
-    return null;
+  if (!client.channel?.findMany) {
+    return [];
   }
 
   try {
-    if (userId) {
-      return await client.channel.findFirst({ where: { userId } });
+    if (phoneNumberId) {
+      const byPhone = await client.channel.findMany({
+        where: { phoneNumberId },
+      });
+      if (Array.isArray(byPhone) && byPhone.length > 0) return byPhone;
     }
-    return await client.channel.findFirst({});
+    if (userId) {
+      const byUser = await client.channel.findMany({
+        where: { userId },
+      });
+      if (Array.isArray(byUser) && byUser.length > 0) return byUser;
+    }
+    const all = await client.channel.findMany({});
+    return Array.isArray(all) ? all : [];
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -52,33 +82,48 @@ export async function authenticateApiRequest(
     };
   }
 
-  const envTestToken = process.env.PANEL_API_TEST_TOKEN;
-  if (envTestToken && token === envTestToken) {
-    const firstChannel = await findFirstChannelSafe();
-    const channelUserId =
-      typeof firstChannel?.userId === "string" ? firstChannel.userId : "admin_user";
-    const channelPhoneId =
-      typeof firstChannel?.phoneNumberId === "string"
-        ? firstChannel.phoneNumberId
-        : process.env.META_PHONE_NUMBER_ID;
-    const channelWabaId =
-      typeof firstChannel?.wabaId === "string"
-        ? firstChannel.wabaId
-        : process.env.META_WABA_ID;
-    const channelAccessToken =
-      typeof firstChannel?.accessToken === "string"
-        ? firstChannel.accessToken
-        : process.env.META_ACCESS_TOKEN;
+  const requestedPhoneId =
+    request.headers.get("x-phone-number-id")?.trim() || undefined;
+
+  const envFallbackToken =
+    process.env.META_ACCESS_TOKEN ||
+    process.env.WHATSAPP_ACCESS_TOKEN ||
+    process.env.WABA_ACCESS_TOKEN;
+
+  const envFallbackPhoneId =
+    process.env.META_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  const envFallbackWabaId =
+    process.env.META_WABA_ID || process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+
+  if (process.env.PANEL_API_TEST_TOKEN && token === process.env.PANEL_API_TEST_TOKEN) {
+    const channels = await findChannelsSafe(undefined, requestedPhoneId);
+    const primaryChannel = channels[0] || null;
 
     return {
       ok: true,
       context: {
-        userId: channelUserId,
+        userId:
+          typeof primaryChannel?.userId === "string"
+            ? primaryChannel.userId
+            : "admin_user",
         token,
         walletBalance: 1000,
-        phoneNumberId: channelPhoneId,
-        wabaId: channelWabaId,
-        metaAccessToken: channelAccessToken,
+        phoneNumberId: pickFirstString(
+          [primaryChannel],
+          ["phoneNumberId", "phone_number_id"],
+          requestedPhoneId || envFallbackPhoneId
+        ),
+        wabaId: pickFirstString(
+          [primaryChannel],
+          ["wabaId", "waba_id", "businessAccountId"],
+          envFallbackWabaId
+        ),
+        metaAccessToken: pickFirstString(
+          [primaryChannel],
+          ["accessToken", "metaAccessToken", "token", "apiToken"],
+          envFallbackToken
+        ),
       },
     };
   }
@@ -99,7 +144,8 @@ export async function authenticateApiRequest(
     }
 
     const userRecord = user as unknown as PrismaLikeRecord;
-    const channel = await findFirstChannelSafe(user.id);
+    const channels = await findChannelsSafe(user.id, requestedPhoneId);
+    const matchedChannel = channels[0] || null;
 
     const rawBalance =
       typeof userRecord.walletBalance === "number"
@@ -110,26 +156,29 @@ export async function authenticateApiRequest(
         ? userRecord.credits
         : 0;
 
-    const phoneNumberId =
-      typeof channel?.phoneNumberId === "string"
-        ? channel.phoneNumberId
-        : typeof userRecord.phoneNumberId === "string"
-        ? userRecord.phoneNumberId
-        : process.env.META_PHONE_NUMBER_ID;
+    const phoneNumberId = pickFirstString(
+      [matchedChannel, userRecord],
+      ["phoneNumberId", "phone_number_id"],
+      requestedPhoneId || envFallbackPhoneId
+    );
 
-    const wabaId =
-      typeof channel?.wabaId === "string"
-        ? channel.wabaId
-        : typeof userRecord.wabaId === "string"
-        ? userRecord.wabaId
-        : process.env.META_WABA_ID;
+    const wabaId = pickFirstString(
+      [matchedChannel, userRecord],
+      ["wabaId", "waba_id", "businessAccountId"],
+      envFallbackWabaId
+    );
 
-    const metaAccessToken =
-      typeof channel?.accessToken === "string"
-        ? channel.accessToken
-        : typeof userRecord.metaAccessToken === "string"
-        ? userRecord.metaAccessToken
-        : process.env.META_ACCESS_TOKEN;
+    const metaAccessToken = pickFirstString(
+      [matchedChannel, userRecord],
+      [
+        "accessToken",
+        "metaAccessToken",
+        "whatsappToken",
+        "wabaToken",
+        "token",
+      ],
+      envFallbackToken
+    );
 
     return {
       ok: true,

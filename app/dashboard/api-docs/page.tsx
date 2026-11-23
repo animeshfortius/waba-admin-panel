@@ -3,12 +3,14 @@
 import React, { useMemo, useState } from "react";
 
 type HttpMethod = "GET" | "POST";
+type MessageKind = "text" | "template";
 
 interface EndpointField {
   key: string;
   label: string;
   placeholder: string;
   location: "path" | "body" | "query";
+  onlyWhen?: MessageKind;
 }
 
 interface ApiEndpointItem {
@@ -18,6 +20,7 @@ interface ApiEndpointItem {
   description: string;
   method: HttpMethod;
   pathTemplate: string;
+  supportsMessageType?: boolean;
   fields: EndpointField[];
 }
 
@@ -26,14 +29,15 @@ const ENDPOINTS: ApiEndpointItem[] = [
     id: "send-message",
     group: "Messaging & Media",
     title: "Send WhatsApp Message",
-    description: "Send a WhatsApp text message via Meta Graph API.",
+    description: "Send a WhatsApp text or template message via Meta Graph API.",
     method: "POST",
     pathTemplate: "/api/{version}/{phoneNumberId}/messages",
+    supportsMessageType: true,
     fields: [
       {
         key: "version",
         label: "Graph Version",
-        placeholder: "v21.0",
+        placeholder: "v21.0 / v23.0",
         location: "path",
       },
       {
@@ -53,6 +57,28 @@ const ENDPOINTS: ApiEndpointItem[] = [
         label: "Message Body",
         placeholder: "Enter message text",
         location: "body",
+        onlyWhen: "text",
+      },
+      {
+        key: "templateName",
+        label: "Template Name",
+        placeholder: "Enter approved template name",
+        location: "body",
+        onlyWhen: "template",
+      },
+      {
+        key: "languageCode",
+        label: "Language Code",
+        placeholder: "en_US",
+        location: "body",
+        onlyWhen: "template",
+      },
+      {
+        key: "templateVars",
+        label: "Body Variables (comma separated)",
+        placeholder: "var1, var2",
+        location: "body",
+        onlyWhen: "template",
       },
     ],
   },
@@ -305,6 +331,7 @@ export default function ApiDocsPage() {
   const [activeToken, setActiveToken] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string>(ENDPOINTS[0].id);
+  const [messageKind, setMessageKind] = useState<MessageKind>("text");
 
   const initialFieldValues = useMemo(() => {
     const map: Record<string, Record<string, string>> = {};
@@ -332,6 +359,13 @@ export default function ApiDocsPage() {
 
   const currentValues = formValues[selectedEndpoint.id] || {};
 
+  const visibleFields = useMemo(() => {
+    return selectedEndpoint.fields.filter((f) => {
+      if (!f.onlyWhen) return true;
+      return f.onlyWhen === messageKind;
+    });
+  }, [selectedEndpoint, messageKind]);
+
   const resolvedPath = useMemo(() => {
     let url = selectedEndpoint.pathTemplate;
     for (const f of selectedEndpoint.fields) {
@@ -350,12 +384,53 @@ export default function ApiDocsPage() {
     if (selectedEndpoint.method === "GET") return null;
 
     if (selectedEndpoint.id === "send-message") {
+      const toVal = (currentValues.to || "").trim();
+
+      if (messageKind === "template") {
+        const templateName = (currentValues.templateName || "").trim();
+        const languageCode = (currentValues.languageCode || "").trim();
+        const rawVars = (currentValues.templateVars || "").trim();
+        const varList = rawVars
+          ? rawVars
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+
+        const templateObj: Record<string, unknown> = {};
+        if (templateName) templateObj.name = templateName;
+        if (languageCode) {
+          templateObj.language = { code: languageCode };
+        }
+        if (varList.length > 0) {
+          templateObj.components = [
+            {
+              type: "body",
+              parameters: varList.map((text) => ({
+                type: "text",
+                text,
+              })),
+            },
+          ];
+        }
+
+        const payload: Record<string, unknown> = {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          type: "template",
+        };
+        if (toVal) payload.to = toVal;
+        if (Object.keys(templateObj).length > 0) {
+          payload.template = templateObj;
+        }
+        return payload;
+      }
+
       const payload: Record<string, unknown> = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
         type: "text",
       };
-      const toVal = (currentValues.to || "").trim();
       const textVal = (currentValues.messageText || "").trim();
       if (toVal) payload.to = toVal;
       if (textVal) {
@@ -377,7 +452,7 @@ export default function ApiDocsPage() {
       }
     }
     return payload;
-  }, [selectedEndpoint, currentValues]);
+  }, [selectedEndpoint, currentValues, messageKind]);
 
   const curlSnippet = useMemo(() => {
     const origin =
@@ -385,20 +460,30 @@ export default function ApiDocsPage() {
         ? window.location.origin
         : "http://localhost:3000";
     const fullUrl = `${origin}${resolvedPath}`;
+    const phoneIdVal = (currentValues.phoneNumberId || "").trim();
+    const phoneHeaderPart = phoneIdVal
+      ? ` \\\n  -H "x-phone-number-id: ${phoneIdVal}"`
+      : "";
     const authPart = activeToken
       ? ` \\\n  -H "Authorization: Bearer ${activeToken}"`
       : ` \\\n  -H "Authorization: Bearer YOUR_API_TOKEN"`;
 
     if (selectedEndpoint.method === "GET") {
-      return `curl -X GET "${fullUrl}"${authPart}`;
+      return `curl -X GET "${fullUrl}"${authPart}${phoneHeaderPart}`;
     }
 
-    return `curl -X POST "${fullUrl}"${authPart} \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(
+    return `curl -X POST "${fullUrl}"${authPart}${phoneHeaderPart} \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(
       builtRequestBody || {},
       null,
       2
     )}'`;
-  }, [resolvedPath, activeToken, selectedEndpoint.method, builtRequestBody]);
+  }, [
+    resolvedPath,
+    activeToken,
+    selectedEndpoint.method,
+    builtRequestBody,
+    currentValues,
+  ]);
 
   const filteredEndpoints = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -447,6 +532,10 @@ export default function ApiDocsPage() {
       };
       if (activeToken) {
         headers.Authorization = `Bearer ${activeToken}`;
+      }
+      const phoneIdVal = (currentValues.phoneNumberId || "").trim();
+      if (phoneIdVal) {
+        headers["x-phone-number-id"] = phoneIdVal;
       }
 
       const res = await fetch(resolvedPath, {
@@ -631,18 +720,48 @@ export default function ApiDocsPage() {
               </button>
             </div>
 
+            {selectedEndpoint.supportsMessageType && (
+              <div className="mt-4 flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Payload Type:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMessageKind("text")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    messageKind === "text"
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  Text Message
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMessageKind("template")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    messageKind === "template"
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  Template Payload
+                </button>
+              </div>
+            )}
+
             <div className="mt-5">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Parameters
               </h3>
 
-              {selectedEndpoint.fields.length === 0 ? (
+              {visibleFields.length === 0 ? (
                 <p className="mt-2 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
                   No parameters required for this endpoint.
                 </p>
               ) : (
                 <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {selectedEndpoint.fields.map((field) => (
+                  {visibleFields.map((field) => (
                     <div key={field.key}>
                       <div className="mb-1.5 flex items-center justify-between">
                         <label className="text-xs font-medium text-slate-700">

@@ -127,7 +127,10 @@ export async function GET(request: NextRequest) {
       const primaryTitle =
         displayName && phoneNumber
           ? `${displayName} (${phoneNumber})`
-          : displayName || phoneNumber || phoneNumberId || `Channel ${index + 1}`;
+          : displayName ||
+            phoneNumber ||
+            phoneNumberId ||
+            `Channel ${index + 1}`;
 
       const label = wabaId
         ? `${primaryTitle} — WABA: ${wabaId}`
@@ -140,6 +143,7 @@ export async function GET(request: NextRequest) {
         phoneNumber,
         phoneNumberId,
         wabaId,
+        accessToken,
         hasToken: Boolean(accessToken),
       };
     });
@@ -157,18 +161,23 @@ export async function GET(request: NextRequest) {
         phoneNumber: "",
         phoneNumberId: auth.context.phoneNumberId || "",
         wabaId: auth.context.wabaId || "",
+        accessToken: auth.context.metaAccessToken || "",
         hasToken: Boolean(auth.context.metaAccessToken),
       });
     }
-
-    const activeToken =
-      auth.context.metaAccessToken || process.env.META_ACCESS_TOKEN || "";
 
     const activeWabaId =
       requestedWabaId ||
       channels[0]?.wabaId ||
       auth.context.wabaId ||
       process.env.META_WABA_ID ||
+      "";
+
+    const matchedChannel = channels.find((c) => c.wabaId === activeWabaId);
+    const activeToken =
+      matchedChannel?.accessToken ||
+      auth.context.metaAccessToken ||
+      process.env.META_ACCESS_TOKEN ||
       "";
 
     let templates: Array<{
@@ -189,7 +198,7 @@ export async function GET(request: NextRequest) {
       templateFetchError = "WABA ID not found for this channel/user.";
     } else {
       const metaRes = await fetch(
-        `https://graph.facebook.com/v21.0/${encodeURIComponent(
+        `https://graph.facebook.com/v23.0/${encodeURIComponent(
           activeWabaId
         )}/message_templates?limit=100`,
         {
@@ -231,18 +240,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const safeChannels = channels.map(({ accessToken: _omit, ...rest }) => rest);
+
     return NextResponse.json({
       success: true,
       userId: auth.context.userId,
       walletBalance: auth.context.walletBalance,
-      defaultVersion: "v21.0",
+      defaultVersion: "v23.0",
       defaultPhoneNumberId:
-        channels.find((c) => c.wabaId === activeWabaId)?.phoneNumberId ||
+        matchedChannel?.phoneNumberId ||
         channels[0]?.phoneNumberId ||
         auth.context.phoneNumberId ||
         "",
       defaultWabaId: activeWabaId,
-      channels,
+      channels: safeChannels,
       templates,
       templateFetchError,
     });

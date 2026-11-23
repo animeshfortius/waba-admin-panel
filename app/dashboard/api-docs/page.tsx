@@ -305,7 +305,7 @@ export default function ApiDocsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string>(ENDPOINTS[0].id);
 
-  const [graphVersion] = useState("v21.0");
+  const [graphVersion] = useState("v23.0");
   const [channels, setChannels] = useState<ChannelOption[]>([]);
   const [selectedPhoneId, setSelectedPhoneId] = useState("");
   const [selectedWabaId, setSelectedWabaId] = useState("");

@@ -12,6 +12,38 @@ export interface AuthenticatedApiContext {
 
 type PrismaLikeRecord = Record<string, unknown>;
 
+const TOKEN_KEYS = [
+  "accessToken",
+  "access_token",
+  "metaAccessToken",
+  "meta_access_token",
+  "whatsappAccessToken",
+  "whatsapp_access_token",
+  "whatsappToken",
+  "wabaAccessToken",
+  "waba_access_token",
+  "wabaToken",
+  "graphToken",
+  "graph_token",
+  "bearerToken",
+  "token",
+];
+
+const PHONE_ID_KEYS = [
+  "phoneNumberId",
+  "phone_number_id",
+  "whatsappPhoneNumberId",
+  "phoneId",
+];
+
+const WABA_ID_KEYS = [
+  "wabaId",
+  "waba_id",
+  "businessAccountId",
+  "business_account_id",
+  "whatsappBusinessAccountId",
+];
+
 function pickFirstString(
   records: Array<PrismaLikeRecord | null | undefined>,
   keys: string[],
@@ -29,38 +61,102 @@ function pickFirstString(
   return fallback && fallback.trim().length > 0 ? fallback.trim() : undefined;
 }
 
-async function findChannelsSafe(
-  userId?: string,
-  phoneNumberId?: string
+async function findRecordsFromModel(
+  modelName: string,
+  userId?: string
 ): Promise<PrismaLikeRecord[]> {
-  const client = prisma as unknown as {
-    channel?: {
-      findMany: (args?: unknown) => Promise<PrismaLikeRecord[]>;
-    };
-  };
+  const client = prisma as unknown as Record<
+    string,
+    { findMany?: (args?: unknown) => Promise<PrismaLikeRecord[]> } | undefined
+  >;
 
-  if (!client.channel?.findMany) {
+  const model = client[modelName];
+  if (!model?.findMany) {
     return [];
   }
 
   try {
-    if (phoneNumberId) {
-      const byPhone = await client.channel.findMany({
-        where: { phoneNumberId },
-      });
-      if (Array.isArray(byPhone) && byPhone.length > 0) return byPhone;
-    }
     if (userId) {
-      const byUser = await client.channel.findMany({
-        where: { userId },
-      });
-      if (Array.isArray(byUser) && byUser.length > 0) return byUser;
+      const byUser = await model.findMany({ where: { userId } });
+      if (Array.isArray(byUser) && byUser.length > 0) {
+        return byUser;
+      }
     }
-    const all = await client.channel.findMany({});
-    return Array.isArray(all) ? all : [];
+    const allRows = await model.findMany();
+    return Array.isArray(allRows) ? allRows : [];
   } catch {
     return [];
   }
+}
+
+async function collectRelatedRecords(userId?: string): Promise<PrismaLikeRecord[]> {
+  const modelNames = [
+    "channel",
+    "whatsappChannel",
+    "wabaAccount",
+    "wabaConfig",
+    "whatsAppAccount",
+    "metaConfig",
+    "apiConfig",
+    "setting",
+    "settings",
+    "config",
+    "systemConfig",
+  ];
+
+  const collected: PrismaLikeRecord[] = [];
+  for (const name of modelNames) {
+    const rows = await findRecordsFromModel(name, userId);
+    if (rows.length > 0) {
+      collected.push(...rows);
+    }
+  }
+  return collected;
+}
+
+function getEnvFallbackToken(): string | undefined {
+  const candidates = [
+    process.env.META_ACCESS_TOKEN,
+    process.env.WHATSAPP_ACCESS_TOKEN,
+    process.env.WABA_ACCESS_TOKEN,
+    process.env.META_SYSTEM_USER_TOKEN,
+    process.env.GRAPH_API_TOKEN,
+    process.env.FACEBOOK_ACCESS_TOKEN,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().length > 0) {
+      return c.trim();
+    }
+  }
+  return undefined;
+}
+
+function getEnvFallbackPhoneId(): string | undefined {
+  const candidates = [
+    process.env.META_PHONE_NUMBER_ID,
+    process.env.WHATSAPP_PHONE_NUMBER_ID,
+    process.env.WABA_PHONE_NUMBER_ID,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().length > 0) {
+      return c.trim();
+    }
+  }
+  return undefined;
+}
+
+function getEnvFallbackWabaId(): string | undefined {
+  const candidates = [
+    process.env.META_WABA_ID,
+    process.env.WHATSAPP_BUSINESS_ACCOUNT_ID,
+    process.env.WABA_ID,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().length > 0) {
+      return c.trim();
+    }
+  }
+  return undefined;
 }
 
 export async function authenticateApiRequest(
@@ -85,44 +181,43 @@ export async function authenticateApiRequest(
   const requestedPhoneId =
     request.headers.get("x-phone-number-id")?.trim() || undefined;
 
-  const envFallbackToken =
-    process.env.META_ACCESS_TOKEN ||
-    process.env.WHATSAPP_ACCESS_TOKEN ||
-    process.env.WABA_ACCESS_TOKEN;
+  const envToken = getEnvFallbackToken();
+  const envPhoneId = getEnvFallbackPhoneId();
+  const envWabaId = getEnvFallbackWabaId();
 
-  const envFallbackPhoneId =
-    process.env.META_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER_ID;
-
-  const envFallbackWabaId =
-    process.env.META_WABA_ID || process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
-
-  if (process.env.PANEL_API_TEST_TOKEN && token === process.env.PANEL_API_TEST_TOKEN) {
-    const channels = await findChannelsSafe(undefined, requestedPhoneId);
-    const primaryChannel = channels[0] || null;
+  if (
+    process.env.PANEL_API_TEST_TOKEN &&
+    token === process.env.PANEL_API_TEST_TOKEN
+  ) {
+    const related = await collectRelatedRecords();
+    const matched =
+      (requestedPhoneId
+        ? related.find(
+            (r) => pickFirstString([r], PHONE_ID_KEYS) === requestedPhoneId
+          )
+        : undefined) || related[0];
 
     return {
       ok: true,
       context: {
         userId:
-          typeof primaryChannel?.userId === "string"
-            ? primaryChannel.userId
-            : "admin_user",
+          typeof matched?.userId === "string" ? matched.userId : "admin_user",
         token,
         walletBalance: 1000,
         phoneNumberId: pickFirstString(
-          [primaryChannel],
-          ["phoneNumberId", "phone_number_id"],
-          requestedPhoneId || envFallbackPhoneId
+          [matched, ...related],
+          PHONE_ID_KEYS,
+          requestedPhoneId || envPhoneId
         ),
         wabaId: pickFirstString(
-          [primaryChannel],
-          ["wabaId", "waba_id", "businessAccountId"],
-          envFallbackWabaId
+          [matched, ...related],
+          WABA_ID_KEYS,
+          envWabaId
         ),
         metaAccessToken: pickFirstString(
-          [primaryChannel],
-          ["accessToken", "metaAccessToken", "token", "apiToken"],
-          envFallbackToken
+          [matched, ...related],
+          TOKEN_KEYS,
+          envToken
         ),
       },
     };
@@ -144,8 +239,13 @@ export async function authenticateApiRequest(
     }
 
     const userRecord = user as unknown as PrismaLikeRecord;
-    const channels = await findChannelsSafe(user.id, requestedPhoneId);
-    const matchedChannel = channels[0] || null;
+    const relatedForUser = await collectRelatedRecords(user.id);
+    const matched =
+      (requestedPhoneId
+        ? relatedForUser.find(
+            (r) => pickFirstString([r], PHONE_ID_KEYS) === requestedPhoneId
+          )
+        : undefined) || relatedForUser[0];
 
     const rawBalance =
       typeof userRecord.walletBalance === "number"
@@ -157,27 +257,21 @@ export async function authenticateApiRequest(
         : 0;
 
     const phoneNumberId = pickFirstString(
-      [matchedChannel, userRecord],
-      ["phoneNumberId", "phone_number_id"],
-      requestedPhoneId || envFallbackPhoneId
+      [matched, userRecord, ...relatedForUser],
+      PHONE_ID_KEYS,
+      requestedPhoneId || envPhoneId
     );
 
     const wabaId = pickFirstString(
-      [matchedChannel, userRecord],
-      ["wabaId", "waba_id", "businessAccountId"],
-      envFallbackWabaId
+      [matched, userRecord, ...relatedForUser],
+      WABA_ID_KEYS,
+      envWabaId
     );
 
     const metaAccessToken = pickFirstString(
-      [matchedChannel, userRecord],
-      [
-        "accessToken",
-        "metaAccessToken",
-        "whatsappToken",
-        "wabaToken",
-        "token",
-      ],
-      envFallbackToken
+      [matched, userRecord, ...relatedForUser],
+      TOKEN_KEYS,
+      envToken
     );
 
     return {

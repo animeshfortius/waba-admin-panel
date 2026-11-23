@@ -43,6 +43,8 @@ interface ApiEndpointItem {
   method: HttpMethod;
   pathTemplate: string;
   supportsAutoTemplate?: boolean;
+  usesChannelContext?: boolean;
+  usesWabaContext?: boolean;
   fields: EndpointField[];
 }
 
@@ -56,6 +58,8 @@ const ENDPOINTS: ApiEndpointItem[] = [
     method: "POST",
     pathTemplate: "/api/{version}/{phoneNumberId}/messages",
     supportsAutoTemplate: true,
+    usesChannelContext: true,
+    usesWabaContext: true,
     fields: [
       {
         key: "to",
@@ -72,6 +76,8 @@ const ENDPOINTS: ApiEndpointItem[] = [
     description: "Upload media from a URL to Meta WhatsApp Media API.",
     method: "POST",
     pathTemplate: "/api/v1/media/upload",
+    usesChannelContext: true,
+    usesWabaContext: true,
     fields: [
       {
         key: "mediaType",
@@ -94,6 +100,8 @@ const ENDPOINTS: ApiEndpointItem[] = [
     description: "Fetch message templates for the active WABA.",
     method: "GET",
     pathTemplate: "/api/v1/meta/templates",
+    usesChannelContext: true,
+    usesWabaContext: true,
     fields: [],
   },
   {
@@ -103,6 +111,8 @@ const ENDPOINTS: ApiEndpointItem[] = [
     description: "Submit a new message template to Meta WABA.",
     method: "POST",
     pathTemplate: "/api/v1/meta/templates",
+    usesChannelContext: true,
+    usesWabaContext: true,
     fields: [
       {
         key: "name",
@@ -137,6 +147,8 @@ const ENDPOINTS: ApiEndpointItem[] = [
     description: "Fetch details of a specific template ID.",
     method: "GET",
     pathTemplate: "/api/v1/meta/templates/{id}",
+    usesChannelContext: true,
+    usesWabaContext: true,
     fields: [
       {
         key: "id",
@@ -153,6 +165,8 @@ const ENDPOINTS: ApiEndpointItem[] = [
     description: "Sync all templates from Meta WABA account.",
     method: "POST",
     pathTemplate: "/api/v1/meta/templates/sync",
+    usesChannelContext: true,
+    usesWabaContext: true,
     fields: [],
   },
   {
@@ -162,6 +176,9 @@ const ENDPOINTS: ApiEndpointItem[] = [
     description: "Send WhatsApp template via CleverTap endpoint.",
     method: "POST",
     pathTemplate: "/api/v1/meta/clevertap",
+    supportsAutoTemplate: true,
+    usesChannelContext: true,
+    usesWabaContext: true,
     fields: [
       {
         key: "to",
@@ -190,6 +207,9 @@ const ENDPOINTS: ApiEndpointItem[] = [
     description: "Send WhatsApp template via MoEngage endpoint.",
     method: "POST",
     pathTemplate: "/api/v1/meta/moengage",
+    supportsAutoTemplate: true,
+    usesChannelContext: true,
+    usesWabaContext: true,
     fields: [
       {
         key: "to",
@@ -218,6 +238,9 @@ const ENDPOINTS: ApiEndpointItem[] = [
     description: "Send WhatsApp template via WebEngage endpoint.",
     method: "POST",
     pathTemplate: "/api/v1/meta/webengage",
+    supportsAutoTemplate: true,
+    usesChannelContext: true,
+    usesWabaContext: true,
     fields: [
       {
         key: "to",
@@ -246,6 +269,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
     description: "Check wallet balance for the active token.",
     method: "GET",
     pathTemplate: "/api/v1/user/balance",
+    usesChannelContext: true,
     fields: [],
   },
   {
@@ -255,6 +279,8 @@ const ENDPOINTS: ApiEndpointItem[] = [
     description: "Send a test event to /api/v1/webhook.",
     method: "POST",
     pathTemplate: "/api/v1/webhook",
+    usesChannelContext: true,
+    usesWabaContext: true,
     fields: [
       {
         key: "to",
@@ -436,7 +462,7 @@ export default function ApiDocsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string>(ENDPOINTS[0].id);
 
-  const [graphVersion] = useState("v23.0");
+  const [graphVersion, setGraphVersion] = useState("v23.0");
   const [channels, setChannels] = useState<ChannelOption[]>([]);
   const [selectedPhoneId, setSelectedPhoneId] = useState("");
   const [selectedWabaId, setSelectedWabaId] = useState("");
@@ -504,6 +530,14 @@ export default function ApiDocsPage() {
 
         setChannels(fetchedChannels);
         setTemplates(fetchedTemplates);
+
+        const detectedVersion =
+          typeof json.graphVersion === "string" && json.graphVersion.trim()
+            ? json.graphVersion.trim()
+            : typeof json.apiVersion === "string" && json.apiVersion.trim()
+            ? json.apiVersion.trim()
+            : "v23.0";
+        setGraphVersion(detectedVersion);
 
         const defaultPhone =
           json.defaultPhoneNumberId || fetchedChannels[0]?.phoneNumberId || "";
@@ -604,8 +638,10 @@ export default function ApiDocsPage() {
     }
     if (
       selectedWabaId &&
-      (selectedEndpoint.id === "create-template" ||
-        selectedEndpoint.id === "sync-templates")
+      (selectedEndpoint.id === "upload-media" ||
+        selectedEndpoint.id === "create-template" ||
+        selectedEndpoint.id === "sync-templates" ||
+        selectedEndpoint.id === "webhook-test")
     ) {
       payload.wabaId = selectedWabaId;
     }
@@ -613,7 +649,8 @@ export default function ApiDocsPage() {
       selectedPhoneId &&
       (selectedEndpoint.id === "clevertap" ||
         selectedEndpoint.id === "moengage" ||
-        selectedEndpoint.id === "webengage")
+        selectedEndpoint.id === "webengage" ||
+        selectedEndpoint.id === "webhook-test")
     ) {
       payload.phoneNumberId = selectedPhoneId;
     }
@@ -669,16 +706,20 @@ export default function ApiDocsPage() {
     const phoneHdr = selectedPhoneId
       ? ` \\\n  -H "x-phone-number-id: ${selectedPhoneId}"`
       : "";
+    const wabaHdr = selectedWabaId
+      ? ` \\\n  -H "x-waba-id: ${selectedWabaId}"`
+      : "";
 
     if (selectedEndpoint.method === "GET") {
-      return `curl -X GET "${fullUrl}"${authPart}${phoneHdr}`;
+      return `curl -X GET "${fullUrl}"${authPart}${phoneHdr}${wabaHdr}`;
     }
 
-    return `curl -X POST "${fullUrl}"${authPart}${phoneHdr} \\\n  -H "Content-Type: application/json" \\\n  -d '${rawJsonText}'`;
+    return `curl -X POST "${fullUrl}"${authPart}${phoneHdr}${wabaHdr} \\\n  -H "Content-Type: application/json" \\\n  -d '${rawJsonText}'`;
   }, [
     resolvedPath,
     activeToken,
     selectedPhoneId,
+    selectedWabaId,
     selectedEndpoint.method,
     rawJsonText,
   ]);
@@ -771,6 +812,9 @@ export default function ApiDocsPage() {
       if (selectedPhoneId) {
         headers["x-phone-number-id"] = selectedPhoneId;
       }
+      if (selectedWabaId) {
+        headers["x-waba-id"] = selectedWabaId;
+      }
 
       const res = await fetch(resolvedPath, {
         method: selectedEndpoint.method,
@@ -842,6 +886,17 @@ export default function ApiDocsPage() {
     (activeTemplateObj.headerVariableCount > 0 ||
       activeTemplateObj.variableCount > 0 ||
       activeTemplateObj.hasDynamicUrlButton);
+
+  const showContextBar =
+    Boolean(selectedEndpoint.usesChannelContext || selectedEndpoint.usesWabaContext) &&
+    (channels.length > 0 ||
+      (templates.length > 0 &&
+        (selectedEndpoint.supportsAutoTemplate ||
+          selectedEndpoint.id === "clevertap" ||
+          selectedEndpoint.id === "moengage" ||
+          selectedEndpoint.id === "webengage")) ||
+      Boolean(selectedPhoneId) ||
+      Boolean(selectedWabaId));
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -992,10 +1047,10 @@ export default function ApiDocsPage() {
               </button>
             </div>
 
-            {(channels.length > 0 || templates.length > 0) && (
+            {showContextBar && (
               <div className="mt-4 space-y-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3.5">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {channels.length > 0 && (
+                  {selectedEndpoint.usesChannelContext && channels.length > 0 && (
                     <div>
                       <label className="mb-1 block text-xs font-semibold text-slate-700">
                         Auto-Detected WABA / Number
@@ -1050,6 +1105,22 @@ export default function ApiDocsPage() {
                         </select>
                       </div>
                     )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 border-t border-indigo-100 pt-2.5 text-xs text-slate-600">
+                  <span className="rounded-md bg-white px-2 py-0.5 font-medium text-slate-700 ring-1 ring-slate-200">
+                    Version: {graphVersion}
+                  </span>
+                  {selectedEndpoint.usesWabaContext && selectedWabaId && (
+                    <span className="rounded-md bg-white px-2 py-0.5 font-medium text-slate-700 ring-1 ring-slate-200">
+                      WABA ID: {selectedWabaId}
+                    </span>
+                  )}
+                  {selectedEndpoint.usesChannelContext && selectedPhoneId && (
+                    <span className="rounded-md bg-white px-2 py-0.5 font-medium text-slate-700 ring-1 ring-slate-200">
+                      Phone ID: {selectedPhoneId}
+                    </span>
+                  )}
                 </div>
 
                 {activeTemplateObj &&

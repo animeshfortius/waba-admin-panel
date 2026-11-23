@@ -125,6 +125,7 @@ export async function GET(req: Request) {
     scheduledLogs.forEach((log) => {
       const key = `${log.campaignName}__${log.channel}`;
       if (!scheduleMap[key]) {
+        const scheduleTimeStr = log.sentAt ? formatIST(log.sentAt) : formatIST(log.createdAt);
         scheduleMap[key] = {
           id: log.id,
           campaignInfo: log.campaignName,
@@ -133,10 +134,10 @@ export async function GET(req: Request) {
           status: log.status,
           totalCount: 0,
           cost: 0,
-          scheduledAt: log.sentAt ? formatIST(log.sentAt) : formatIST(log.createdAt),
-          date: log.sentAt ? formatIST(log.sentAt) : formatIST(log.createdAt),
+          scheduledAt: scheduleTimeStr,
+          date: scheduleTimeStr,
           errorDetails: log.errorDetails || "N/A",
-          createdAt: log.createdAt,
+          createdAt: log.sentAt || log.createdAt,
         };
       }
       scheduleMap[key].totalCount += 1;

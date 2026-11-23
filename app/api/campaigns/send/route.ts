@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+function parseScheduleDateIST(rawDate: string): Date {
+  const trimmed = String(rawDate || "").trim();
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+  if (!hasTimezone && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(trimmed)) {
+    const withSeconds = trimmed.length === 16 ? `${trimmed}:00` : trimmed;
+    return new Date(`${withSeconds}+05:30`);
+  }
+  return new Date(trimmed);
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -79,7 +89,7 @@ export async function POST(req: Request) {
       dbTemplate?.category === "MARKETING" ? 0.804 : 0.155;
 
     if (isScheduled && scheduleDate) {
-      const scheduledAtDate = new Date(scheduleDate);
+      const scheduledAtDate = parseScheduleDateIST(scheduleDate);
       if (Number.isNaN(scheduledAtDate.getTime())) {
         return NextResponse.json(
           { success: false, error: "Invalid scheduleDate format." },
@@ -120,7 +130,7 @@ export async function POST(req: Request) {
         scheduled: true,
         scheduledCount,
         scheduledFor: scheduledAtDate.toISOString(),
-        message: `Campaign "${campaignName}" scheduled for ${scheduledAtDate.toLocaleString()} (${scheduledCount} recipients).`,
+        message: `Campaign "${campaignName}" scheduled for ${scheduledAtDate.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} (${scheduledCount} recipients).`,
       });
     }
 

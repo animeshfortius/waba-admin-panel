@@ -64,26 +64,57 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const { searchParams } = new URL(request.url);
+    const requestedWabaId = (searchParams.get("wabaId") || "").trim();
+
     const rows = await collectChannelsForUser(auth.context.userId);
 
     const channels = rows.map((row, index) => {
       const phoneNumberId =
-        extractString(row, ["phoneNumberId", "phone_number_id"]) ||
+        extractString(row, [
+          "phoneNumberId",
+          "phone_number_id",
+          "phoneId",
+        ]) ||
         auth.context.phoneNumberId ||
         process.env.META_PHONE_NUMBER_ID ||
         "";
+
       const wabaId =
-        extractString(row, ["wabaId", "waba_id", "businessAccountId"]) ||
+        extractString(row, [
+          "wabaId",
+          "waba_id",
+          "businessAccountId",
+          "whatsappBusinessAccountId",
+        ]) ||
         auth.context.wabaId ||
         process.env.META_WABA_ID ||
         "";
-      const displayPhone =
-        extractString(row, ["displayPhoneNumber", "phone", "mobile", "name"]) ||
-        phoneNumberId ||
-        `Channel ${index + 1}`;
+
+      const displayName = extractString(row, [
+        "displayName",
+        "display_name",
+        "verifiedName",
+        "verified_name",
+        "channelName",
+        "name",
+        "title",
+        "label",
+      ]);
+
+      const phoneNumber = extractString(row, [
+        "displayPhoneNumber",
+        "display_phone_number",
+        "phoneNumber",
+        "phone_number",
+        "phone",
+        "mobile",
+      ]);
+
       const accessToken =
         extractString(row, [
           "accessToken",
+          "access_token",
           "metaAccessToken",
           "whatsappToken",
           "wabaToken",
@@ -93,21 +124,37 @@ export async function GET(request: NextRequest) {
         process.env.META_ACCESS_TOKEN ||
         "";
 
+      const primaryTitle =
+        displayName && phoneNumber
+          ? `${displayName} (${phoneNumber})`
+          : displayName || phoneNumber || phoneNumberId || `Channel ${index + 1}`;
+
+      const label = wabaId
+        ? `${primaryTitle} — WABA: ${wabaId}`
+        : primaryTitle;
+
       return {
         id: extractString(row, ["id"]) || `channel-${index + 1}`,
-        label: wabaId ? `${displayPhone} (WABA: ${wabaId})` : displayPhone,
+        label,
+        displayName,
+        phoneNumber,
         phoneNumberId,
         wabaId,
         hasToken: Boolean(accessToken),
       };
     });
 
-    if (channels.length === 0 && (auth.context.phoneNumberId || auth.context.wabaId)) {
+    if (
+      channels.length === 0 &&
+      (auth.context.phoneNumberId || auth.context.wabaId)
+    ) {
       channels.push({
         id: "default-context",
         label: auth.context.wabaId
-          ? `${auth.context.phoneNumberId || "Default"} (WABA: ${auth.context.wabaId})`
+          ? `${auth.context.phoneNumberId || "Default"} — WABA: ${auth.context.wabaId}`
           : auth.context.phoneNumberId || "Default Channel",
+        displayName: "",
+        phoneNumber: "",
         phoneNumberId: auth.context.phoneNumberId || "",
         wabaId: auth.context.wabaId || "",
         hasToken: Boolean(auth.context.metaAccessToken),
@@ -116,8 +163,13 @@ export async function GET(request: NextRequest) {
 
     const activeToken =
       auth.context.metaAccessToken || process.env.META_ACCESS_TOKEN || "";
+
     const activeWabaId =
-      channels[0]?.wabaId || auth.context.wabaId || process.env.META_WABA_ID || "";
+      requestedWabaId ||
+      channels[0]?.wabaId ||
+      auth.context.wabaId ||
+      process.env.META_WABA_ID ||
+      "";
 
     let templates: Array<{
       id: string;
@@ -131,7 +183,11 @@ export async function GET(request: NextRequest) {
 
     let templateFetchError: string | null = null;
 
-    if (activeToken && activeWabaId) {
+    if (!activeToken) {
+      templateFetchError = "Meta access token not found for this channel/user.";
+    } else if (!activeWabaId) {
+      templateFetchError = "WABA ID not found for this channel/user.";
+    } else {
       const metaRes = await fetch(
         `https://graph.facebook.com/v21.0/${encodeURIComponent(
           activeWabaId
@@ -170,7 +226,8 @@ export async function GET(request: NextRequest) {
         });
       } else {
         templateFetchError =
-          metaJson?.error?.message || "Unable to fetch templates from Meta";
+          metaJson?.error?.message ||
+          `Meta Graph API returned status ${metaRes.status} while fetching templates.`;
       }
     }
 
@@ -179,7 +236,11 @@ export async function GET(request: NextRequest) {
       userId: auth.context.userId,
       walletBalance: auth.context.walletBalance,
       defaultVersion: "v21.0",
-      defaultPhoneNumberId: channels[0]?.phoneNumberId || auth.context.phoneNumberId || "",
+      defaultPhoneNumberId:
+        channels.find((c) => c.wabaId === activeWabaId)?.phoneNumberId ||
+        channels[0]?.phoneNumberId ||
+        auth.context.phoneNumberId ||
+        "",
       defaultWabaId: activeWabaId,
       channels,
       templates,

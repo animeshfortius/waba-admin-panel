@@ -7,6 +7,8 @@ type HttpMethod = "GET" | "POST";
 interface ChannelOption {
   id: string;
   label: string;
+  displayName?: string;
+  phoneNumber?: string;
   phoneNumberId: string;
   wabaId: string;
   hasToken: boolean;
@@ -331,56 +333,67 @@ export default function ApiDocsPage() {
 
   const currentValues = formValues[selectedEndpoint.id] || {};
 
-  const loadAccountContext = useCallback(async (tokenToUse: string) => {
-    if (!tokenToUse.trim()) return;
-    setLoadingContext(true);
-    setContextNotice(null);
+  const loadAccountContext = useCallback(
+    async (tokenToUse: string, overrideWabaId?: string) => {
+      if (!tokenToUse.trim()) return;
+      setLoadingContext(true);
+      setContextNotice(null);
 
-    try {
-      const res = await fetch("/api/v1/user/context", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${tokenToUse.trim()}`,
-        },
-      });
-      const json = await res.json().catch(() => ({}));
+      try {
+        const query = overrideWabaId
+          ? `?wabaId=${encodeURIComponent(overrideWabaId)}`
+          : "";
+        const res = await fetch(`/api/v1/user/context${query}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${tokenToUse.trim()}`,
+          },
+        });
+        const json = await res.json().catch(() => ({}));
 
-      if (!res.ok || !json?.success) {
-        setContextNotice(json?.error || "Could not auto-load WABA/templates.");
-        return;
+        if (!res.ok || !json?.success) {
+          setContextNotice(json?.error || "Could not auto-load WABA/templates.");
+          return;
+        }
+
+        const fetchedChannels: ChannelOption[] = Array.isArray(json.channels)
+          ? json.channels
+          : [];
+        const fetchedTemplates: TemplateOption[] = Array.isArray(json.templates)
+          ? json.templates
+          : [];
+
+        setChannels(fetchedChannels);
+        setTemplates(fetchedTemplates);
+
+        const defaultPhone =
+          json.defaultPhoneNumberId || fetchedChannels[0]?.phoneNumberId || "";
+        const defaultWaba =
+          overrideWabaId ||
+          json.defaultWabaId ||
+          fetchedChannels[0]?.wabaId ||
+          "";
+
+        setSelectedPhoneId(defaultPhone);
+        setSelectedWabaId(defaultWaba);
+
+        if (fetchedTemplates.length > 0) {
+          setSelectedTemplateName(fetchedTemplates[0].name);
+        } else {
+          setSelectedTemplateName("");
+        }
+
+        if (json.templateFetchError) {
+          setContextNotice(String(json.templateFetchError));
+        }
+      } catch {
+        setContextNotice("Network error while loading WABA and templates.");
+      } finally {
+        setLoadingContext(false);
       }
-
-      const fetchedChannels: ChannelOption[] = Array.isArray(json.channels)
-        ? json.channels
-        : [];
-      const fetchedTemplates: TemplateOption[] = Array.isArray(json.templates)
-        ? json.templates
-        : [];
-
-      setChannels(fetchedChannels);
-      setTemplates(fetchedTemplates);
-
-      const defaultPhone =
-        fetchedChannels[0]?.phoneNumberId || json.defaultPhoneNumberId || "";
-      const defaultWaba =
-        fetchedChannels[0]?.wabaId || json.defaultWabaId || "";
-
-      setSelectedPhoneId(defaultPhone);
-      setSelectedWabaId(defaultWaba);
-
-      if (fetchedTemplates.length > 0) {
-        setSelectedTemplateName(fetchedTemplates[0].name);
-      }
-
-      if (json.templateFetchError) {
-        setContextNotice(String(json.templateFetchError));
-      }
-    } catch {
-      setContextNotice("Network error while loading WABA and templates.");
-    } finally {
-      setLoadingContext(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     if (activeToken) {
@@ -783,7 +796,6 @@ export default function ApiDocsPage() {
               </button>
             </div>
 
-            {/* Auto-Loaded WABA / Channel & Template Dropdowns */}
             {(channels.length > 0 || templates.length > 0) && (
               <div className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3.5 sm:grid-cols-2">
                 {channels.length > 0 && (
@@ -796,9 +808,15 @@ export default function ApiDocsPage() {
                       onChange={(e) => {
                         const phone = e.target.value;
                         setSelectedPhoneId(phone);
-                        const ch = channels.find((c) => c.phoneNumberId === phone);
+                        const ch = channels.find(
+                          (c) => c.phoneNumberId === phone
+                        );
+                        const nextWaba = ch?.wabaId || selectedWabaId;
                         if (ch?.wabaId) setSelectedWabaId(ch.wabaId);
                         setJsonEditedManually(false);
+                        if (activeToken && nextWaba) {
+                          loadAccountContext(activeToken, nextWaba);
+                        }
                       }}
                       className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
                     >
@@ -836,7 +854,6 @@ export default function ApiDocsPage() {
               </div>
             )}
 
-            {/* Minimal Inputs */}
             {selectedEndpoint.fields.length > 0 && (
               <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {selectedEndpoint.fields.map((field) => (
@@ -858,7 +875,6 @@ export default function ApiDocsPage() {
               </div>
             )}
 
-            {/* Editable Auto-Generated JSON Payload */}
             {selectedEndpoint.method === "POST" && (
               <div className="mt-5">
                 <div className="mb-1.5 flex items-center justify-between">

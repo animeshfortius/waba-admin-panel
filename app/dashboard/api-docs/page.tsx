@@ -1,16 +1,32 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 type HttpMethod = "GET" | "POST";
-type MessageKind = "text" | "template";
+
+interface ChannelOption {
+  id: string;
+  label: string;
+  phoneNumberId: string;
+  wabaId: string;
+  hasToken: boolean;
+}
+
+interface TemplateOption {
+  id: string;
+  name: string;
+  language: string;
+  status: string;
+  category: string;
+  bodyText: string;
+  variableCount: number;
+}
 
 interface EndpointField {
   key: string;
   label: string;
   placeholder: string;
-  location: "path" | "body" | "query";
-  onlyWhen?: MessageKind;
+  location: "path" | "body";
 }
 
 interface ApiEndpointItem {
@@ -20,7 +36,7 @@ interface ApiEndpointItem {
   description: string;
   method: HttpMethod;
   pathTemplate: string;
-  supportsMessageType?: boolean;
+  supportsAutoTemplate?: boolean;
   fields: EndpointField[];
 }
 
@@ -29,56 +45,17 @@ const ENDPOINTS: ApiEndpointItem[] = [
     id: "send-message",
     group: "Messaging & Media",
     title: "Send WhatsApp Message",
-    description: "Send a WhatsApp text or template message via Meta Graph API.",
+    description:
+      "Select a template to auto-fill the JSON payload, enter recipient number, and click Send Request.",
     method: "POST",
     pathTemplate: "/api/{version}/{phoneNumberId}/messages",
-    supportsMessageType: true,
+    supportsAutoTemplate: true,
     fields: [
-      {
-        key: "version",
-        label: "Graph Version",
-        placeholder: "v21.0 / v23.0",
-        location: "path",
-      },
-      {
-        key: "phoneNumberId",
-        label: "Phone Number ID",
-        placeholder: "Enter Phone Number ID",
-        location: "path",
-      },
       {
         key: "to",
         label: "Recipient Number",
         placeholder: "91XXXXXXXXXX",
         location: "body",
-      },
-      {
-        key: "messageText",
-        label: "Message Body",
-        placeholder: "Enter message text",
-        location: "body",
-        onlyWhen: "text",
-      },
-      {
-        key: "templateName",
-        label: "Template Name",
-        placeholder: "Enter approved template name",
-        location: "body",
-        onlyWhen: "template",
-      },
-      {
-        key: "languageCode",
-        label: "Language Code",
-        placeholder: "en_US",
-        location: "body",
-        onlyWhen: "template",
-      },
-      {
-        key: "templateVars",
-        label: "Body Variables (comma separated)",
-        placeholder: "var1, var2",
-        location: "body",
-        onlyWhen: "template",
       },
     ],
   },
@@ -90,12 +67,6 @@ const ENDPOINTS: ApiEndpointItem[] = [
     method: "POST",
     pathTemplate: "/api/v1/media/upload",
     fields: [
-      {
-        key: "phoneNumberId",
-        label: "Phone Number ID",
-        placeholder: "Enter Phone Number ID",
-        location: "body",
-      },
       {
         key: "mediaType",
         label: "Media Type",
@@ -114,7 +85,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
     id: "get-templates",
     group: "Templates & Marketing",
     title: "Get Message Templates",
-    description: "Fetch message templates from configured WABA ID.",
+    description: "Fetch message templates for the active WABA.",
     method: "GET",
     pathTemplate: "/api/v1/meta/templates",
     fields: [],
@@ -127,12 +98,6 @@ const ENDPOINTS: ApiEndpointItem[] = [
     method: "POST",
     pathTemplate: "/api/v1/meta/templates",
     fields: [
-      {
-        key: "wabaId",
-        label: "WABA ID",
-        placeholder: "Enter WABA ID",
-        location: "body",
-      },
       {
         key: "name",
         label: "Template Name",
@@ -163,7 +128,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
     id: "get-template-by-id",
     group: "Templates & Marketing",
     title: "Get Template by ID",
-    description: "Fetch a specific message template by its Meta ID.",
+    description: "Fetch details of a specific template ID.",
     method: "GET",
     pathTemplate: "/api/v1/meta/templates/{id}",
     fields: [
@@ -179,17 +144,10 @@ const ENDPOINTS: ApiEndpointItem[] = [
     id: "sync-templates",
     group: "Templates & Marketing",
     title: "Sync Templates",
-    description: "Sync templates from Meta WABA account.",
+    description: "Sync all templates from Meta WABA account.",
     method: "POST",
     pathTemplate: "/api/v1/meta/templates/sync",
-    fields: [
-      {
-        key: "wabaId",
-        label: "WABA ID",
-        placeholder: "Enter WABA ID",
-        location: "body",
-      },
-    ],
+    fields: [],
   },
   {
     id: "clevertap",
@@ -200,12 +158,6 @@ const ENDPOINTS: ApiEndpointItem[] = [
     pathTemplate: "/api/v1/meta/clevertap",
     fields: [
       {
-        key: "phoneNumberId",
-        label: "Phone Number ID",
-        placeholder: "Enter Phone Number ID",
-        location: "body",
-      },
-      {
         key: "to",
         label: "Recipient Number",
         placeholder: "91XXXXXXXXXX",
@@ -214,7 +166,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
       {
         key: "templateName",
         label: "Template Name",
-        placeholder: "Enter approved template name",
+        placeholder: "Select or enter template name",
         location: "body",
       },
       {
@@ -234,12 +186,6 @@ const ENDPOINTS: ApiEndpointItem[] = [
     pathTemplate: "/api/v1/meta/moengage",
     fields: [
       {
-        key: "phoneNumberId",
-        label: "Phone Number ID",
-        placeholder: "Enter Phone Number ID",
-        location: "body",
-      },
-      {
         key: "to",
         label: "Recipient Number",
         placeholder: "91XXXXXXXXXX",
@@ -248,7 +194,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
       {
         key: "templateName",
         label: "Template Name",
-        placeholder: "Enter approved template name",
+        placeholder: "Select or enter template name",
         location: "body",
       },
       {
@@ -268,12 +214,6 @@ const ENDPOINTS: ApiEndpointItem[] = [
     pathTemplate: "/api/v1/meta/webengage",
     fields: [
       {
-        key: "phoneNumberId",
-        label: "Phone Number ID",
-        placeholder: "Enter Phone Number ID",
-        location: "body",
-      },
-      {
         key: "to",
         label: "Recipient Number",
         placeholder: "91XXXXXXXXXX",
@@ -282,7 +222,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
       {
         key: "templateName",
         label: "Template Name",
-        placeholder: "Enter approved template name",
+        placeholder: "Select or enter template name",
         location: "body",
       },
       {
@@ -297,7 +237,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
     id: "wallet-balance",
     group: "Account & Webhooks",
     title: "Get Wallet Balance",
-    description: "Fetch wallet balance for the authenticated user.",
+    description: "Check wallet balance for the active token.",
     method: "GET",
     pathTemplate: "/api/v1/user/balance",
     fields: [],
@@ -306,7 +246,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
     id: "webhook-test",
     group: "Account & Webhooks",
     title: "Webhook Event",
-    description: "Send a payload to /api/v1/webhook.",
+    description: "Send a test event to /api/v1/webhook.",
     method: "POST",
     pathTemplate: "/api/v1/webhook",
     fields: [
@@ -326,26 +266,58 @@ const ENDPOINTS: ApiEndpointItem[] = [
   },
 ];
 
+function buildTemplatePayload(tpl: TemplateOption, toValue: string) {
+  const parameters = Array.from({ length: tpl.variableCount }, (_, idx) => ({
+    type: "text",
+    text: `{{${idx + 1}}}`,
+  }));
+
+  const templateObj: Record<string, unknown> = {
+    name: tpl.name,
+    language: {
+      code: tpl.language || "en_US",
+    },
+  };
+
+  if (parameters.length > 0) {
+    templateObj.components = [
+      {
+        type: "body",
+        parameters,
+      },
+    ];
+  }
+
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    ...(toValue ? { to: toValue } : {}),
+    type: "template",
+    template: templateObj,
+  };
+}
+
 export default function ApiDocsPage() {
   const [tokenInput, setTokenInput] = useState("");
   const [activeToken, setActiveToken] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string>(ENDPOINTS[0].id);
-  const [messageKind, setMessageKind] = useState<MessageKind>("text");
 
-  const initialFieldValues = useMemo(() => {
-    const map: Record<string, Record<string, string>> = {};
-    for (const ep of ENDPOINTS) {
-      map[ep.id] = {};
-      for (const f of ep.fields) {
-        map[ep.id][f.key] = "";
-      }
-    }
-    return map;
-  }, []);
+  const [graphVersion] = useState("v21.0");
+  const [channels, setChannels] = useState<ChannelOption[]>([]);
+  const [selectedPhoneId, setSelectedPhoneId] = useState("");
+  const [selectedWabaId, setSelectedWabaId] = useState("");
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [selectedTemplateName, setSelectedTemplateName] = useState("");
+  const [loadingContext, setLoadingContext] = useState(false);
+  const [contextNotice, setContextNotice] = useState<string | null>(null);
 
-  const [formValues, setFormValues] =
-    useState<Record<string, Record<string, string>>>(initialFieldValues);
+  const [formValues, setFormValues] = useState<
+    Record<string, Record<string, string>>
+  >({});
+  const [rawJsonText, setRawJsonText] = useState("{}");
+  const [jsonEditedManually, setJsonEditedManually] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [copiedCurl, setCopiedCurl] = useState(false);
   const [responseBox, setResponseBox] = useState<{
@@ -359,15 +331,74 @@ export default function ApiDocsPage() {
 
   const currentValues = formValues[selectedEndpoint.id] || {};
 
-  const visibleFields = useMemo(() => {
-    return selectedEndpoint.fields.filter((f) => {
-      if (!f.onlyWhen) return true;
-      return f.onlyWhen === messageKind;
-    });
-  }, [selectedEndpoint, messageKind]);
+  const loadAccountContext = useCallback(async (tokenToUse: string) => {
+    if (!tokenToUse.trim()) return;
+    setLoadingContext(true);
+    setContextNotice(null);
+
+    try {
+      const res = await fetch("/api/v1/user/context", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${tokenToUse.trim()}`,
+        },
+      });
+      const json = await res.json().catch(() => ({}));
+
+      if (!res.ok || !json?.success) {
+        setContextNotice(json?.error || "Could not auto-load WABA/templates.");
+        return;
+      }
+
+      const fetchedChannels: ChannelOption[] = Array.isArray(json.channels)
+        ? json.channels
+        : [];
+      const fetchedTemplates: TemplateOption[] = Array.isArray(json.templates)
+        ? json.templates
+        : [];
+
+      setChannels(fetchedChannels);
+      setTemplates(fetchedTemplates);
+
+      const defaultPhone =
+        fetchedChannels[0]?.phoneNumberId || json.defaultPhoneNumberId || "";
+      const defaultWaba =
+        fetchedChannels[0]?.wabaId || json.defaultWabaId || "";
+
+      setSelectedPhoneId(defaultPhone);
+      setSelectedWabaId(defaultWaba);
+
+      if (fetchedTemplates.length > 0) {
+        setSelectedTemplateName(fetchedTemplates[0].name);
+      }
+
+      if (json.templateFetchError) {
+        setContextNotice(String(json.templateFetchError));
+      }
+    } catch {
+      setContextNotice("Network error while loading WABA and templates.");
+    } finally {
+      setLoadingContext(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeToken) {
+      loadAccountContext(activeToken);
+    }
+  }, [activeToken, loadAccountContext]);
+
+  const activeTemplateObj = useMemo(() => {
+    return templates.find((t) => t.name === selectedTemplateName) || null;
+  }, [templates, selectedTemplateName]);
 
   const resolvedPath = useMemo(() => {
     let url = selectedEndpoint.pathTemplate;
+    url = url.replace("{version}", graphVersion);
+    url = url.replace(
+      "{phoneNumberId}",
+      selectedPhoneId ? encodeURIComponent(selectedPhoneId) : "{phoneNumberId}"
+    );
     for (const f of selectedEndpoint.fields) {
       if (f.location === "path") {
         const raw = (currentValues[f.key] || "").trim();
@@ -378,71 +409,50 @@ export default function ApiDocsPage() {
       }
     }
     return url;
-  }, [selectedEndpoint, currentValues]);
+  }, [selectedEndpoint, graphVersion, selectedPhoneId, currentValues]);
 
-  const builtRequestBody = useMemo(() => {
+  const generatedPayload = useMemo(() => {
     if (selectedEndpoint.method === "GET") return null;
 
     if (selectedEndpoint.id === "send-message") {
       const toVal = (currentValues.to || "").trim();
-
-      if (messageKind === "template") {
-        const templateName = (currentValues.templateName || "").trim();
-        const languageCode = (currentValues.languageCode || "").trim();
-        const rawVars = (currentValues.templateVars || "").trim();
-        const varList = rawVars
-          ? rawVars
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : [];
-
-        const templateObj: Record<string, unknown> = {};
-        if (templateName) templateObj.name = templateName;
-        if (languageCode) {
-          templateObj.language = { code: languageCode };
-        }
-        if (varList.length > 0) {
-          templateObj.components = [
-            {
-              type: "body",
-              parameters: varList.map((text) => ({
-                type: "text",
-                text,
-              })),
-            },
-          ];
-        }
-
-        const payload: Record<string, unknown> = {
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          type: "template",
-        };
-        if (toVal) payload.to = toVal;
-        if (Object.keys(templateObj).length > 0) {
-          payload.template = templateObj;
-        }
-        return payload;
+      if (activeTemplateObj) {
+        return buildTemplatePayload(activeTemplateObj, toVal);
       }
-
-      const payload: Record<string, unknown> = {
+      return {
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        type: "text",
+        ...(toVal ? { to: toVal } : {}),
+        type: "template",
+        template: {
+          name: "",
+          language: {
+            code: "",
+          },
+        },
       };
-      const textVal = (currentValues.messageText || "").trim();
-      if (toVal) payload.to = toVal;
-      if (textVal) {
-        payload.text = {
-          preview_url: false,
-          body: textVal,
-        };
-      }
-      return payload;
     }
 
     const payload: Record<string, unknown> = {};
+    if (selectedPhoneId && selectedEndpoint.id === "upload-media") {
+      payload.phoneNumberId = selectedPhoneId;
+    }
+    if (
+      selectedWabaId &&
+      (selectedEndpoint.id === "create-template" ||
+        selectedEndpoint.id === "sync-templates")
+    ) {
+      payload.wabaId = selectedWabaId;
+    }
+    if (
+      selectedPhoneId &&
+      (selectedEndpoint.id === "clevertap" ||
+        selectedEndpoint.id === "moengage" ||
+        selectedEndpoint.id === "webengage")
+    ) {
+      payload.phoneNumberId = selectedPhoneId;
+    }
+
     for (const f of selectedEndpoint.fields) {
       if (f.location === "body") {
         const val = (currentValues[f.key] ?? "").trim();
@@ -451,8 +461,32 @@ export default function ApiDocsPage() {
         }
       }
     }
+
+    if (
+      (selectedEndpoint.id === "clevertap" ||
+        selectedEndpoint.id === "moengage" ||
+        selectedEndpoint.id === "webengage") &&
+      !payload.templateName &&
+      selectedTemplateName
+    ) {
+      payload.templateName = selectedTemplateName;
+    }
+
     return payload;
-  }, [selectedEndpoint, currentValues, messageKind]);
+  }, [
+    selectedEndpoint,
+    currentValues,
+    activeTemplateObj,
+    selectedPhoneId,
+    selectedWabaId,
+    selectedTemplateName,
+  ]);
+
+  useEffect(() => {
+    if (selectedEndpoint.method === "POST" && !jsonEditedManually) {
+      setRawJsonText(JSON.stringify(generatedPayload || {}, null, 2));
+    }
+  }, [selectedEndpoint.method, generatedPayload, jsonEditedManually]);
 
   const curlSnippet = useMemo(() => {
     const origin =
@@ -460,29 +494,24 @@ export default function ApiDocsPage() {
         ? window.location.origin
         : "http://localhost:3000";
     const fullUrl = `${origin}${resolvedPath}`;
-    const phoneIdVal = (currentValues.phoneNumberId || "").trim();
-    const phoneHeaderPart = phoneIdVal
-      ? ` \\\n  -H "x-phone-number-id: ${phoneIdVal}"`
-      : "";
     const authPart = activeToken
       ? ` \\\n  -H "Authorization: Bearer ${activeToken}"`
       : ` \\\n  -H "Authorization: Bearer YOUR_API_TOKEN"`;
+    const phoneHdr = selectedPhoneId
+      ? ` \\\n  -H "x-phone-number-id: ${selectedPhoneId}"`
+      : "";
 
     if (selectedEndpoint.method === "GET") {
-      return `curl -X GET "${fullUrl}"${authPart}${phoneHeaderPart}`;
+      return `curl -X GET "${fullUrl}"${authPart}${phoneHdr}`;
     }
 
-    return `curl -X POST "${fullUrl}"${authPart}${phoneHeaderPart} \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(
-      builtRequestBody || {},
-      null,
-      2
-    )}'`;
+    return `curl -X POST "${fullUrl}"${authPart}${phoneHdr} \\\n  -H "Content-Type: application/json" \\\n  -d '${rawJsonText}'`;
   }, [
     resolvedPath,
     activeToken,
+    selectedPhoneId,
     selectedEndpoint.method,
-    builtRequestBody,
-    currentValues,
+    rawJsonText,
   ]);
 
   const filteredEndpoints = useMemo(() => {
@@ -509,6 +538,7 @@ export default function ApiDocsPage() {
   }, [filteredEndpoints]);
 
   function handleFieldChange(key: string, value: string) {
+    setJsonEditedManually(false);
     setFormValues((prev) => ({
       ...prev,
       [selectedEndpoint.id]: {
@@ -520,31 +550,51 @@ export default function ApiDocsPage() {
 
   function handleApplyToken(e: React.FormEvent) {
     e.preventDefault();
+    setJsonEditedManually(false);
     setActiveToken(tokenInput.trim());
+  }
+
+  function handleSelectTemplate(tplName: string) {
+    setJsonEditedManually(false);
+    setSelectedTemplateName(tplName);
+    const tpl = templates.find((t) => t.name === tplName);
+    if (tpl) {
+      setFormValues((prev) => ({
+        ...prev,
+        [selectedEndpoint.id]: {
+          ...(prev[selectedEndpoint.id] || {}),
+          templateName: tpl.name,
+          language: tpl.language,
+        },
+      }));
+    }
   }
 
   async function handleTryRequest() {
     setLoading(true);
     const started = performance.now();
+
     try {
+      let bodyToSend: string | undefined;
+      if (selectedEndpoint.method === "POST") {
+        JSON.parse(rawJsonText);
+        bodyToSend = rawJsonText;
+      }
+
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
       if (activeToken) {
         headers.Authorization = `Bearer ${activeToken}`;
       }
-      const phoneIdVal = (currentValues.phoneNumberId || "").trim();
-      if (phoneIdVal) {
-        headers["x-phone-number-id"] = phoneIdVal;
+      if (selectedPhoneId) {
+        headers["x-phone-number-id"] = selectedPhoneId;
       }
 
       const res = await fetch(resolvedPath, {
         method: selectedEndpoint.method,
         headers,
-        body:
-          selectedEndpoint.method === "POST"
-            ? JSON.stringify(builtRequestBody || {})
-            : undefined,
+        body: bodyToSend,
       });
 
       const contentType = res.headers.get("content-type") || "";
@@ -563,7 +613,10 @@ export default function ApiDocsPage() {
         durationMs: Math.round(performance.now() - started),
         data: {
           success: false,
-          error: err instanceof Error ? err.message : "Network request failed",
+          error:
+            err instanceof Error
+              ? err.message
+              : "Invalid JSON payload or network error",
         },
       });
     } finally {
@@ -593,7 +646,7 @@ export default function ApiDocsPage() {
               </span>
             </div>
             <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-900">
-              WhatsApp Business API Reference & Live Tester
+              WhatsApp Business API Reference & Instant Tester
             </h1>
           </div>
 
@@ -610,14 +663,15 @@ export default function ApiDocsPage() {
             />
             <button
               type="submit"
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+              disabled={loadingContext}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
             >
-              Set Token
+              {loadingContext ? "Loading..." : "Set Token"}
             </button>
             {activeToken ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                Token Active
+                {templates.length} Templates Loaded
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
@@ -627,6 +681,14 @@ export default function ApiDocsPage() {
           </form>
         </div>
       </header>
+
+      {contextNotice && (
+        <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-medium text-amber-800">
+            {contextNotice}
+          </div>
+        </div>
+      )}
 
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12">
         <aside className="lg:col-span-4 xl:col-span-3">
@@ -655,6 +717,7 @@ export default function ApiDocsPage() {
                             type="button"
                             onClick={() => {
                               setSelectedId(item.id);
+                              setJsonEditedManually(false);
                               setResponseBox(null);
                             }}
                             className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm transition ${
@@ -720,71 +783,109 @@ export default function ApiDocsPage() {
               </button>
             </div>
 
-            {selectedEndpoint.supportsMessageType && (
-              <div className="mt-4 flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Payload Type:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setMessageKind("text")}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                    messageKind === "text"
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  Text Message
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMessageKind("template")}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                    messageKind === "template"
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  Template Payload
-                </button>
+            {/* Auto-Loaded WABA / Channel & Template Dropdowns */}
+            {(channels.length > 0 || templates.length > 0) && (
+              <div className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3.5 sm:grid-cols-2">
+                {channels.length > 0 && (
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">
+                      Auto-Detected WABA / Number
+                    </label>
+                    <select
+                      value={selectedPhoneId}
+                      onChange={(e) => {
+                        const phone = e.target.value;
+                        setSelectedPhoneId(phone);
+                        const ch = channels.find((c) => c.phoneNumberId === phone);
+                        if (ch?.wabaId) setSelectedWabaId(ch.wabaId);
+                        setJsonEditedManually(false);
+                      }}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
+                    >
+                      {channels.map((ch) => (
+                        <option key={ch.id} value={ch.phoneNumberId}>
+                          {ch.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {templates.length > 0 &&
+                  (selectedEndpoint.supportsAutoTemplate ||
+                    selectedEndpoint.id === "clevertap" ||
+                    selectedEndpoint.id === "moengage" ||
+                    selectedEndpoint.id === "webengage") && (
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-700">
+                        Select Template (Auto-Fills Payload)
+                      </label>
+                      <select
+                        value={selectedTemplateName}
+                        onChange={(e) => handleSelectTemplate(e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
+                      >
+                        {templates.map((tpl) => (
+                          <option key={`${tpl.id}-${tpl.name}`} value={tpl.name}>
+                            {tpl.name} ({tpl.language})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
               </div>
             )}
 
-            <div className="mt-5">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Parameters
-              </h3>
+            {/* Minimal Inputs */}
+            {selectedEndpoint.fields.length > 0 && (
+              <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {selectedEndpoint.fields.map((field) => (
+                  <div key={field.key}>
+                    <label className="mb-1.5 block text-xs font-medium text-slate-700">
+                      {field.label}
+                    </label>
+                    <input
+                      type="text"
+                      value={currentValues[field.key] ?? ""}
+                      onChange={(e) =>
+                        handleFieldChange(field.key, e.target.value)
+                      }
+                      placeholder={field.placeholder}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
 
-              {visibleFields.length === 0 ? (
-                <p className="mt-2 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                  No parameters required for this endpoint.
-                </p>
-              ) : (
-                <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {visibleFields.map((field) => (
-                    <div key={field.key}>
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <label className="text-xs font-medium text-slate-700">
-                          {field.label}
-                        </label>
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-slate-500">
-                          {field.location}
-                        </span>
-                      </div>
-                      <input
-                        type="text"
-                        value={currentValues[field.key] ?? ""}
-                        onChange={(e) =>
-                          handleFieldChange(field.key, e.target.value)
-                        }
-                        placeholder={field.placeholder}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                      />
-                    </div>
-                  ))}
+            {/* Editable Auto-Generated JSON Payload */}
+            {selectedEndpoint.method === "POST" && (
+              <div className="mt-5">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Request JSON Payload (Auto-Generated & Editable)
+                  </label>
+                  {jsonEditedManually && (
+                    <button
+                      type="button"
+                      onClick={() => setJsonEditedManually(false)}
+                      className="text-xs font-medium text-indigo-600 hover:underline"
+                    >
+                      Reset to Auto Payload
+                    </button>
+                  )}
                 </div>
-              )}
-            </div>
+                <textarea
+                  rows={10}
+                  value={rawJsonText}
+                  onChange={(e) => {
+                    setJsonEditedManually(true);
+                    setRawJsonText(e.target.value);
+                  }}
+                  className="w-full rounded-lg border border-slate-300 bg-slate-950 p-3.5 font-mono text-xs leading-relaxed text-emerald-300 focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+            )}
           </section>
 
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">

@@ -31,7 +31,7 @@ async function collectChannelsForUser(userId: string): Promise<RecordMap[]> {
           return allRows;
         }
       } catch {
-        // try next model candidate if present
+        // try next model candidate
       }
     }
   }
@@ -48,6 +48,52 @@ function extractString(rec: RecordMap | null | undefined, keys: string[]): strin
     }
   }
   return "";
+}
+
+function parseTemplateComponents(components: RecordMap[]) {
+  let headerType: "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT" = "NONE";
+  let headerVariableCount = 0;
+  let bodyText = "";
+  let bodyVariableCount = 0;
+  let hasDynamicUrlButton = false;
+  let urlButtonIndex = 0;
+
+  for (const comp of components) {
+    const type = String(comp.type || "").toUpperCase();
+
+    if (type === "HEADER") {
+      const format = String(comp.format || "TEXT").toUpperCase();
+      if (format === "IMAGE" || format === "VIDEO" || format === "DOCUMENT") {
+        headerType = format;
+        headerVariableCount = 1;
+      } else if (format === "TEXT") {
+        headerType = "TEXT";
+        const hText = typeof comp.text === "string" ? comp.text : "";
+        headerVariableCount = (hText.match(/\{\{\d+\}\}/g) || []).length;
+      }
+    } else if (type === "BODY") {
+      bodyText = typeof comp.text === "string" ? comp.text : "";
+      bodyVariableCount = (bodyText.match(/\{\{\d+\}\}/g) || []).length;
+    } else if (type === "BUTTONS" && Array.isArray(comp.buttons)) {
+      (comp.buttons as RecordMap[]).forEach((btn, idx) => {
+        const btnType = String(btn.type || "").toUpperCase();
+        const urlStr = typeof btn.url === "string" ? btn.url : "";
+        if (btnType === "URL" && /\{\{\d+\}\}/.test(urlStr)) {
+          hasDynamicUrlButton = true;
+          urlButtonIndex = idx;
+        }
+      });
+    }
+  }
+
+  return {
+    headerType,
+    headerVariableCount,
+    bodyText,
+    bodyVariableCount,
+    hasDynamicUrlButton,
+    urlButtonIndex,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -186,8 +232,12 @@ export async function GET(request: NextRequest) {
       language: string;
       status: string;
       category: string;
+      headerType: "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT";
+      headerVariableCount: number;
       bodyText: string;
       variableCount: number;
+      hasDynamicUrlButton: boolean;
+      urlButtonIndex: number;
     }> = [];
 
     let templateFetchError: string | null = null;
@@ -216,12 +266,7 @@ export async function GET(request: NextRequest) {
           const components = Array.isArray(tpl.components)
             ? (tpl.components as RecordMap[])
             : [];
-          const bodyComp = components.find(
-            (c) => String(c.type || "").toUpperCase() === "BODY"
-          );
-          const bodyText =
-            typeof bodyComp?.text === "string" ? bodyComp.text : "";
-          const matches = bodyText.match(/\{\{\d+\}\}/g) || [];
+          const parsed = parseTemplateComponents(components);
 
           return {
             id: String(tpl.id || tpl.name || ""),
@@ -229,8 +274,12 @@ export async function GET(request: NextRequest) {
             language: String(tpl.language || "en_US"),
             status: String(tpl.status || ""),
             category: String(tpl.category || ""),
-            bodyText,
-            variableCount: matches.length,
+            headerType: parsed.headerType,
+            headerVariableCount: parsed.headerVariableCount,
+            bodyText: parsed.bodyText,
+            variableCount: parsed.bodyVariableCount,
+            hasDynamicUrlButton: parsed.hasDynamicUrlButton,
+            urlButtonIndex: parsed.urlButtonIndex,
           };
         });
       } else {

@@ -20,8 +20,12 @@ interface TemplateOption {
   language: string;
   status: string;
   category: string;
+  headerType: "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT";
+  headerVariableCount: number;
   bodyText: string;
   variableCount: number;
+  hasDynamicUrlButton: boolean;
+  urlButtonIndex: number;
 }
 
 interface EndpointField {
@@ -48,7 +52,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
     group: "Messaging & Media",
     title: "Send WhatsApp Message",
     description:
-      "Select a template to auto-fill the JSON payload, enter recipient number, and click Send Request.",
+      "Select a template, enter variable values, enter recipient number, and send.",
     method: "POST",
     pathTemplate: "/api/{version}/{phoneNumberId}/messages",
     supportsAutoTemplate: true,
@@ -268,11 +272,121 @@ const ENDPOINTS: ApiEndpointItem[] = [
   },
 ];
 
-function buildTemplatePayload(tpl: TemplateOption, toValue: string) {
-  const parameters = Array.from({ length: tpl.variableCount }, (_, idx) => ({
-    type: "text",
-    text: `{{${idx + 1}}}`,
-  }));
+function extractErrorMessage(payload: unknown, fallbackStatus?: number | null): string {
+  if (!payload) {
+    return fallbackStatus ? `Request failed with HTTP ${fallbackStatus}` : "Request failed";
+  }
+  if (typeof payload === "string") {
+    return payload.trim() || "Request failed";
+  }
+  if (typeof payload === "object") {
+    const obj = payload as Record<string, unknown>;
+    if (typeof obj.error === "string" && obj.error.trim()) {
+      return obj.error.trim();
+    }
+    if (obj.error && typeof obj.error === "object") {
+      const nestedErr = obj.error as Record<string, unknown>;
+      if (typeof nestedErr.message === "string" && nestedErr.message.trim()) {
+        return nestedErr.message.trim();
+      }
+    }
+    if (obj.data && typeof obj.data === "object") {
+      const dataObj = obj.data as Record<string, unknown>;
+      if (dataObj.error && typeof dataObj.error === "object") {
+        const metaErr = dataObj.error as Record<string, unknown>;
+        if (typeof metaErr.message === "string" && metaErr.message.trim()) {
+          return metaErr.message.trim();
+        }
+      }
+    }
+    if (typeof obj.message === "string" && obj.message.trim()) {
+      return obj.message.trim();
+    }
+  }
+  return fallbackStatus ? `Request failed with HTTP ${fallbackStatus}` : "Request failed";
+}
+
+function buildTemplatePayload(
+  tpl: TemplateOption,
+  toValue: string,
+  headerValue: string,
+  bodyVarValues: string[],
+  buttonUrlSuffix: string
+) {
+  const components: Array<Record<string, unknown>> = [];
+
+  if (tpl.headerVariableCount > 0) {
+    if (tpl.headerType === "IMAGE") {
+      components.push({
+        type: "header",
+        parameters: [
+          {
+            type: "image",
+            image: { link: headerValue.trim() || "{{header_image_url}}" },
+          },
+        ],
+      });
+    } else if (tpl.headerType === "VIDEO") {
+      components.push({
+        type: "header",
+        parameters: [
+          {
+            type: "video",
+            video: { link: headerValue.trim() || "{{header_video_url}}" },
+          },
+        ],
+      });
+    } else if (tpl.headerType === "DOCUMENT") {
+      components.push({
+        type: "header",
+        parameters: [
+          {
+            type: "document",
+            document: { link: headerValue.trim() || "{{header_document_url}}" },
+          },
+        ],
+      });
+    } else if (tpl.headerType === "TEXT") {
+      components.push({
+        type: "header",
+        parameters: [
+          {
+            type: "text",
+            text: headerValue.trim() || "{{1}}",
+          },
+        ],
+      });
+    }
+  }
+
+  if (tpl.variableCount > 0) {
+    const parameters = Array.from({ length: tpl.variableCount }, (_, idx) => {
+      const typed = (bodyVarValues[idx] ?? "").trim();
+      return {
+        type: "text",
+        text: typed.length > 0 ? typed : `{{${idx + 1}}}`,
+      };
+    });
+
+    components.push({
+      type: "body",
+      parameters,
+    });
+  }
+
+  if (tpl.hasDynamicUrlButton) {
+    components.push({
+      type: "button",
+      sub_type: "url",
+      index: String(tpl.urlButtonIndex),
+      parameters: [
+        {
+          type: "text",
+          text: buttonUrlSuffix.trim() || "{{1}}",
+        },
+      ],
+    });
+  }
 
   const templateObj: Record<string, unknown> = {
     name: tpl.name,
@@ -281,13 +395,8 @@ function buildTemplatePayload(tpl: TemplateOption, toValue: string) {
     },
   };
 
-  if (parameters.length > 0) {
-    templateObj.components = [
-      {
-        type: "body",
-        parameters,
-      },
-    ];
+  if (components.length > 0) {
+    templateObj.components = components;
   }
 
   return {
@@ -311,6 +420,11 @@ export default function ApiDocsPage() {
   const [selectedWabaId, setSelectedWabaId] = useState("");
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [selectedTemplateName, setSelectedTemplateName] = useState("");
+
+  const [headerVarValue, setHeaderVarValue] = useState("");
+  const [templateVarValues, setTemplateVarValues] = useState<string[]>([]);
+  const [buttonVarValue, setButtonVarValue] = useState("");
+
   const [loadingContext, setLoadingContext] = useState(false);
   const [contextNotice, setContextNotice] = useState<string | null>(null);
 
@@ -324,6 +438,9 @@ export default function ApiDocsPage() {
   const [copiedCurl, setCopiedCurl] = useState(false);
   const [responseBox, setResponseBox] = useState<{
     status: number | null;
+    statusText: string;
+    isOk: boolean;
+    errorSummary: string | null;
     durationMs: number | null;
     data: unknown;
   } | null>(null);
@@ -378,9 +495,16 @@ export default function ApiDocsPage() {
         setSelectedWabaId(defaultWaba);
 
         if (fetchedTemplates.length > 0) {
-          setSelectedTemplateName(fetchedTemplates[0].name);
+          const firstTpl = fetchedTemplates[0];
+          setSelectedTemplateName(firstTpl.name);
+          setHeaderVarValue("");
+          setButtonVarValue("");
+          setTemplateVarValues(Array(firstTpl.variableCount).fill(""));
         } else {
           setSelectedTemplateName("");
+          setHeaderVarValue("");
+          setButtonVarValue("");
+          setTemplateVarValues([]);
         }
 
         if (json.templateFetchError) {
@@ -430,7 +554,13 @@ export default function ApiDocsPage() {
     if (selectedEndpoint.id === "send-message") {
       const toVal = (currentValues.to || "").trim();
       if (activeTemplateObj) {
-        return buildTemplatePayload(activeTemplateObj, toVal);
+        return buildTemplatePayload(
+          activeTemplateObj,
+          toVal,
+          headerVarValue,
+          templateVarValues,
+          buttonVarValue
+        );
       }
       return {
         messaging_product: "whatsapp",
@@ -490,6 +620,9 @@ export default function ApiDocsPage() {
     selectedEndpoint,
     currentValues,
     activeTemplateObj,
+    headerVarValue,
+    templateVarValues,
+    buttonVarValue,
     selectedPhoneId,
     selectedWabaId,
     selectedTemplateName,
@@ -561,6 +694,15 @@ export default function ApiDocsPage() {
     }));
   }
 
+  function handleVariableInputChange(index: number, value: string) {
+    setJsonEditedManually(false);
+    setTemplateVarValues((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  }
+
   function handleApplyToken(e: React.FormEvent) {
     e.preventDefault();
     setJsonEditedManually(false);
@@ -572,6 +714,9 @@ export default function ApiDocsPage() {
     setSelectedTemplateName(tplName);
     const tpl = templates.find((t) => t.name === tplName);
     if (tpl) {
+      setHeaderVarValue("");
+      setButtonVarValue("");
+      setTemplateVarValues(Array(tpl.variableCount).fill(""));
       setFormValues((prev) => ({
         ...prev,
         [selectedEndpoint.id]: {
@@ -615,21 +760,42 @@ export default function ApiDocsPage() {
         ? await res.json()
         : await res.text();
 
+      const payloadSuccess =
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "success" in parsed &&
+        (parsed as { success?: unknown }).success === false
+          ? false
+          : res.ok;
+
+      const labelText = res.statusText
+        ? `${res.status} ${res.statusText}`
+        : `HTTP ${res.status}`;
+
       setResponseBox({
         status: res.status,
+        statusText: labelText,
+        isOk: payloadSuccess,
+        errorSummary: payloadSuccess
+          ? null
+          : extractErrorMessage(parsed, res.status),
         durationMs: Math.round(performance.now() - started),
         data: parsed,
       });
     } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Invalid JSON payload or network error";
       setResponseBox({
         status: null,
+        statusText: "Request Error",
+        isOk: false,
+        errorSummary: msg,
         durationMs: Math.round(performance.now() - started),
         data: {
           success: false,
-          error:
-            err instanceof Error
-              ? err.message
-              : "Invalid JSON payload or network error",
+          error: msg,
         },
       });
     } finally {
@@ -646,6 +812,13 @@ export default function ApiDocsPage() {
       setCopiedCurl(false);
     }
   }
+
+  const hasAnyTemplateInputs =
+    selectedEndpoint.supportsAutoTemplate &&
+    activeTemplateObj &&
+    (activeTemplateObj.headerVariableCount > 0 ||
+      activeTemplateObj.variableCount > 0 ||
+      activeTemplateObj.hasDynamicUrlButton);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -797,60 +970,174 @@ export default function ApiDocsPage() {
             </div>
 
             {(channels.length > 0 || templates.length > 0) && (
-              <div className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3.5 sm:grid-cols-2">
-                {channels.length > 0 && (
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-700">
-                      Auto-Detected WABA / Number
-                    </label>
-                    <select
-                      value={selectedPhoneId}
-                      onChange={(e) => {
-                        const phone = e.target.value;
-                        setSelectedPhoneId(phone);
-                        const ch = channels.find(
-                          (c) => c.phoneNumberId === phone
-                        );
-                        const nextWaba = ch?.wabaId || selectedWabaId;
-                        if (ch?.wabaId) setSelectedWabaId(ch.wabaId);
-                        setJsonEditedManually(false);
-                        if (activeToken && nextWaba) {
-                          loadAccountContext(activeToken, nextWaba);
-                        }
-                      }}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
-                    >
-                      {channels.map((ch) => (
-                        <option key={ch.id} value={ch.phoneNumberId}>
-                          {ch.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {templates.length > 0 &&
-                  (selectedEndpoint.supportsAutoTemplate ||
-                    selectedEndpoint.id === "clevertap" ||
-                    selectedEndpoint.id === "moengage" ||
-                    selectedEndpoint.id === "webengage") && (
+              <div className="mt-4 space-y-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3.5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {channels.length > 0 && (
                     <div>
                       <label className="mb-1 block text-xs font-semibold text-slate-700">
-                        Select Template (Auto-Fills Payload)
+                        Auto-Detected WABA / Number
                       </label>
                       <select
-                        value={selectedTemplateName}
-                        onChange={(e) => handleSelectTemplate(e.target.value)}
+                        value={selectedPhoneId}
+                        onChange={(e) => {
+                          const phone = e.target.value;
+                          setSelectedPhoneId(phone);
+                          const ch = channels.find(
+                            (c) => c.phoneNumberId === phone
+                          );
+                          const nextWaba = ch?.wabaId || selectedWabaId;
+                          if (ch?.wabaId) setSelectedWabaId(ch.wabaId);
+                          setJsonEditedManually(false);
+                          if (activeToken && nextWaba) {
+                            loadAccountContext(activeToken, nextWaba);
+                          }
+                        }}
                         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
                       >
-                        {templates.map((tpl) => (
-                          <option key={`${tpl.id}-${tpl.name}`} value={tpl.name}>
-                            {tpl.name} ({tpl.language})
+                        {channels.map((ch) => (
+                          <option key={ch.id} value={ch.phoneNumberId}>
+                            {ch.label}
                           </option>
                         ))}
                       </select>
                     </div>
                   )}
+
+                  {templates.length > 0 &&
+                    (selectedEndpoint.supportsAutoTemplate ||
+                      selectedEndpoint.id === "clevertap" ||
+                      selectedEndpoint.id === "moengage" ||
+                      selectedEndpoint.id === "webengage") && (
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-slate-700">
+                          Select Template (Auto-Fills Payload)
+                        </label>
+                        <select
+                          value={selectedTemplateName}
+                          onChange={(e) => handleSelectTemplate(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
+                        >
+                          {templates.map((tpl) => (
+                            <option key={`${tpl.id}-${tpl.name}`} value={tpl.name}>
+                              {`${tpl.name} (${tpl.language}) — [${
+                                tpl.category || "GENERAL"
+                              }]`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                </div>
+
+                {/* Selected Template Category, Status & Body Preview */}
+                {activeTemplateObj &&
+                  (selectedEndpoint.supportsAutoTemplate ||
+                    selectedEndpoint.id === "clevertap" ||
+                    selectedEndpoint.id === "moengage" ||
+                    selectedEndpoint.id === "webengage") && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-indigo-100 pt-2.5 text-xs">
+                      <span className="rounded-md bg-indigo-100 px-2 py-0.5 font-semibold uppercase text-indigo-800">
+                        Category: {activeTemplateObj.category || "N/A"}
+                      </span>
+                      {activeTemplateObj.status && (
+                        <span
+                          className={`rounded-md px-2 py-0.5 font-semibold uppercase ${
+                            activeTemplateObj.status === "APPROVED"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {activeTemplateObj.status}
+                        </span>
+                      )}
+                      <span className="rounded-md bg-slate-200/70 px-2 py-0.5 font-medium text-slate-700">
+                        Lang: {activeTemplateObj.language}
+                      </span>
+                      {activeTemplateObj.bodyText && (
+                        <span className="w-full text-slate-600 sm:w-auto sm:truncate">
+                          Body: {activeTemplateObj.bodyText}
+                        </span>
+                      )}
+                    </div>
+                  )}
+              </div>
+            )}
+
+            {/* Dynamic Template Variable Inputs (Header, Body & Button URL) */}
+            {hasAnyTemplateInputs && activeTemplateObj && (
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3.5">
+                <div className="mb-2.5 flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
+                    Template Parameters
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Auto-updates JSON payload below
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {activeTemplateObj.headerVariableCount > 0 && (
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-700">
+                        {activeTemplateObj.headerType === "TEXT"
+                          ? "Header Variable {{1}}"
+                          : `Header ${activeTemplateObj.headerType} URL`}
+                      </label>
+                      <input
+                        type="text"
+                        value={headerVarValue}
+                        onChange={(e) => {
+                          setJsonEditedManually(false);
+                          setHeaderVarValue(e.target.value);
+                        }}
+                        placeholder={
+                          activeTemplateObj.headerType === "TEXT"
+                            ? "Enter header variable value"
+                            : `Enter public ${activeTemplateObj.headerType.toLowerCase()} URL`
+                        }
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      />
+                    </div>
+                  )}
+
+                  {Array.from(
+                    { length: activeTemplateObj.variableCount },
+                    (_, idx) => (
+                      <div key={`body-var-${idx}`}>
+                        <label className="mb-1 block text-xs font-medium text-slate-700">
+                          {`Body Variable {{${idx + 1}}}`}
+                        </label>
+                        <input
+                          type="text"
+                          value={templateVarValues[idx] ?? ""}
+                          onChange={(e) =>
+                            handleVariableInputChange(idx, e.target.value)
+                          }
+                          placeholder={`Enter value for {{${idx + 1}}}`}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        />
+                      </div>
+                    )
+                  )}
+
+                  {activeTemplateObj.hasDynamicUrlButton && (
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-700">
+                        Button Dynamic URL Parameter {"{{1}}"}
+                      </label>
+                      <input
+                        type="text"
+                        value={buttonVarValue}
+                        onChange={(e) => {
+                          setJsonEditedManually(false);
+                          setButtonVarValue(e.target.value);
+                        }}
+                        placeholder="Enter dynamic URL suffix/parameter"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -930,17 +1217,15 @@ export default function ApiDocsPage() {
 
               {responseBox && (
                 <div className="flex items-center gap-2">
-                  {responseBox.status !== null && (
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                        responseBox.status >= 200 && responseBox.status < 300
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-rose-100 text-rose-800"
-                      }`}
-                    >
-                      HTTP {responseBox.status}
-                    </span>
-                  )}
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                      responseBox.isOk
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-rose-100 text-rose-800"
+                    }`}
+                  >
+                    {responseBox.statusText}
+                  </span>
                   {responseBox.durationMs !== null && (
                     <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
                       {responseBox.durationMs} ms
@@ -955,9 +1240,20 @@ export default function ApiDocsPage() {
                 Response will appear here after sending a request.
               </div>
             ) : (
-              <pre className="max-h-96 overflow-auto rounded-lg bg-slate-950 p-4 text-xs leading-relaxed text-emerald-300">
-                <code>{JSON.stringify(responseBox.data, null, 2)}</code>
-              </pre>
+              <div className="space-y-3">
+                {!responseBox.isOk && responseBox.errorSummary && (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-medium text-rose-800">
+                    Error: {responseBox.errorSummary}
+                  </div>
+                )}
+                <pre
+                  className={`max-h-96 overflow-auto rounded-lg bg-slate-950 p-4 text-xs leading-relaxed ${
+                    responseBox.isOk ? "text-emerald-300" : "text-rose-300"
+                  }`}
+                >
+                  <code>{JSON.stringify(responseBox.data, null, 2)}</code>
+                </pre>
+              </div>
             )}
           </section>
         </main>

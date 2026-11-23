@@ -129,7 +129,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
       {
         key: "category",
         label: "Category",
-        placeholder: "UTILITY / MARKETING",
+        placeholder: "UTILITY / MARKETING / AUTHENTICATION",
         location: "body",
       },
       {
@@ -660,6 +660,8 @@ export default function ApiDocsPage() {
         const rawVal =
           f.key === "mediaType"
             ? (currentValues[f.key] ?? "image").trim() || "image"
+            : f.key === "category"
+            ? (currentValues[f.key] ?? "UTILITY").trim() || "UTILITY"
             : (currentValues[f.key] ?? "").trim();
         if (rawVal !== "") {
           payload[f.key] =
@@ -1254,6 +1256,18 @@ export default function ApiDocsPage() {
                         <option value="image">image</option>
                         <option value="video">video</option>
                         <option value="document">document</option>
+                      </select>
+                    ) : field.key === "category" ? (
+                      <select
+                        value={currentValues[field.key] ?? "UTILITY"}
+                        onChange={(e) =>
+                          handleFieldChange(field.key, e.target.value)
+                        }
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      >
+                        <option value="UTILITY">UTILITY</option>
+                        <option value="MARKETING">MARKETING</option>
+                        <option value="AUTHENTICATION">AUTHENTICATION</option>
                       </select>
                     ) : (
                       <input

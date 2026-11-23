@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateApiRequest } from "@/lib/api-auth";
 import { logApiActivity } from "@/lib/api-logger";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(
   request: NextRequest,
@@ -101,6 +102,41 @@ export async function POST(
 
     const metaData = await metaResponse.json().catch(() => ({}));
 
+    const isSent = Boolean(metaResponse.ok && metaData?.messages?.[0]?.id);
+    const metaMessageId = metaData?.messages?.[0]?.id
+      ? String(metaData.messages[0].id).trim()
+      : null;
+    const errorMsg = metaResponse.ok
+      ? "N/A"
+      : metaData?.error?.message || "Meta Graph API error";
+
+    // Save API message entry to CampaignLog for reporting
+    try {
+      const recipientNumber = String(body?.to || "").replace(/\D/g, "") || "N/A";
+      const templateName =
+        body?.template?.name || body?.type || "API_Message";
+      const now = new Date();
+
+      await prisma.campaignLog.create({
+        data: {
+          userId: auth.context.userId || "admin",
+          campaignName: "API_Console",
+          templateName,
+          channel: String(targetPhoneId),
+          recipient: recipientNumber,
+          status: isSent ? "SENT" : "FAILED",
+          messageId: metaMessageId,
+          cost: 0,
+          errorDetails: errorMsg,
+          sentAt: now,
+          deliveredAt: null,
+          readAt: null,
+        },
+      });
+    } catch (dbErr) {
+      console.error("Failed to save API message to campaignLog:", dbErr);
+    }
+
     logApiActivity({
       endpoint: endpointPath,
       method: "POST",
@@ -108,9 +144,7 @@ export async function POST(
       statusCode: metaResponse.status,
       success: metaResponse.ok,
       durationMs: Date.now() - startTime,
-      errorMessage: metaResponse.ok
-        ? undefined
-        : metaData?.error?.message || "Meta Graph API error",
+      errorMessage: metaResponse.ok ? undefined : errorMsg,
     });
 
     return NextResponse.json(

@@ -34,10 +34,10 @@ export async function GET(req: Request) {
     // 🟢 Build dynamic Prisma where clause EXCLUDING Direct Chats
     const whereClause: any = {
       campaignName: {
-        not: "Direct_Chat_Campaign" // Direct chat logs ko campaign reports se hata diya hai
+        not: "Direct_Chat_Campaign"
       }
     };
-    
+
     if (statusFilter) {
       whereClause.status = statusFilter;
     }
@@ -80,6 +80,7 @@ export async function GET(req: Request) {
         success: true,
         campaigns: [],
         deliveries: [],
+        apis: [],
         wabaAccounts,
         stats: { total: 0, sent: 0, delivered: 0, read: 0, failed: 0 }
       }, {
@@ -111,6 +112,24 @@ export async function GET(req: Request) {
       };
     });
 
+    const apiLogs = messageLogs.filter((log) =>
+      String(log.campaignName || "").startsWith("API_")
+    );
+
+    const apiReports = apiLogs.map((log) => ({
+      id: log.id,
+      campaignInfo: log.campaignName,
+      templateName: log.templateName,
+      channel: log.channel,
+      number: log.recipient,
+      status: log.status,
+      messageId: log.messageId || "N/A",
+      cost: typeof log.cost === 'number' ? log.cost.toFixed(3) : log.cost,
+      errorDetails: log.errorDetails || "N/A",
+      date: formatIST(log.sentAt || log.createdAt),
+      createdAt: log.createdAt,
+    }));
+
     const campaignMap: { [key: string]: any } = {};
     messageLogs.forEach((log) => {
       if (!campaignMap[log.campaignName]) {
@@ -140,6 +159,7 @@ export async function GET(req: Request) {
       success: true,
       campaigns: campaignReports,
       deliveries: deliveryLogs,
+      apis: apiReports,
       wabaAccounts,
       stats: {
         total: messageLogs.length,
@@ -153,6 +173,6 @@ export async function GET(req: Request) {
     });
   } catch (error: any) {
     console.error("Reports API Error:", error);
-    return NextResponse.json({ success: false, error: error.message, campaigns: [], deliveries: [], wabaAccounts: [] }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message, campaigns: [], deliveries: [], apis: [], wabaAccounts: [] }, { status: 500 });
   }
 }

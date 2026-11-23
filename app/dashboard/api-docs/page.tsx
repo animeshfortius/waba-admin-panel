@@ -684,6 +684,8 @@ export default function ApiDocsPage() {
   const activeBodyText =
     currentValues.bodyText !== undefined
       ? currentValues.bodyText
+      : activeCategory === "AUTHENTICATION"
+      ? "{{1}} is your verification code."
       : "Hello {{1}}, welcome to our service!";
 
   useEffect(() => {
@@ -693,14 +695,15 @@ export default function ApiDocsPage() {
         const next: Record<string, string> = {};
         matches.forEach((m) => {
           const num = m.replace(/[{}]/g, "");
-          next[num] = prev[num] || `Sample ${num}`;
+          next[num] =
+            prev[num] || (activeCategory === "AUTHENTICATION" ? "123456" : `Sample ${num}`);
         });
         return next;
       });
     } else {
       setTplVariableSamples({});
     }
-  }, [activeBodyText]);
+  }, [activeBodyText, activeCategory]);
 
   const loadAccountContext = useCallback(
     async (tokenToUse: string, overrideWabaId?: string) => {
@@ -830,6 +833,7 @@ export default function ApiDocsPage() {
   }, [selectedEndpoint, graphVersion, selectedPhoneId, currentValues]);
 
   const computedHeaderType = useMemo(() => {
+    if (activeCategory === "AUTHENTICATION") return "NONE";
     if (
       tplMediaType === "Image" ||
       tplMediaType === "Video" ||
@@ -844,7 +848,7 @@ export default function ApiDocsPage() {
       return "TEXT";
     }
     return "NONE";
-  }, [tplMediaType, tplHeaderText]);
+  }, [activeCategory, tplMediaType, tplHeaderText]);
 
   const generatedPayload = useMemo(() => {
     if (selectedEndpoint.method === "GET") return null;
@@ -951,27 +955,32 @@ export default function ApiDocsPage() {
       payload.headerType = computedHeaderType;
       payload.headerText =
         computedHeaderType === "TEXT" ? tplHeaderText.trim() : "";
-      if (normalizedUrl) {
+      if (normalizedUrl && activeCategory !== "AUTHENTICATION") {
         payload.mediaUrl = normalizedUrl;
       }
-      if (tplMediaFile) {
+      if (tplMediaFile && activeCategory !== "AUTHENTICATION") {
         payload.mediaFileName = tplMediaFile.name;
       }
-      payload.footerText = tplFooterText.trim();
+      payload.footerText =
+        activeCategory === "AUTHENTICATION" ? "" : tplFooterText.trim();
       payload.variableSamples = Object.values(tplVariableSamples);
-      payload.buttons = tplButtons.map((b) => ({
-        type: mapButtonTypeToApi(b.type),
-        text: b.text,
-        value: b.value || "",
-      }));
+      payload.buttons =
+        activeCategory === "AUTHENTICATION"
+          ? []
+          : tplButtons.map((b) => ({
+              type: mapButtonTypeToApi(b.type),
+              text: b.text,
+              value: b.value || "",
+            }));
       payload.components = buildMetaComponentsPreview({
         headerType: computedHeaderType,
         headerText: tplHeaderText,
         mediaUrl: normalizedUrl,
         bodyText: activeBodyText,
-        footerText: tplFooterText,
+        footerText:
+          activeCategory === "AUTHENTICATION" ? "" : tplFooterText,
         variableSamples: tplVariableSamples,
-        buttons: tplButtons,
+        buttons: activeCategory === "AUTHENTICATION" ? [] : tplButtons,
       });
     }
 
@@ -1078,6 +1087,44 @@ export default function ApiDocsPage() {
       [selectedEndpoint.id]: {
         ...(prev[selectedEndpoint.id] || {}),
         [key]: value,
+      },
+    }));
+  }
+
+  function handleCategoryChange(
+    nextCategory: "UTILITY" | "MARKETING" | "AUTHENTICATION"
+  ) {
+    setJsonEditedManually(false);
+
+    if (nextCategory === "AUTHENTICATION") {
+      setTplSubType("Zero-tap OTP");
+      setTplMediaType("None");
+      setTplMediaFile(null);
+      setTplMediaPreviewUrl("");
+      setTplMediaUrl("");
+      setTplHeaderText("");
+      setTplFooterText("");
+      setTplButtons([]);
+      setTplVariableSamples({ "1": "123456" });
+      setFormValues((prev) => ({
+        ...prev,
+        [selectedEndpoint.id]: {
+          ...(prev[selectedEndpoint.id] || {}),
+          category: "AUTHENTICATION",
+          bodyText: "{{1}} is your verification code.",
+        },
+      }));
+      return;
+    }
+
+    setTplSubType("Default");
+    setTplVariableSamples({ "1": "Animesh" });
+    setFormValues((prev) => ({
+      ...prev,
+      [selectedEndpoint.id]: {
+        ...(prev[selectedEndpoint.id] || {}),
+        category: nextCategory,
+        bodyText: "Hello {{1}}, welcome to our service!",
       },
     }));
   }
@@ -1711,7 +1758,12 @@ export default function ApiDocsPage() {
                       <select
                         value={activeCategory}
                         onChange={(e) =>
-                          handleFieldChange("category", e.target.value)
+                          handleCategoryChange(
+                            e.target.value as
+                              | "UTILITY"
+                              | "MARKETING"
+                              | "AUTHENTICATION"
+                          )
                         }
                         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                       >
@@ -1796,151 +1848,166 @@ export default function ApiDocsPage() {
                     }}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                   >
-                    <option value="Default">Default</option>
-                    <option value="Catalogue">Catalogue</option>
-                    <option value="Flows">Flows</option>
-                    <option value="Limited Time Offer (LTO)">
-                      Limited Time Offer (LTO)
-                    </option>
-                    <option value="Carousel">Carousel</option>
+                    {activeCategory === "AUTHENTICATION" ? (
+                      <>
+                        <option value="Zero-tap OTP">Zero-tap OTP</option>
+                        <option value="One-tap auto fill">
+                          One-tap auto fill
+                        </option>
+                        <option value="Copy code">Copy code</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="Default">Default</option>
+                        <option value="Catalogue">Catalogue</option>
+                        <option value="Flows">Flows</option>
+                        <option value="Limited Time Offer (LTO)">
+                          Limited Time Offer (LTO)
+                        </option>
+                        <option value="Carousel">Carousel</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
-                <div className="space-y-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                      Media Header
-                    </label>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                      {(
-                        [
-                          "None",
-                          "Image",
-                          "Video",
-                          "Document",
-                          "Location",
-                        ] as const
-                      ).map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => {
-                            setJsonEditedManually(false);
-                            setTplMediaType(m);
-                            if (m === "None") {
-                              setTplMediaFile(null);
-                              setTplMediaPreviewUrl("");
-                              setTplMediaUrl("");
-                            } else {
-                              setTplHeaderText("");
-                            }
-                          }}
-                          className={`rounded-lg border py-1.5 text-xs font-semibold transition ${
-                            tplMediaType === m
-                              ? "border-indigo-600 bg-indigo-600 text-white"
-                              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                          }`}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {tplMediaType === "None" && (
+                {activeCategory !== "AUTHENTICATION" && (
+                  <div className="space-y-3">
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-700">
-                        Header Text (Optional)
+                      <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                        Media Header
                       </label>
-                      <input
-                        type="text"
-                        value={tplHeaderText}
-                        onChange={(e) => {
-                          setJsonEditedManually(false);
-                          setTplHeaderText(e.target.value);
-                        }}
-                        placeholder="Optional header text..."
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                      />
-                    </div>
-                  )}
-
-                  {(tplMediaType === "Image" ||
-                    tplMediaType === "Video" ||
-                    tplMediaType === "Document") && (
-                    <div className="space-y-2.5 rounded-lg border border-dashed border-indigo-300 bg-white p-3.5">
-                      <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-                        <div>
-                          <div className="text-xs font-semibold text-slate-800">
-                            {tplMediaType} Media File / URL
-                          </div>
-                          <div className="text-[11px] text-slate-500">
-                            {tplMediaType === "Image" &&
-                              "JPG, JPEG, PNG • Max 5 MB"}
-                            {tplMediaType === "Video" && "MP4, 3GP • Max 16 MB"}
-                            {tplMediaType === "Document" && "PDF • Max 100 MB"}
-                          </div>
-                        </div>
-
-                        <label className="inline-flex cursor-pointer items-center rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
-                          <span>Choose {tplMediaType} File</span>
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept={
-                              tplMediaType === "Image"
-                                ? ".jpg,.jpeg,.png,image/jpeg,image/png"
-                                : tplMediaType === "Video"
-                                ? ".mp4,.3gp,video/mp4,video/3gpp"
-                                : ".pdf,application/pdf"
-                            }
-                            onChange={handleTplMediaFileChange}
-                          />
-                        </label>
-                      </div>
-
-                      <input
-                        type="text"
-                        value={tplMediaUrl}
-                        onChange={(e) => {
-                          setJsonEditedManually(false);
-                          setTplMediaUrl(e.target.value);
-                        }}
-                        placeholder="Media URL (https://...)"
-                        className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900"
-                      />
-
-                      {tplMediaFile && (
-                        <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-                          <span className="truncate font-medium">
-                            {tplMediaFile.name} (
-                            {(tplMediaFile.size / (1024 * 1024)).toFixed(2)}{" "}
-                            MB)
-                          </span>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                        {(
+                          [
+                            "None",
+                            "Image",
+                            "Video",
+                            "Document",
+                            "Location",
+                          ] as const
+                        ).map((m) => (
                           <button
+                            key={m}
                             type="button"
                             onClick={() => {
                               setJsonEditedManually(false);
-                              setTplMediaFile(null);
-                              setTplMediaPreviewUrl("");
+                              setTplMediaType(m);
+                              if (m === "None") {
+                                setTplMediaFile(null);
+                                setTplMediaPreviewUrl("");
+                                setTplMediaUrl("");
+                              } else {
+                                setTplHeaderText("");
+                              }
                             }}
-                            className="ml-2 font-semibold text-rose-600 hover:underline"
+                            className={`rounded-lg border py-1.5 text-xs font-semibold transition ${
+                              tplMediaType === m
+                                ? "border-indigo-600 bg-indigo-600 text-white"
+                                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                            }`}
                           >
-                            Remove
+                            {m}
                           </button>
-                        </div>
-                      )}
-
-                      {tplMediaType === "Image" && tplMediaPreviewUrl && (
-                        <img
-                          src={tplMediaPreviewUrl}
-                          alt="Selected media preview"
-                          className="h-28 w-auto rounded-lg border border-slate-200 object-cover"
-                        />
-                      )}
+                        ))}
+                      </div>
                     </div>
-                  )}
-                </div>
+
+                    {tplMediaType === "None" && (
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-700">
+                          Header Text (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={tplHeaderText}
+                          onChange={(e) => {
+                            setJsonEditedManually(false);
+                            setTplHeaderText(e.target.value);
+                          }}
+                          placeholder="Optional header text..."
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                        />
+                      </div>
+                    )}
+
+                    {(tplMediaType === "Image" ||
+                      tplMediaType === "Video" ||
+                      tplMediaType === "Document") && (
+                      <div className="space-y-2.5 rounded-lg border border-dashed border-indigo-300 bg-white p-3.5">
+                        <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                          <div>
+                            <div className="text-xs font-semibold text-slate-800">
+                              {tplMediaType} Media File / URL
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {tplMediaType === "Image" &&
+                                "JPG, JPEG, PNG • Max 5 MB"}
+                              {tplMediaType === "Video" &&
+                                "MP4, 3GP • Max 16 MB"}
+                              {tplMediaType === "Document" && "PDF • Max 100 MB"}
+                            </div>
+                          </div>
+
+                          <label className="inline-flex cursor-pointer items-center rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
+                            <span>Choose {tplMediaType} File</span>
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept={
+                                tplMediaType === "Image"
+                                  ? ".jpg,.jpeg,.png,image/jpeg,image/png"
+                                  : tplMediaType === "Video"
+                                  ? ".mp4,.3gp,video/mp4,video/3gpp"
+                                  : ".pdf,application/pdf"
+                              }
+                              onChange={handleTplMediaFileChange}
+                            />
+                          </label>
+                        </div>
+
+                        <input
+                          type="text"
+                          value={tplMediaUrl}
+                          onChange={(e) => {
+                            setJsonEditedManually(false);
+                            setTplMediaUrl(e.target.value);
+                          }}
+                          placeholder="Media URL (https://...)"
+                          className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900"
+                        />
+
+                        {tplMediaFile && (
+                          <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                            <span className="truncate font-medium">
+                              {tplMediaFile.name} (
+                              {(tplMediaFile.size / (1024 * 1024)).toFixed(2)}{" "}
+                              MB)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setJsonEditedManually(false);
+                                setTplMediaFile(null);
+                                setTplMediaPreviewUrl("");
+                              }}
+                              className="ml-2 font-semibold text-rose-600 hover:underline"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        )}
+
+                        {tplMediaType === "Image" && tplMediaPreviewUrl && (
+                          <img
+                            src={tplMediaPreviewUrl}
+                            alt="Selected media preview"
+                            className="h-28 w-auto rounded-lg border border-slate-200 object-cover"
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {Object.keys(tplVariableSamples).length > 0 && (
                   <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
@@ -1975,120 +2042,124 @@ export default function ApiDocsPage() {
                   </div>
                 )}
 
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-700">
-                    Footer Text (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={tplFooterText}
-                    onChange={(e) => {
-                      setJsonEditedManually(false);
-                      setTplFooterText(e.target.value);
-                    }}
-                    placeholder="e.g. Reply STOP to unsubscribe"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                  />
-                </div>
+                {activeCategory !== "AUTHENTICATION" && (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-700">
+                        Footer Text (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={tplFooterText}
+                        onChange={(e) => {
+                          setJsonEditedManually(false);
+                          setTplFooterText(e.target.value);
+                        }}
+                        placeholder="e.g. Reply STOP to unsubscribe"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                      />
+                    </div>
 
-                <div className="relative space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-700">
-                      Interactive Buttons (Optional)
-                    </label>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setShowTplButtonMenu((prev) => !prev)}
-                        className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
-                      >
-                        + Add Button
-                      </button>
+                    <div className="relative space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-slate-700">
+                          Interactive Buttons (Optional)
+                        </label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setShowTplButtonMenu((prev) => !prev)}
+                            className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                          >
+                            + Add Button
+                          </button>
 
-                      {showTplButtonMenu && (
-                        <div className="absolute right-0 z-30 mt-1.5 w-52 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
-                          {(
-                            [
-                              "Custom",
-                              "Visit website",
-                              "Call Phone Number",
-                              "Complete flow",
-                              "Copy offer code",
-                            ] as TemplateBuilderButtonType[]
-                          ).map((btnType) => (
-                            <button
-                              key={btnType}
-                              type="button"
-                              onClick={() => handleAddTplButton(btnType)}
-                              className="block w-full px-3.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-indigo-50"
+                          {showTplButtonMenu && (
+                            <div className="absolute right-0 z-30 mt-1.5 w-52 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                              {(
+                                [
+                                  "Custom",
+                                  "Visit website",
+                                  "Call Phone Number",
+                                  "Complete flow",
+                                  "Copy offer code",
+                                ] as TemplateBuilderButtonType[]
+                              ).map((btnType) => (
+                                <button
+                                  key={btnType}
+                                  type="button"
+                                  onClick={() => handleAddTplButton(btnType)}
+                                  className="block w-full px-3.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-indigo-50"
+                                >
+                                  {btnType}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {tplButtons.length > 0 && (
+                        <div className="space-y-2">
+                          {tplButtons.map((btn, idx) => (
+                            <div
+                              key={btn.id}
+                              className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-2.5"
                             >
-                              {btnType}
-                            </button>
+                              <span className="w-28 text-xs font-semibold text-slate-600">
+                                {btn.type}
+                              </span>
+                              <input
+                                type="text"
+                                value={btn.text}
+                                onChange={(e) => {
+                                  setJsonEditedManually(false);
+                                  const next = [...tplButtons];
+                                  next[idx].text = e.target.value;
+                                  setTplButtons(next);
+                                }}
+                                placeholder="Button text"
+                                className="flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
+                              />
+                              {(btn.type === "Visit website" ||
+                                btn.type === "Call Phone Number" ||
+                                btn.type === "Copy offer code" ||
+                                btn.type === "Complete flow") && (
+                                <input
+                                  type="text"
+                                  value={btn.value || ""}
+                                  onChange={(e) => {
+                                    setJsonEditedManually(false);
+                                    const next = [...tplButtons];
+                                    next[idx].value = e.target.value;
+                                    setTplButtons(next);
+                                  }}
+                                  placeholder={
+                                    btn.type === "Visit website"
+                                      ? "https://example.com"
+                                      : btn.type === "Call Phone Number"
+                                      ? "+919876543210"
+                                      : btn.type === "Copy offer code"
+                                      ? "OFFER20"
+                                      : "Flow ID / URL"
+                                  }
+                                  className="flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 font-mono text-xs"
+                                />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTplButton(btn.id)}
+                                className="rounded-lg px-2 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                              >
+                                ✕
+                              </button>
+                            </div>
                           ))}
                         </div>
                       )}
                     </div>
-                  </div>
-
-                  {tplButtons.length > 0 && (
-                    <div className="space-y-2">
-                      {tplButtons.map((btn, idx) => (
-                        <div
-                          key={btn.id}
-                          className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-2.5"
-                        >
-                          <span className="w-28 text-xs font-semibold text-slate-600">
-                            {btn.type}
-                          </span>
-                          <input
-                            type="text"
-                            value={btn.text}
-                            onChange={(e) => {
-                              setJsonEditedManually(false);
-                              const next = [...tplButtons];
-                              next[idx].text = e.target.value;
-                              setTplButtons(next);
-                            }}
-                            placeholder="Button text"
-                            className="flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
-                          />
-                          {(btn.type === "Visit website" ||
-                            btn.type === "Call Phone Number" ||
-                            btn.type === "Copy offer code" ||
-                            btn.type === "Complete flow") && (
-                            <input
-                              type="text"
-                              value={btn.value || ""}
-                              onChange={(e) => {
-                                setJsonEditedManually(false);
-                                const next = [...tplButtons];
-                                next[idx].value = e.target.value;
-                                setTplButtons(next);
-                              }}
-                              placeholder={
-                                btn.type === "Visit website"
-                                  ? "https://example.com"
-                                  : btn.type === "Call Phone Number"
-                                  ? "+919876543210"
-                                  : btn.type === "Copy offer code"
-                                  ? "OFFER20"
-                                  : "Flow ID / URL"
-                              }
-                              className="flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 font-mono text-xs"
-                            />
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveTplButton(btn.id)}
-                            className="rounded-lg px-2 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                  </>
+                )}
               </div>
             )}
 

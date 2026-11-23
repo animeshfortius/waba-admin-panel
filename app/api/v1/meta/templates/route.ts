@@ -15,11 +15,19 @@ function buildMetaComponentsFromBody(body: Record<string, unknown>) {
     return body.components;
   }
 
+  const category = String(body.category || "UTILITY")
+    .trim()
+    .toUpperCase();
   const components: Array<Record<string, unknown>> = [];
   const headerType = String(body.headerType || "NONE").toUpperCase();
   const headerText = String(body.headerText || "").trim();
   const mediaUrl = String(body.mediaUrl || "").trim();
-  const bodyText = String(body.bodyText || "").trim();
+  const rawBodyText = String(body.bodyText || "").trim();
+  const bodyText =
+    category === "AUTHENTICATION" &&
+    (!rawBodyText || rawBodyText.includes("welcome to our service"))
+      ? "{{1}} is your verification code."
+      : rawBodyText;
   const footerText = String(body.footerText || "").trim();
   const variableSamples = Array.isArray(body.variableSamples)
     ? body.variableSamples.map((v) => String(v ?? ""))
@@ -28,39 +36,41 @@ function buildMetaComponentsFromBody(body: Record<string, unknown>) {
     ? (body.buttons as TemplateButtonInput[])
     : [];
 
-  if (headerType === "TEXT" && headerText) {
-    const headerComp: Record<string, unknown> = {
-      type: "HEADER",
-      format: "TEXT",
-      text: headerText,
-    };
-    const headerVars = headerText.match(/\{\{\d+\}\}/g);
-    if (headerVars && headerVars.length > 0) {
-      headerComp.example = {
-        header_text: headerVars.map((_, i) => `SampleHeader${i + 1}`),
+  if (category !== "AUTHENTICATION") {
+    if (headerType === "TEXT" && headerText) {
+      const headerComp: Record<string, unknown> = {
+        type: "HEADER",
+        format: "TEXT",
+        text: headerText,
       };
-    }
-    components.push(headerComp);
-  } else if (
-    headerType === "IMAGE" ||
-    headerType === "VIDEO" ||
-    headerType === "DOCUMENT"
-  ) {
-    const headerComp: Record<string, unknown> = {
-      type: "HEADER",
-      format: headerType,
-    };
-    if (mediaUrl) {
-      headerComp.example = {
-        header_handle: [mediaUrl],
+      const headerVars = headerText.match(/\{\{\d+\}\}/g);
+      if (headerVars && headerVars.length > 0) {
+        headerComp.example = {
+          header_text: headerVars.map((_, i) => `SampleHeader${i + 1}`),
+        };
+      }
+      components.push(headerComp);
+    } else if (
+      headerType === "IMAGE" ||
+      headerType === "VIDEO" ||
+      headerType === "DOCUMENT"
+    ) {
+      const headerComp: Record<string, unknown> = {
+        type: "HEADER",
+        format: headerType,
       };
+      if (mediaUrl) {
+        headerComp.example = {
+          header_handle: [mediaUrl],
+        };
+      }
+      components.push(headerComp);
+    } else if (headerType === "LOCATION") {
+      components.push({
+        type: "HEADER",
+        format: "LOCATION",
+      });
     }
-    components.push(headerComp);
-  } else if (headerType === "LOCATION") {
-    components.push({
-      type: "HEADER",
-      format: "LOCATION",
-    });
   }
 
   const bodyComp: Record<string, unknown> = {
@@ -71,7 +81,8 @@ function buildMetaComponentsFromBody(body: Record<string, unknown>) {
   if (bodyVarMatches && bodyVarMatches.length > 0) {
     const samples = bodyVarMatches.map((_, idx) => {
       const val = (variableSamples[idx] || "").trim();
-      return val || `Sample${idx + 1}`;
+      if (val) return val;
+      return category === "AUTHENTICATION" ? "123456" : `Sample${idx + 1}`;
     });
     bodyComp.example = {
       body_text: [samples],
@@ -79,7 +90,7 @@ function buildMetaComponentsFromBody(body: Record<string, unknown>) {
   }
   components.push(bodyComp);
 
-  if (footerText) {
+  if (category !== "AUTHENTICATION" && footerText) {
     components.push({
       type: "FOOTER",
       text: footerText,
@@ -118,7 +129,7 @@ function buildMetaComponentsFromBody(body: Record<string, unknown>) {
           return {
             type: "COPY_CODE",
             text,
-            example: [value || "OFFER20"],
+            example: [value || "123456"],
           };
         }
 
@@ -294,7 +305,12 @@ export async function POST(request: NextRequest) {
     const category = String(body?.category || "UTILITY")
       .trim()
       .toUpperCase();
-    const bodyText = String(body?.bodyText || "").trim();
+    const rawBodyText = String(body?.bodyText || "").trim();
+    const bodyText =
+      category === "AUTHENTICATION" &&
+      (!rawBodyText || rawBodyText.includes("welcome to our service"))
+        ? "{{1}} is your verification code."
+        : rawBodyText;
 
     if (!name || !bodyText) {
       return NextResponse.json(
@@ -310,7 +326,11 @@ export async function POST(request: NextRequest) {
       name,
       language,
       category,
-      components: buildMetaComponentsFromBody(body),
+      components: buildMetaComponentsFromBody({
+        ...body,
+        category,
+        bodyText,
+      }),
     };
 
     if (typeof body?.allowCategoryChange === "boolean") {

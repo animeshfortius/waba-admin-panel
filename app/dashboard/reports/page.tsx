@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<"campaign" | "delivery" | "schedule" | "fallback" | "api" | "service">("campaign");
   const [dateRange, setDateRange] = useState("All");
-  
+
   // Custom Date Range States
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
@@ -126,10 +126,11 @@ export default function ReportsPage() {
   };
 
   const handleDownloadCSV = (item: any) => {
-    const csvContent = "data:text/csv;charset=utf-8," + 
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
       [
         "ID,Info/Name,Template,Status,Timestamp,Cost",
-        `"${item.id || 1}","${item.campaignInfo || item.number || "N/A"}","${item.templateName || item.templateInfo || "N/A"}","${item.status || "READ"}","${item.createdAt || item.date || "N/A"}","${item.cost || "0.00"}"`
+        `"${item.id || 1}","${item.campaignInfo || item.number || "N/A"}","${item.templateName || item.templateInfo || "N/A"}","${item.status || "READ"}","${item.createdAt || item.date || "N/A"}","${item.cost || "0.00"}"`,
       ].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -173,10 +174,18 @@ export default function ReportsPage() {
 
   const filteredSchedules = useMemo(() => {
     return scheduleData.filter((item) => {
+      if (appliedChannel) {
+        const cleanSelected = appliedChannel.replace(/\D/g, "");
+        const cleanItemChannel = String(item.channel || "").replace(/\D/g, "");
+        if (cleanSelected && cleanItemChannel && !cleanItemChannel.includes(cleanSelected) && !cleanSelected.includes(cleanItemChannel)) {
+          return false;
+        }
+      }
+      if (appliedCampaignStatus && String(item.status || "").toUpperCase() !== appliedCampaignStatus.toUpperCase()) return false;
       if (appliedTemplateSearch && !item.templateName?.toLowerCase().includes(appliedTemplateSearch.toLowerCase())) return false;
       return true;
     });
-  }, [scheduleData, appliedTemplateSearch]);
+  }, [scheduleData, appliedChannel, appliedCampaignStatus, appliedTemplateSearch]);
 
   const filteredFallbacks = useMemo(() => {
     return fallbackData.filter((item) => {
@@ -201,13 +210,20 @@ export default function ReportsPage() {
 
   const activeDataset = useMemo(() => {
     switch (activeTab) {
-      case "campaign": return filteredCampaigns;
-      case "delivery": return filteredDeliveries;
-      case "schedule": return filteredSchedules;
-      case "fallback": return filteredFallbacks;
-      case "api": return filteredApis;
-      case "service": return filteredServices;
-      default: return filteredCampaigns;
+      case "campaign":
+        return filteredCampaigns;
+      case "delivery":
+        return filteredDeliveries;
+      case "schedule":
+        return filteredSchedules;
+      case "fallback":
+        return filteredFallbacks;
+      case "api":
+        return filteredApis;
+      case "service":
+        return filteredServices;
+      default:
+        return filteredCampaigns;
     }
   }, [activeTab, filteredCampaigns, filteredDeliveries, filteredSchedules, filteredFallbacks, filteredApis, filteredServices]);
 
@@ -224,7 +240,10 @@ export default function ReportsPage() {
     }
 
     let total = targetList.length;
-    let sent = 0, delivered = 0, read = 0, failed = 0;
+    let sent = 0,
+      delivered = 0,
+      read = 0,
+      failed = 0;
 
     if (activeTab === "campaign" && !campaignFilter) {
       total = filteredCampaigns.reduce((acc, curr) => acc + (Number(curr.totalCount) || 1), 0);
@@ -232,6 +251,8 @@ export default function ReportsPage() {
       delivered = apiStats.delivered;
       read = apiStats.read;
       failed = apiStats.failed;
+    } else if (activeTab === "schedule") {
+      total = filteredSchedules.reduce((acc, curr) => acc + (Number(curr.totalCount) || 1), 0);
     } else {
       targetList.forEach((item) => {
         const s = (item.status || "").toUpperCase();
@@ -244,11 +265,10 @@ export default function ReportsPage() {
     }
 
     return { total: total || 0, sent: sent || 0, delivered: delivered || 0, read: read || 0, failed: failed || 0 };
-  }, [activeTab, filteredCampaigns, filteredDeliveries, activeDataset, campaignFilter, apiStats]);
+  }, [activeTab, filteredCampaigns, filteredDeliveries, filteredSchedules, activeDataset, campaignFilter, apiStats]);
 
   return (
     <div className="space-y-6 w-full p-4 lg:p-6 text-xs font-sans">
-      
       {/* Top Header & Breadcrumb */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
         <div>
@@ -348,18 +368,18 @@ export default function ReportsPage() {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[10px] text-gray-500">From:</label>
-                    <input 
-                      type="date" 
-                      value={customStartDate} 
+                    <input
+                      type="date"
+                      value={customStartDate}
                       onChange={(e) => setCustomStartDate(e.target.value)}
                       className="w-full border rounded-lg p-1.5 text-xs bg-gray-50 font-mono"
                     />
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-500">To:</label>
-                    <input 
-                      type="date" 
-                      value={customEndDate} 
+                    <input
+                      type="date"
+                      value={customEndDate}
                       onChange={(e) => setCustomEndDate(e.target.value)}
                       className="w-full border rounded-lg p-1.5 text-xs bg-gray-50 font-mono"
                     />
@@ -457,6 +477,7 @@ export default function ReportsPage() {
               className="w-full border rounded-xl p-2.5 bg-gray-50 focus:outline-none"
             >
               <option value="">All Status</option>
+              <option value="SCHEDULED">SCHEDULED</option>
               <option value="READ">READ</option>
               <option value="DELIVERED">DELIVERED</option>
               <option value="SENT">SENT</option>
@@ -514,20 +535,20 @@ export default function ReportsPage() {
                           <td className="p-4 font-mono">+{item.channel}</td>
                           <td className="p-4 font-mono font-bold text-gray-800">₹{item.cost}</td>
                           <td className="p-4 font-bold">{item.totalCount}</td>
-                          
+
                           <td className="p-4 font-mono text-[11px] text-gray-700 w-[230px]">
-                            {item.createdAt ? new Date(item.createdAt).toLocaleString('en-IN', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: true
+                            {item.createdAt ? new Date(item.createdAt).toLocaleString("en-IN", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: true,
                             }) : (item.date || "N/A")}
                           </td>
 
                           <td className="p-4">
-                            <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full text-[10px]">
+                            <span className={`font-bold px-2.5 py-1 rounded-full text-[10px] ${String(item.status || "").toUpperCase() === "SCHEDULED" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
                               {item.status}
                             </span>
                           </td>
@@ -579,12 +600,12 @@ export default function ReportsPage() {
                           <td className="p-3 font-mono">{item.channel}</td>
                           <td className="p-3 font-mono font-bold text-gray-900">{item.number}</td>
                           <td className="p-3">
-                            <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${item.status === "READ" ? "bg-indigo-100 text-indigo-800" : item.status === "DELIVERED" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
+                            <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${item.status === "READ" ? "bg-indigo-100 text-indigo-800" : item.status === "DELIVERED" ? "bg-emerald-100 text-emerald-800" : item.status === "SCHEDULED" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
                               {item.status} {item.status === "READ" && "✓✓"}
                             </span>
                           </td>
                           <td className="p-3 font-mono text-gray-400 truncate max-w-[100px]" title={item.messageId}>{item.messageId}</td>
-                          
+
                           <td className="p-3 font-mono text-[10px] text-gray-600 w-[170px] break-words leading-tight">
                             {item.acknowledgement}
                           </td>
@@ -592,13 +613,13 @@ export default function ReportsPage() {
                           <td className="p-3 font-bold text-emerald-600">₹{item.cost}</td>
 
                           <td className="p-3 font-mono text-[11px] text-gray-700 w-[230px]">
-                            {item.createdAt ? new Date(item.createdAt).toLocaleString('en-IN', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: true
+                            {item.createdAt ? new Date(item.createdAt).toLocaleString("en-IN", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: true,
                             }) : (item.date || "N/A")}
                           </td>
 
@@ -633,9 +654,13 @@ export default function ReportsPage() {
                           <td className="p-4 font-bold text-gray-900">{item.campaignInfo || item.id}</td>
                           <td className="p-4 text-emerald-700 font-medium">{item.templateName || item.name || "N/A"}</td>
                           <td className="p-4 font-mono">{item.channel || "N/A"}</td>
-                          <td className="p-4 font-bold">{item.status || "COMPLETED"}</td>
+                          <td className="p-4 font-bold">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] ${String(item.status || "").toUpperCase() === "SCHEDULED" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+                              {item.status || "COMPLETED"}
+                            </span>
+                          </td>
                           <td className="p-4 font-mono text-[11px]">
-                            {item.createdAt ? new Date(item.createdAt).toLocaleString('en-IN') : (item.date || "N/A")}
+                            {item.scheduledAt || (item.createdAt ? new Date(item.createdAt).toLocaleString("en-IN") : item.date || "N/A")}
                           </td>
                         </tr>
                       ))
@@ -715,7 +740,7 @@ export default function ReportsPage() {
             <div className="mt-4 pt-3 border-t text-[11px] space-y-1 font-mono text-gray-600">
               <div><strong>Recipient:</strong> {selectedItem.number || "+917518900801"}</div>
               <div><strong>Status:</strong> <span className="text-indigo-700 font-bold">{selectedItem.status}</span></div>
-              <div><strong>Timestamp:</strong> <span className="text-gray-800">{selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleString('en-IN') : "N/A"}</span></div>
+              <div><strong>Timestamp:</strong> <span className="text-gray-800">{selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleString("en-IN") : "N/A"}</span></div>
               <div><strong>Cost:</strong> ₹{selectedItem.cost}</div>
             </div>
           </div>

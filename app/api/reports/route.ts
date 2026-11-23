@@ -28,17 +28,17 @@ export async function GET(req: Request) {
     const endDateParam = searchParams.get("endDate");
 
     let wabaAccounts = await prisma.wabaAccount.findMany({
-      select: { wabaId: true, displayPhone: true, displayName: true, userId: true }
+      select: { wabaId: true, displayPhone: true, displayName: true, userId: true },
     });
 
-    // 🟢 Build dynamic Prisma where clause EXCLUDING Direct Chats
+    // Build dynamic Prisma where clause EXCLUDING Direct Chats
     const whereClause: any = {
       campaignName: {
-        not: "Direct_Chat_Campaign"
-      }
+        not: "Direct_Chat_Campaign",
+      },
     };
 
-    if (statusFilter) {
+    if (statusFilter && statusFilter !== "All" && statusFilter !== "All Status") {
       whereClause.status = statusFilter;
     }
 
@@ -76,16 +76,21 @@ export async function GET(req: Request) {
     });
 
     if (messageLogs.length === 0) {
-      return NextResponse.json({
-        success: true,
-        campaigns: [],
-        deliveries: [],
-        apis: [],
-        wabaAccounts,
-        stats: { total: 0, sent: 0, delivered: 0, read: 0, failed: 0 }
-      }, {
-        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' }
-      });
+      return NextResponse.json(
+        {
+          success: true,
+          userId,
+          campaigns: [],
+          deliveries: [],
+          schedules: [],
+          apis: [],
+          wabaAccounts,
+          stats: { total: 0, sent: 0, delivered: 0, read: 0, failed: 0, scheduled: 0 },
+        },
+        {
+          headers: { "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate" },
+        }
+      );
     }
 
     const deliveryLogs = messageLogs.map((log) => {
@@ -106,11 +111,42 @@ export async function GET(req: Request) {
         templateType: "Utility",
         templateName: log.templateName,
         bodyText: `Campaign: ${log.campaignName}`,
-        cost: typeof log.cost === 'number' ? log.cost.toFixed(3) : log.cost,
+        cost: typeof log.cost === "number" ? log.cost.toFixed(3) : log.cost,
         errorDetails: log.errorDetails || "N/A",
-        createdAt: log.createdAt
+        createdAt: log.createdAt,
       };
     });
+
+    const scheduledLogs = messageLogs.filter(
+      (log) => String(log.status || "").toUpperCase() === "SCHEDULED"
+    );
+
+    const scheduleMap: { [key: string]: any } = {};
+    scheduledLogs.forEach((log) => {
+      const key = `${log.campaignName}__${log.channel}`;
+      if (!scheduleMap[key]) {
+        scheduleMap[key] = {
+          id: log.id,
+          campaignInfo: log.campaignName,
+          templateName: log.templateName,
+          channel: log.channel,
+          status: log.status,
+          totalCount: 0,
+          cost: 0,
+          scheduledAt: log.sentAt ? formatIST(log.sentAt) : formatIST(log.createdAt),
+          date: log.sentAt ? formatIST(log.sentAt) : formatIST(log.createdAt),
+          errorDetails: log.errorDetails || "N/A",
+          createdAt: log.createdAt,
+        };
+      }
+      scheduleMap[key].totalCount += 1;
+      scheduleMap[key].cost += Number(log.cost || 0);
+    });
+
+    const scheduleReports = Object.values(scheduleMap).map((s) => ({
+      ...s,
+      cost: s.cost.toFixed(3),
+    }));
 
     const apiLogs = messageLogs.filter((log) =>
       String(log.campaignName || "").startsWith("API_")
@@ -124,7 +160,7 @@ export async function GET(req: Request) {
       number: log.recipient,
       status: log.status,
       messageId: log.messageId || "N/A",
-      cost: typeof log.cost === 'number' ? log.cost.toFixed(3) : log.cost,
+      cost: typeof log.cost === "number" ? log.cost.toFixed(3) : log.cost,
       errorDetails: log.errorDetails || "N/A",
       date: formatIST(log.sentAt || log.createdAt),
       createdAt: log.createdAt,
@@ -141,38 +177,55 @@ export async function GET(req: Request) {
           channel: log.channel,
           cost: 0,
           totalCount: 0,
-          status: "COMPLETED",
+          status: String(log.status || "").toUpperCase() === "SCHEDULED" ? "SCHEDULED" : "COMPLETED",
           error: log.errorDetails,
-          createdAt: log.createdAt
+          createdAt: log.createdAt,
         };
       }
       campaignMap[log.campaignName].totalCount += 1;
       campaignMap[log.campaignName].cost += Number(log.cost || 0);
     });
 
-    const campaignReports = Object.values(campaignMap).map(c => ({
+    const campaignReports = Object.values(campaignMap).map((c) => ({
       ...c,
-      cost: c.cost.toFixed(3)
+      cost: c.cost.toFixed(3),
     }));
 
-    return NextResponse.json({
-      success: true,
-      campaigns: campaignReports,
-      deliveries: deliveryLogs,
-      apis: apiReports,
-      wabaAccounts,
-      stats: {
-        total: messageLogs.length,
-        sent: messageLogs.filter(l => l.status?.toUpperCase() === "SENT").length,
-        delivered: messageLogs.filter(l => l.status?.toUpperCase() === "DELIVERED").length,
-        read: messageLogs.filter(l => l.status?.toUpperCase() === "READ").length,
-        failed: messageLogs.filter(l => l.status?.toUpperCase() === "FAILED").length,
+    return NextResponse.json(
+      {
+        success: true,
+        userId,
+        campaigns: campaignReports,
+        deliveries: deliveryLogs,
+        schedules: scheduleReports,
+        apis: apiReports,
+        wabaAccounts,
+        stats: {
+          total: messageLogs.length,
+          sent: messageLogs.filter((l) => l.status?.toUpperCase() === "SENT").length,
+          delivered: messageLogs.filter((l) => l.status?.toUpperCase() === "DELIVERED").length,
+          read: messageLogs.filter((l) => l.status?.toUpperCase() === "READ").length,
+          failed: messageLogs.filter((l) => l.status?.toUpperCase() === "FAILED").length,
+          scheduled: scheduledLogs.length,
+        },
+      },
+      {
+        headers: { "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate" },
       }
-    }, {
-      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' }
-    });
+    );
   } catch (error: any) {
     console.error("Reports API Error:", error);
-    return NextResponse.json({ success: false, error: error.message, campaigns: [], deliveries: [], apis: [], wabaAccounts: [] }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: error.message,
+        campaigns: [],
+        deliveries: [],
+        schedules: [],
+        apis: [],
+        wabaAccounts: [],
+      },
+      { status: 500 }
+    );
   }
 }

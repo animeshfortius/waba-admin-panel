@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 export async function GET() {
   try {
     const campaigns = await (prisma as any).campaign.findMany({
-      orderBy: { id: "desc" }
+      orderBy: { id: "desc" },
     });
     return NextResponse.json(campaigns);
   } catch (error) {
@@ -17,19 +17,24 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const isScheduled = Boolean(body.isScheduled && body.scheduleDate);
     const newCampaign = await (prisma as any).campaign.create({
       data: {
         userId: body.userId || "default_user",
         name: body.name,
         templateName: body.templateName,
         groupName: body.groupName,
-        status: "COMPLETED",
+        status: isScheduled ? "SCHEDULED" : body.status || "COMPLETED",
+        scheduledAt: body.scheduleDate ? new Date(body.scheduleDate) : null,
         sentCount: body.sentCount || 0,
       },
     });
     return NextResponse.json(newCampaign);
   } catch (error) {
-    return NextResponse.json({ error: "Failed to create campaign" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create campaign" },
+      { status: 500 }
+    );
   }
 }
 
@@ -44,6 +49,9 @@ export async function DELETE(request: Request) {
     });
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to delete campaign" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to delete campaign" },
+      { status: 500 }
+    );
   }
 }

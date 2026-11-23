@@ -22,7 +22,11 @@ export async function POST(req: Request) {
 
     if (!identifier || !numbers || numbers.length === 0 || !templateName) {
       return NextResponse.json(
-        { success: false, error: "Missing required campaign fields (WABA, Numbers, or Template)." },
+        {
+          success: false,
+          error:
+            "Missing required campaign fields (WABA, Numbers, or Template).",
+        },
         { status: 400 }
       );
     }
@@ -48,28 +52,21 @@ export async function POST(req: Request) {
 
     if (!wabaAccount || !resolvedToken || !wabaAccount.phoneNumberId) {
       return NextResponse.json(
-        { success: false, error: "WABA Phone Number ID or Access Token not found in database." },
+        {
+          success: false,
+          error:
+            "WABA Phone Number ID or Access Token not found in database.",
+        },
         { status: 404 }
       );
     }
 
     const ownerUserId = userId || wabaAccount.userId || "admin";
-
-    if (isScheduled && scheduleDate) {
-      return NextResponse.json({
-        success: true,
-        scheduled: true,
-        message: `Campaign "${campaignName}" scheduled for ${scheduleDate} (${numbers.length} recipients).`,
-      });
-    }
-
-    const cleanPhoneId = wabaAccount.phoneNumberId.replace("PHONE_", "").trim();
+    const cleanPhoneId = wabaAccount.phoneNumberId
+      .replace("PHONE_", "")
+      .trim();
     const actualWabaId = wabaAccount.wabaId;
     const channelNumber = wabaAccount.displayPhone || actualWabaId;
-
-    const cleanVariables = Array.isArray(variables)
-      ? variables.filter((v) => v !== undefined && v !== null)
-      : [];
 
     const dbTemplate = await prisma.whatsAppTemplate.findFirst({
       where: {
@@ -78,9 +75,65 @@ export async function POST(req: Request) {
       },
     });
 
-    const headerType = (dbTemplate as any)?.headerType?.toUpperCase() || "NONE";
+    const estimatedCost =
+      dbTemplate?.category === "MARKETING" ? 0.804 : 0.155;
+
+    if (isScheduled && scheduleDate) {
+      const scheduledAtDate = new Date(scheduleDate);
+      if (Number.isNaN(scheduledAtDate.getTime())) {
+        return NextResponse.json(
+          { success: false, error: "Invalid scheduleDate format." },
+          { status: 400 }
+        );
+      }
+
+      let scheduledCount = 0;
+
+      for (const rawNumber of numbers) {
+        let formattedNumber = String(rawNumber).replace(/\D/g, "");
+        if (formattedNumber.length === 10) {
+          formattedNumber = `91${formattedNumber}`;
+        }
+        if (!formattedNumber) continue;
+
+        await prisma.campaignLog.create({
+          data: {
+            userId: ownerUserId,
+            campaignName: campaignName || `Campaign_${templateName}`,
+            templateName: templateName,
+            channel: channelNumber,
+            recipient: formattedNumber,
+            status: "SCHEDULED",
+            messageId: null,
+            cost: estimatedCost,
+            errorDetails: `Scheduled for ${scheduledAtDate.toISOString()}`,
+            sentAt: scheduledAtDate,
+            deliveredAt: null,
+            readAt: null,
+          },
+        });
+        scheduledCount++;
+      }
+
+      return NextResponse.json({
+        success: true,
+        scheduled: true,
+        scheduledCount,
+        scheduledFor: scheduledAtDate.toISOString(),
+        message: `Campaign "${campaignName}" scheduled for ${scheduledAtDate.toLocaleString()} (${scheduledCount} recipients).`,
+      });
+    }
+
+    const cleanVariables = Array.isArray(variables)
+      ? variables.filter((v) => v !== undefined && v !== null)
+      : [];
+
+    const headerType =
+      (dbTemplate as any)?.headerType?.toUpperCase() || "NONE";
     const hasMediaHeader =
-      headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT";
+      headerType === "IMAGE" ||
+      headerType === "VIDEO" ||
+      headerType === "DOCUMENT";
 
     let mediaPayloadParam: any = null;
 
@@ -90,7 +143,11 @@ export async function POST(req: Request) {
 
       if (isMetaId) {
         const mediaKey =
-          headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
+          headerType === "VIDEO"
+            ? "video"
+            : headerType === "DOCUMENT"
+            ? "document"
+            : "image";
         mediaPayloadParam = {
           type: mediaKey,
           [mediaKey]: { id: String(mediaValue).trim() },
@@ -108,12 +165,17 @@ export async function POST(req: Request) {
             mediaValue =
               "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
           } else {
-            mediaValue = "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
+            mediaValue =
+              "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
           }
         }
 
         const mediaKey =
-          headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
+          headerType === "VIDEO"
+            ? "video"
+            : headerType === "DOCUMENT"
+            ? "document"
+            : "image";
         mediaPayloadParam = {
           type: mediaKey,
           [mediaKey]: { link: mediaValue },
@@ -160,7 +222,9 @@ export async function POST(req: Request) {
           language: {
             code: language || "en_US",
           },
-          ...(templateComponents.length > 0 ? { components: templateComponents } : {}),
+          ...(templateComponents.length > 0
+            ? { components: templateComponents }
+            : {}),
         },
       };
 
@@ -218,7 +282,7 @@ export async function POST(req: Request) {
             recipient: formattedNumber,
             status: messageStatus,
             messageId: metaMessageId,
-            cost: dbTemplate?.category === "MARKETING" ? 0.804 : 0.155,
+            cost: estimatedCost,
             errorDetails: errorMsg,
             sentAt: now,
             deliveredAt: null,
@@ -229,7 +293,10 @@ export async function POST(req: Request) {
           `💾 SUCCESS CREATED LOG -> ID: ${savedLog.id} | Recipient: ${formattedNumber} | Wamid: ${metaMessageId}`
         );
       } catch (logErr: any) {
-        console.error(`❌ DB SAVE FAILED for ${formattedNumber}:`, logErr.message);
+        console.error(
+          `❌ DB SAVE FAILED for ${formattedNumber}:`,
+          logErr.message
+        );
       }
     }
 

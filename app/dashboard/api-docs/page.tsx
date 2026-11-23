@@ -1,8 +1,57 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type HttpMethod = "GET" | "POST";
+
+const META_LANGUAGES = [
+  { code: "en_US", label: "English (US) - en_US" },
+  { code: "en_GB", label: "English (UK) - en_GB" },
+  { code: "hi", label: "Hindi - हिंदी (hi)" },
+  { code: "bn", label: "Bengali - বাংলা (bn)" },
+  { code: "mr", label: "Marathi - मराठी (mr)" },
+  { code: "ta", label: "Tamil - தமிழ் (ta)" },
+  { code: "te", label: "Telugu - తెలుగు (te)" },
+  { code: "gu", label: "Gujarati - ગુજરાતી (gu)" },
+  { code: "kn", label: "Kannada - ಕನ್ನಡ (kn)" },
+  { code: "ml", label: "Malayalam - മലയാളം (ml)" },
+  { code: "pa", label: "Punjabi - ਪੰਜਾਬੀ (pa)" },
+  { code: "or", label: "Odia - ଓଡ଼ିଆ (or)" },
+  { code: "as", label: "Assamese - অসমীয়া (as)" },
+  { code: "ur", label: "Urdu - اردو (ur)" },
+  { code: "ar", label: "Arabic - العربية (ar)" },
+  { code: "es", label: "Spanish - Español (es)" },
+  { code: "fr", label: "French - Français (fr)" },
+  { code: "de", label: "German - Deutsch (de)" },
+  { code: "it", label: "Italian - Italiano (it)" },
+  { code: "pt_BR", label: "Portuguese (BR) - pt_BR" },
+  { code: "ru", label: "Russian - Русский (ru)" },
+  { code: "id", label: "Indonesian - Bahasa Indonesia (id)" },
+  { code: "ms", label: "Malay - Bahasa Melayu (ms)" },
+  { code: "th", label: "Thai - ไทย (th)" },
+  { code: "vi", label: "Vietnamese - Tiếng Việt (vi)" },
+  { code: "zh_CN", label: "Chinese (Simplified) - zh_CN" },
+  { code: "ja", label: "Japanese - 日本語 (ja)" },
+  { code: "ko", label: "Korean - 한국어 (ko)" },
+  { code: "tr", label: "Turkish - Türkçe (tr)" },
+  { code: "nl", label: "Dutch - Nederlands (nl)" },
+  { code: "pl", label: "Polish - Polski (pl)" },
+  { code: "uk", label: "Ukrainian - Українська (uk)" },
+];
+
+type TemplateBuilderButtonType =
+  | "Custom"
+  | "Visit website"
+  | "Call Phone Number"
+  | "Complete flow"
+  | "Copy offer code";
+
+interface TemplateBuilderButton {
+  id: string;
+  type: TemplateBuilderButtonType;
+  text: string;
+  value?: string;
+}
 
 interface ChannelOption {
   id: string;
@@ -67,13 +116,19 @@ const ENDPOINTS: ApiEndpointItem[] = [
         placeholder: "91XXXXXXXXXX",
         location: "body",
       },
+      {
+        key: "language",
+        label: "Language",
+        placeholder: "en_US",
+        location: "body",
+      },
     ],
   },
   {
     id: "upload-media",
     group: "Messaging & Media",
     title: "Upload WhatsApp Media",
-    description: "Upload media from a URL to Meta WhatsApp Media API.",
+    description: "Upload media from a URL or file to Meta WhatsApp Media API.",
     method: "POST",
     pathTemplate: "/api/v1/media/upload",
     usesChannelContext: true,
@@ -108,7 +163,8 @@ const ENDPOINTS: ApiEndpointItem[] = [
     id: "create-template",
     group: "Templates & Marketing",
     title: "Create Message Template",
-    description: "Submit a new message template to Meta WABA.",
+    description:
+      "Configure category, language, media header/file, body, footer, and buttons to submit a template to Meta WABA.",
     method: "POST",
     pathTemplate: "/api/v1/meta/templates",
     usesChannelContext: true,
@@ -117,12 +173,12 @@ const ENDPOINTS: ApiEndpointItem[] = [
       {
         key: "name",
         label: "Template Name",
-        placeholder: "template_name",
+        placeholder: "order_update_v1",
         location: "body",
       },
       {
         key: "language",
-        label: "Language Code",
+        label: "Language",
         placeholder: "en_US",
         location: "body",
       },
@@ -135,7 +191,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
       {
         key: "bodyText",
         label: "Body Text",
-        placeholder: "Enter template body text",
+        placeholder: "Hello {{1}}, welcome to our service!",
         location: "body",
       },
     ],
@@ -194,7 +250,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
       },
       {
         key: "language",
-        label: "Language Code",
+        label: "Language",
         placeholder: "en_US",
         location: "body",
       },
@@ -225,7 +281,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
       },
       {
         key: "language",
-        label: "Language Code",
+        label: "Language",
         placeholder: "en_US",
         location: "body",
       },
@@ -256,7 +312,7 @@ const ENDPOINTS: ApiEndpointItem[] = [
       },
       {
         key: "language",
-        label: "Language Code",
+        label: "Language",
         placeholder: "en_US",
         location: "body",
       },
@@ -356,6 +412,7 @@ function extractErrorMessage(
 function buildTemplatePayload(
   tpl: TemplateOption,
   toValue: string,
+  languageCode: string,
   headerValue: string,
   bodyVarValues: string[],
   buttonUrlSuffix: string
@@ -439,7 +496,7 @@ function buildTemplatePayload(
   const templateObj: Record<string, unknown> = {
     name: tpl.name,
     language: {
-      code: tpl.language || "en_US",
+      code: languageCode || tpl.language || "en_US",
     },
   };
 
@@ -454,6 +511,14 @@ function buildTemplatePayload(
     type: "template",
     template: templateObj,
   };
+}
+
+function mapButtonTypeToApi(type: TemplateBuilderButtonType): string {
+  if (type === "Visit website") return "URL";
+  if (type === "Call Phone Number") return "PHONE_NUMBER";
+  if (type === "Copy offer code") return "COPY_CODE";
+  if (type === "Complete flow") return "FLOW";
+  return "QUICK_REPLY";
 }
 
 export default function ApiDocsPage() {
@@ -472,6 +537,53 @@ export default function ApiDocsPage() {
   const [headerVarValue, setHeaderVarValue] = useState("");
   const [templateVarValues, setTemplateVarValues] = useState<string[]>([]);
   const [buttonVarValue, setButtonVarValue] = useState("");
+
+  // Create Message Template rich builder states
+  const [tplSubType, setTplSubType] = useState("Default");
+  const [allowCategoryChange, setAllowCategoryChange] = useState(false);
+  const [tplMediaType, setTplMediaType] = useState<
+    "None" | "Image" | "Video" | "Document" | "Location"
+  >("None");
+  const [tplHeaderText, setTplHeaderText] = useState("");
+  const [tplMediaUrl, setTplMediaUrl] = useState("");
+  const [tplMediaFile, setTplMediaFile] = useState<File | null>(null);
+  const [tplMediaPreviewUrl, setTplMediaPreviewUrl] = useState("");
+  const [tplFooterText, setTplFooterText] = useState("");
+  const [tplVariableSamples, setTplVariableSamples] = useState<
+    Record<string, string>
+  >({ "1": "Animesh" });
+  const [tplButtons, setTplButtons] = useState<TemplateBuilderButton[]>([]);
+  const [showTplButtonMenu, setShowTplButtonMenu] = useState(false);
+
+  // Authentication template builder states
+  const [codeDeliveryOption, setCodeDeliveryOption] = useState("zero_tap");
+  const [authApps, setAuthApps] = useState<
+    Array<{ packageName: string; signatureHash: string }>
+  >([{ packageName: "com.example.myapp", signatureHash: "12345678901" }]);
+  const [otpExpiryMinutes, setOtpExpiryMinutes] = useState(10);
+  const [addSecurityRecommendation, setAddSecurityRecommendation] =
+    useState(true);
+
+  // Carousel template builder states
+  const [carouselCards, setCarouselCards] = useState([
+    {
+      id: 1,
+      mediaType: "Image",
+      mediaUrl: "",
+      text: "Card 1 Offer Details",
+      buttonText: "View Item",
+    },
+    {
+      id: 2,
+      mediaType: "Image",
+      mediaUrl: "",
+      text: "Card 2 Offer Details",
+      buttonText: "View Item",
+    },
+  ]);
+  const [activeCarouselIndex, setActiveCarouselIndex] = useState(0);
+
+  const bodyFieldRef = useRef<HTMLInputElement | null>(null);
 
   const [loadingContext, setLoadingContext] = useState(false);
   const [contextNotice, setContextNotice] = useState<string | null>(null);
@@ -497,6 +609,30 @@ export default function ApiDocsPage() {
     ENDPOINTS.find((ep) => ep.id === selectedId) || ENDPOINTS[0];
 
   const currentValues = formValues[selectedEndpoint.id] || {};
+  const activeCategory = (
+    currentValues.category || "UTILITY"
+  ).toUpperCase() as "UTILITY" | "MARKETING" | "AUTHENTICATION";
+
+  const activeBodyText =
+    currentValues.bodyText !== undefined
+      ? currentValues.bodyText
+      : "Hello {{1}}, welcome to our service!";
+
+  useEffect(() => {
+    const matches = activeBodyText.match(/\{\{(\d+)\}\}/g);
+    if (matches) {
+      setTplVariableSamples((prev) => {
+        const next: Record<string, string> = {};
+        matches.forEach((m) => {
+          const num = m.replace(/[{}]/g, "");
+          next[num] = prev[num] || `Sample ${num}`;
+        });
+        return next;
+      });
+    } else {
+      setTplVariableSamples({});
+    }
+  }, [activeBodyText]);
 
   const loadAccountContext = useCallback(
     async (tokenToUse: string, overrideWabaId?: string) => {
@@ -556,6 +692,13 @@ export default function ApiDocsPage() {
           setHeaderVarValue("");
           setButtonVarValue("");
           setTemplateVarValues(Array(firstTpl.variableCount).fill(""));
+          setFormValues((prev) => ({
+            ...prev,
+            "send-message": {
+              ...(prev["send-message"] || {}),
+              language: firstTpl.language || prev["send-message"]?.language || "en_US",
+            },
+          }));
         } else {
           setSelectedTemplateName("");
           setHeaderVarValue("");
@@ -604,15 +747,38 @@ export default function ApiDocsPage() {
     return url;
   }, [selectedEndpoint, graphVersion, selectedPhoneId, currentValues]);
 
+  const computedHeaderType = useMemo(() => {
+    if (
+      tplMediaType === "Image" ||
+      tplMediaType === "Video" ||
+      tplMediaType === "Document"
+    ) {
+      return tplMediaType.toUpperCase();
+    }
+    if (tplMediaType === "Location") {
+      return "LOCATION";
+    }
+    if (tplHeaderText && tplHeaderText.trim() !== "") {
+      return "TEXT";
+    }
+    return "NONE";
+  }, [tplMediaType, tplHeaderText]);
+
   const generatedPayload = useMemo(() => {
     if (selectedEndpoint.method === "GET") return null;
 
     if (selectedEndpoint.id === "send-message") {
       const toVal = (currentValues.to || "").trim();
+      const langVal = (
+        currentValues.language ||
+        activeTemplateObj?.language ||
+        "en_US"
+      ).trim();
       if (activeTemplateObj) {
         return buildTemplatePayload(
           activeTemplateObj,
           toVal,
+          langVal,
           headerVarValue,
           templateVarValues,
           buttonVarValue
@@ -624,9 +790,9 @@ export default function ApiDocsPage() {
         ...(toVal ? { to: toVal } : {}),
         type: "template",
         template: {
-          name: "",
+          name: selectedTemplateName || "",
           language: {
-            code: "",
+            code: langVal,
           },
         },
       };
@@ -662,11 +828,65 @@ export default function ApiDocsPage() {
             ? (currentValues[f.key] ?? "image").trim() || "image"
             : f.key === "category"
             ? (currentValues[f.key] ?? "UTILITY").trim() || "UTILITY"
+            : f.key === "language"
+            ? (currentValues[f.key] ?? "en_US").trim() || "en_US"
+            : f.key === "bodyText" && selectedEndpoint.id === "create-template"
+            ? (currentValues[f.key] ?? activeBodyText).trim()
             : (currentValues[f.key] ?? "").trim();
         if (rawVal !== "") {
           payload[f.key] =
             f.key === "mediaUrl" ? normalizePublicUrl(rawVal) : rawVal;
         }
+      }
+    }
+
+    if (selectedEndpoint.id === "create-template") {
+      payload.category = activeCategory;
+      payload.language = (currentValues.language || "en_US").trim() || "en_US";
+      payload.subType = tplSubType;
+      payload.allowCategoryChange = allowCategoryChange;
+      payload.headerType = computedHeaderType;
+      payload.headerText =
+        computedHeaderType === "TEXT" ? tplHeaderText.trim() : "";
+
+      const normalizedMediaUrl = normalizePublicUrl(tplMediaUrl);
+      if (
+        computedHeaderType === "IMAGE" ||
+        computedHeaderType === "VIDEO" ||
+        computedHeaderType === "DOCUMENT"
+      ) {
+        if (tplMediaFile) {
+          payload.mediaFileName = tplMediaFile.name;
+          payload.mediaMimeType = tplMediaFile.type || undefined;
+          payload.mediaSizeBytes = tplMediaFile.size;
+        }
+        if (normalizedMediaUrl) {
+          payload.mediaUrl = normalizedMediaUrl;
+        }
+      }
+
+      payload.footerText = tplFooterText.trim();
+      payload.variableSamples = Object.values(tplVariableSamples);
+      payload.buttons = tplButtons.map((b) => ({
+        type: mapButtonTypeToApi(b.type),
+        text: b.text,
+        value: b.value || "",
+      }));
+
+      if (activeCategory === "AUTHENTICATION") {
+        payload.authConfig = {
+          codeDeliveryOption,
+          apps: authApps,
+          otpExpiryMinutes,
+          addSecurityRecommendation,
+        };
+      }
+
+      if (tplSubType === "Carousel") {
+        payload.carouselCards = carouselCards.map((c) => ({
+          ...c,
+          mediaUrl: normalizePublicUrl(c.mediaUrl),
+        }));
       }
     }
 
@@ -691,6 +911,22 @@ export default function ApiDocsPage() {
     selectedPhoneId,
     selectedWabaId,
     selectedTemplateName,
+    activeBodyText,
+    activeCategory,
+    tplSubType,
+    allowCategoryChange,
+    computedHeaderType,
+    tplHeaderText,
+    tplMediaUrl,
+    tplMediaFile,
+    tplFooterText,
+    tplVariableSamples,
+    tplButtons,
+    codeDeliveryOption,
+    authApps,
+    otpExpiryMinutes,
+    addSecurityRecommendation,
+    carouselCards,
   ]);
 
   useEffect(() => {
@@ -719,6 +955,10 @@ export default function ApiDocsPage() {
       return `curl -X GET "${fullUrl}"${authPart}${phoneHdr}${wabaHdr}`;
     }
 
+    if (selectedEndpoint.id === "create-template" && tplMediaFile) {
+      return `curl -X POST "${fullUrl}"${authPart}${phoneHdr}${wabaHdr} \\\n  -F "mediaFile=@${tplMediaFile.name}" \\\n  -F 'payload=${rawJsonText}'`;
+    }
+
     return `curl -X POST "${fullUrl}"${authPart}${phoneHdr}${wabaHdr} \\\n  -H "Content-Type: application/json" \\\n  -d '${rawJsonText}'`;
   }, [
     resolvedPath,
@@ -726,6 +966,8 @@ export default function ApiDocsPage() {
     selectedPhoneId,
     selectedWabaId,
     selectedEndpoint.method,
+    selectedEndpoint.id,
+    tplMediaFile,
     rawJsonText,
   ]);
 
@@ -763,6 +1005,86 @@ export default function ApiDocsPage() {
     }));
   }
 
+  function handleCategoryChange(nextCategory: "UTILITY" | "MARKETING" | "AUTHENTICATION") {
+    handleFieldChange("category", nextCategory);
+    if (nextCategory === "MARKETING") {
+      setTplSubType("Default");
+    } else if (nextCategory === "UTILITY") {
+      setTplSubType("None");
+    } else {
+      setTplSubType("Zero-tap OTP");
+    }
+  }
+
+  function handleAddBodyVariable() {
+    const matches = activeBodyText.match(/\{\{(\d+)\}\}/g);
+    const nextNum = matches ? matches.length + 1 : 1;
+    const nextText = `${activeBodyText} {{${nextNum}}}`.trim();
+    handleFieldChange("bodyText", nextText);
+    setTimeout(() => bodyFieldRef.current?.focus(), 0);
+  }
+
+  function handleAddHeaderVariable() {
+    const matches = tplHeaderText.match(/\{\{(\d+)\}\}/g);
+    const nextNum = matches ? matches.length + 1 : 1;
+    setJsonEditedManually(false);
+    setTplHeaderText((prev) => `${prev} {{${nextNum}}}`.trim());
+  }
+
+  function handleTplMediaFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const sizeMB = file.size / (1024 * 1024);
+    if (tplMediaType === "Image" && sizeMB > 5) {
+      alert("Image size exceeds 5MB limit.");
+      e.target.value = "";
+      return;
+    }
+    if (tplMediaType === "Video" && sizeMB > 16) {
+      alert("Video size exceeds 16MB limit.");
+      e.target.value = "";
+      return;
+    }
+    if (tplMediaType === "Document" && sizeMB > 100) {
+      alert("Document size exceeds 100MB limit.");
+      e.target.value = "";
+      return;
+    }
+
+    setJsonEditedManually(false);
+    setTplMediaFile(file);
+    setTplMediaPreviewUrl(URL.createObjectURL(file));
+  }
+
+  function handleAddTplButton(type: TemplateBuilderButtonType) {
+    if (tplButtons.length >= 10) {
+      alert("Maximum 10 buttons allowed.");
+      return;
+    }
+    setJsonEditedManually(false);
+    setTplButtons((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${prev.length}`,
+        type,
+        text:
+          type === "Custom"
+            ? "Quick Reply"
+            : type === "Visit website"
+            ? "Visit Website"
+            : type,
+        value: "",
+      },
+    ]);
+    setShowTplButtonMenu(false);
+  }
+
+  function handleRemoveTplButton(id: string) {
+    setJsonEditedManually(false);
+    setTplButtons((prev) => prev.filter((b) => b.id !== id));
+  }
+
   function handleVariableInputChange(index: number, value: string) {
     setJsonEditedManually(false);
     setTemplateVarValues((prev) => {
@@ -791,7 +1113,7 @@ export default function ApiDocsPage() {
         [selectedEndpoint.id]: {
           ...(prev[selectedEndpoint.id] || {}),
           templateName: tpl.name,
-          language: tpl.language,
+          language: tpl.language || prev[selectedEndpoint.id]?.language || "en_US",
         },
       }));
     }
@@ -802,15 +1124,33 @@ export default function ApiDocsPage() {
     const started = performance.now();
 
     try {
-      let bodyToSend: string | undefined;
+      let bodyToSend: BodyInit | undefined;
+      const headers: Record<string, string> = {};
+
       if (selectedEndpoint.method === "POST") {
-        JSON.parse(rawJsonText);
-        bodyToSend = rawJsonText;
+        const parsedJson = JSON.parse(rawJsonText);
+
+        if (selectedEndpoint.id === "create-template" && tplMediaFile) {
+          const fd = new FormData();
+          fd.append("mediaFile", tplMediaFile);
+          fd.append("payload", rawJsonText);
+          Object.entries(parsedJson as Record<string, unknown>).forEach(
+            ([k, v]) => {
+              if (v !== undefined && v !== null) {
+                fd.append(
+                  k,
+                  typeof v === "object" ? JSON.stringify(v) : String(v)
+                );
+              }
+            }
+          );
+          bodyToSend = fd;
+        } else {
+          headers["Content-Type"] = "application/json";
+          bodyToSend = rawJsonText;
+        }
       }
 
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
       if (activeToken) {
         headers.Authorization = `Bearer ${activeToken}`;
       }
@@ -1242,9 +1582,22 @@ export default function ApiDocsPage() {
               <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {selectedEndpoint.fields.map((field) => (
                   <div key={field.key}>
-                    <label className="mb-1.5 block text-xs font-medium text-slate-700">
-                      {field.label}
-                    </label>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label className="block text-xs font-medium text-slate-700">
+                        {field.label}
+                      </label>
+                      {field.key === "bodyText" &&
+                        selectedEndpoint.id === "create-template" && (
+                          <button
+                            type="button"
+                            onClick={handleAddBodyVariable}
+                            className="text-xs font-semibold text-indigo-600 hover:underline"
+                          >
+                            + Add Variable
+                          </button>
+                        )}
+                    </div>
+
                     {field.key === "mediaType" ? (
                       <select
                         value={currentValues[field.key] ?? "image"}
@@ -1259,9 +1612,14 @@ export default function ApiDocsPage() {
                       </select>
                     ) : field.key === "category" ? (
                       <select
-                        value={currentValues[field.key] ?? "UTILITY"}
+                        value={activeCategory}
                         onChange={(e) =>
-                          handleFieldChange(field.key, e.target.value)
+                          handleCategoryChange(
+                            e.target.value as
+                              | "UTILITY"
+                              | "MARKETING"
+                              | "AUTHENTICATION"
+                          )
                         }
                         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                       >
@@ -1269,10 +1627,36 @@ export default function ApiDocsPage() {
                         <option value="MARKETING">MARKETING</option>
                         <option value="AUTHENTICATION">AUTHENTICATION</option>
                       </select>
+                    ) : field.key === "language" ? (
+                      <select
+                        value={
+                          currentValues[field.key] ??
+                          activeTemplateObj?.language ??
+                          "en_US"
+                        }
+                        onChange={(e) =>
+                          handleFieldChange(field.key, e.target.value)
+                        }
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      >
+                        {META_LANGUAGES.map((lang) => (
+                          <option key={lang.code} value={lang.code}>
+                            {lang.label}
+                          </option>
+                        ))}
+                      </select>
                     ) : (
                       <input
+                        ref={
+                          field.key === "bodyText" ? bodyFieldRef : undefined
+                        }
                         type="text"
-                        value={currentValues[field.key] ?? ""}
+                        value={
+                          field.key === "bodyText" &&
+                          selectedEndpoint.id === "create-template"
+                            ? currentValues[field.key] ?? activeBodyText
+                            : currentValues[field.key] ?? ""
+                        }
                         onChange={(e) =>
                           handleFieldChange(field.key, e.target.value)
                         }
@@ -1282,6 +1666,584 @@ export default function ApiDocsPage() {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {selectedEndpoint.id === "create-template" && (
+              <div className="mt-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Template Format, Media, Footer & Buttons
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Category: {activeCategory} ({tplSubType}) • Header:{" "}
+                      {computedHeaderType}
+                    </p>
+                  </div>
+                  <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={allowCategoryChange}
+                      onChange={(e) => {
+                        setJsonEditedManually(false);
+                        setAllowCategoryChange(e.target.checked);
+                      }}
+                      className="rounded accent-indigo-600"
+                    />
+                    <span>Allow Category Change</span>
+                  </label>
+                </div>
+
+                {/* Sub-type selector based on Category */}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    Template Sub-Type ({activeCategory})
+                  </label>
+                  <select
+                    value={tplSubType}
+                    onChange={(e) => {
+                      setJsonEditedManually(false);
+                      setTplSubType(e.target.value);
+                    }}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
+                  >
+                    {activeCategory === "MARKETING" && (
+                      <>
+                        <option value="Default">Default</option>
+                        <option value="Catalogue">Catalogue</option>
+                        <option value="Flows">Flows</option>
+                        <option value="Calling permissions request">
+                          Calling permissions request
+                        </option>
+                        <option value="Limited Time Offer (LTO)">
+                          Limited Time Offer (LTO)
+                        </option>
+                        <option value="Carousel">Carousel</option>
+                      </>
+                    )}
+                    {activeCategory === "UTILITY" && (
+                      <>
+                        <option value="None">Default Utility</option>
+                        <option value="Order status">Order status</option>
+                        <option value="Order details">Order details</option>
+                      </>
+                    )}
+                    {activeCategory === "AUTHENTICATION" && (
+                      <>
+                        <option value="Zero-tap OTP">Zero-tap OTP</option>
+                        <option value="One-tap auto fill">
+                          One-tap auto fill
+                        </option>
+                        <option value="Copy code">Copy code</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                {/* Authentication options */}
+                {activeCategory === "AUTHENTICATION" && (
+                  <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3.5">
+                    <div className="text-xs font-bold text-slate-800">
+                      Authentication Code Delivery & App Setup
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-700">
+                          Code Delivery Option
+                        </label>
+                        <select
+                          value={codeDeliveryOption}
+                          onChange={(e) => {
+                            setJsonEditedManually(false);
+                            setCodeDeliveryOption(e.target.value);
+                          }}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs text-slate-900"
+                        >
+                          <option value="zero_tap">Zero-tap OTP</option>
+                          <option value="one_tap">One-tap auto fill</option>
+                          <option value="copy_code">Copy code</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-700">
+                          OTP Expiry (Minutes)
+                        </label>
+                        <input
+                          type="number"
+                          value={otpExpiryMinutes}
+                          onChange={(e) => {
+                            setJsonEditedManually(false);
+                            setOtpExpiryMinutes(Number(e.target.value) || 10);
+                          }}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs text-slate-900"
+                        />
+                      </div>
+                      <div className="flex items-end pb-1">
+                        <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={addSecurityRecommendation}
+                            onChange={(e) => {
+                              setJsonEditedManually(false);
+                              setAddSecurityRecommendation(e.target.checked);
+                            }}
+                            className="rounded accent-emerald-600"
+                          />
+                          <span>Security Recommendation</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {authApps.map((app, idx) => (
+                        <div
+                          key={idx}
+                          className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+                        >
+                          <input
+                            type="text"
+                            value={app.packageName}
+                            onChange={(e) => {
+                              setJsonEditedManually(false);
+                              const next = [...authApps];
+                              next[idx].packageName = e.target.value;
+                              setAuthApps(next);
+                            }}
+                            placeholder="Android Package (com.example.app)"
+                            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs"
+                          />
+                          <input
+                            type="text"
+                            value={app.signatureHash}
+                            onChange={(e) => {
+                              setJsonEditedManually(false);
+                              const next = [...authApps];
+                              next[idx].signatureHash = e.target.value;
+                              setAuthApps(next);
+                            }}
+                            placeholder="Signature Hash (11 chars)"
+                            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs"
+                          />
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setJsonEditedManually(false);
+                          setAuthApps((prev) => [
+                            ...prev,
+                            { packageName: "", signatureHash: "" },
+                          ]);
+                        }}
+                        className="text-xs font-semibold text-emerald-700 hover:underline"
+                      >
+                        + Add another app
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Carousel options */}
+                {tplSubType === "Carousel" && (
+                  <div className="space-y-3 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">
+                        Carousel Cards ({carouselCards.length}/10)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (carouselCards.length >= 10) return;
+                          setJsonEditedManually(false);
+                          setCarouselCards((prev) => [
+                            ...prev,
+                            {
+                              id: Date.now(),
+                              mediaType: "Image",
+                              mediaUrl: "",
+                              text: `Card ${prev.length + 1} Offer Details`,
+                              buttonText: "View Item",
+                            },
+                          ]);
+                        }}
+                        className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700"
+                      >
+                        + Add Card
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {carouselCards.map((c, idx) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setActiveCarouselIndex(idx)}
+                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${
+                            activeCarouselIndex === idx
+                              ? "border-indigo-600 bg-indigo-600 text-white"
+                              : "border-slate-300 bg-white text-slate-700"
+                          }`}
+                        >
+                          Card {idx + 1}
+                        </button>
+                      ))}
+                    </div>
+                    {carouselCards[activeCarouselIndex] && (
+                      <div className="grid grid-cols-1 gap-2.5 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-2">
+                        <select
+                          value={carouselCards[activeCarouselIndex].mediaType}
+                          onChange={(e) => {
+                            setJsonEditedManually(false);
+                            const next = [...carouselCards];
+                            next[activeCarouselIndex].mediaType = e.target.value;
+                            setCarouselCards(next);
+                          }}
+                          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
+                        >
+                          <option value="Image">Image</option>
+                          <option value="Video">Video</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={carouselCards[activeCarouselIndex].buttonText}
+                          onChange={(e) => {
+                            setJsonEditedManually(false);
+                            const next = [...carouselCards];
+                            next[activeCarouselIndex].buttonText =
+                              e.target.value;
+                            setCarouselCards(next);
+                          }}
+                          placeholder="Button Text"
+                          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
+                        />
+                        <input
+                          type="text"
+                          value={carouselCards[activeCarouselIndex].mediaUrl}
+                          onChange={(e) => {
+                            setJsonEditedManually(false);
+                            const next = [...carouselCards];
+                            next[activeCarouselIndex].mediaUrl = e.target.value;
+                            setCarouselCards(next);
+                          }}
+                          placeholder="Card Media URL (https://...)"
+                          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
+                        />
+                        <input
+                          type="text"
+                          value={carouselCards[activeCarouselIndex].text}
+                          onChange={(e) => {
+                            setJsonEditedManually(false);
+                            const next = [...carouselCards];
+                            next[activeCarouselIndex].text = e.target.value;
+                            setCarouselCards(next);
+                          }}
+                          placeholder="Card Body Text"
+                          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Media Header & File Upload */}
+                {activeCategory !== "AUTHENTICATION" && tplSubType !== "Carousel" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                        Media Header Type
+                      </label>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                        {(
+                          [
+                            "None",
+                            "Image",
+                            "Video",
+                            "Document",
+                            "Location",
+                          ] as const
+                        ).map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => {
+                              setJsonEditedManually(false);
+                              setTplMediaType(m);
+                              if (m === "None") {
+                                setTplMediaFile(null);
+                                setTplMediaPreviewUrl("");
+                                setTplMediaUrl("");
+                              } else {
+                                setTplHeaderText("");
+                              }
+                            }}
+                            className={`rounded-lg border py-1.5 text-xs font-semibold transition ${
+                              tplMediaType === m
+                                ? "border-indigo-600 bg-indigo-600 text-white"
+                                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {tplMediaType === "None" && (
+                      <div>
+                        <div className="mb-1 flex items-center justify-between">
+                          <label className="text-xs font-medium text-slate-700">
+                            Header Text (Optional)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={handleAddHeaderVariable}
+                            className="text-xs font-semibold text-indigo-600 hover:underline"
+                          >
+                            + Add Variable
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={tplHeaderText}
+                          onChange={(e) => {
+                            setJsonEditedManually(false);
+                            setTplHeaderText(e.target.value);
+                          }}
+                          placeholder="Optional header text..."
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                        />
+                      </div>
+                    )}
+
+                    {(tplMediaType === "Image" ||
+                      tplMediaType === "Video" ||
+                      tplMediaType === "Document") && (
+                      <div className="space-y-2.5 rounded-lg border border-dashed border-indigo-300 bg-white p-3.5">
+                        <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                          <div>
+                            <div className="text-xs font-semibold text-slate-800">
+                              {tplMediaType} File / Sample Media
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {tplMediaType === "Image" &&
+                                "JPG, JPEG, PNG • Max 5 MB"}
+                              {tplMediaType === "Video" &&
+                                "MP4, 3GP • Max 16 MB"}
+                              {tplMediaType === "Document" && "PDF • Max 100 MB"}
+                            </div>
+                          </div>
+
+                          <label className="inline-flex cursor-pointer items-center rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
+                            <span>Choose {tplMediaType} File</span>
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept={
+                                tplMediaType === "Image"
+                                  ? ".jpg,.jpeg,.png,image/jpeg,image/png"
+                                  : tplMediaType === "Video"
+                                  ? ".mp4,.3gp,video/mp4,video/3gpp"
+                                  : ".pdf,application/pdf"
+                              }
+                              onChange={handleTplMediaFileChange}
+                            />
+                          </label>
+                        </div>
+
+                        <input
+                          type="text"
+                          value={tplMediaUrl}
+                          onChange={(e) => {
+                            setJsonEditedManually(false);
+                            setTplMediaUrl(e.target.value);
+                          }}
+                          placeholder={`Or paste ${tplMediaType.toLowerCase()} URL (https://...)`}
+                          className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900"
+                        />
+
+                        {tplMediaFile && (
+                          <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                            <span className="truncate font-medium">
+                              {tplMediaFile.name} (
+                              {(tplMediaFile.size / (1024 * 1024)).toFixed(2)}{" "}
+                              MB)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setJsonEditedManually(false);
+                                setTplMediaFile(null);
+                                setTplMediaPreviewUrl("");
+                              }}
+                              className="ml-2 font-semibold text-rose-600 hover:underline"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        )}
+
+                        {tplMediaType === "Image" && tplMediaPreviewUrl && (
+                          <img
+                            src={tplMediaPreviewUrl}
+                            alt="Selected media preview"
+                            className="h-28 w-auto rounded-lg border border-slate-200 object-cover"
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Variable Sample Values */}
+                {Object.keys(tplVariableSamples).length > 0 && (
+                  <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                    <div className="text-xs font-semibold text-slate-700">
+                      Body Variable Samples
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {Object.keys(tplVariableSamples).map((varKey) => (
+                        <div
+                          key={varKey}
+                          className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5"
+                        >
+                          <span className="font-mono text-xs font-bold text-indigo-700">
+                            {`{{${varKey}}}`}
+                          </span>
+                          <input
+                            type="text"
+                            value={tplVariableSamples[varKey]}
+                            onChange={(e) => {
+                              setJsonEditedManually(false);
+                              setTplVariableSamples((prev) => ({
+                                ...prev,
+                                [varKey]: e.target.value,
+                              }));
+                            }}
+                            placeholder={`Sample for {{${varKey}}}`}
+                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer Text */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-700">
+                    Footer Text (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={tplFooterText}
+                    onChange={(e) => {
+                      setJsonEditedManually(false);
+                      setTplFooterText(e.target.value);
+                    }}
+                    placeholder="e.g. Reply STOP to unsubscribe"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                  />
+                </div>
+
+                {/* Interactive Buttons */}
+                <div className="relative space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700">
+                      Interactive Buttons (Optional)
+                    </label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowTplButtonMenu((prev) => !prev)}
+                        className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                      >
+                        + Add Button
+                      </button>
+
+                      {showTplButtonMenu && (
+                        <div className="absolute right-0 z-30 mt-1.5 w-52 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                          {(
+                            [
+                              "Custom",
+                              "Visit website",
+                              "Call Phone Number",
+                              "Complete flow",
+                              "Copy offer code",
+                            ] as TemplateBuilderButtonType[]
+                          ).map((btnType) => (
+                            <button
+                              key={btnType}
+                              type="button"
+                              onClick={() => handleAddTplButton(btnType)}
+                              className="block w-full px-3.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-indigo-50"
+                            >
+                              {btnType}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {tplButtons.length > 0 && (
+                    <div className="space-y-2">
+                      {tplButtons.map((btn, idx) => (
+                        <div
+                          key={btn.id}
+                          className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-2.5"
+                        >
+                          <span className="w-28 text-xs font-semibold text-slate-600">
+                            {btn.type}
+                          </span>
+                          <input
+                            type="text"
+                            value={btn.text}
+                            onChange={(e) => {
+                              setJsonEditedManually(false);
+                              const next = [...tplButtons];
+                              next[idx].text = e.target.value;
+                              setTplButtons(next);
+                            }}
+                            placeholder="Button text"
+                            className="flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
+                          />
+                          {(btn.type === "Visit website" ||
+                            btn.type === "Call Phone Number" ||
+                            btn.type === "Copy offer code" ||
+                            btn.type === "Complete flow") && (
+                            <input
+                              type="text"
+                              value={btn.value || ""}
+                              onChange={(e) => {
+                                setJsonEditedManually(false);
+                                const next = [...tplButtons];
+                                next[idx].value = e.target.value;
+                                setTplButtons(next);
+                              }}
+                              placeholder={
+                                btn.type === "Visit website"
+                                  ? "https://example.com"
+                                  : btn.type === "Call Phone Number"
+                                  ? "+919876543210"
+                                  : btn.type === "Copy offer code"
+                                  ? "OFFER20"
+                                  : "Flow ID / URL"
+                              }
+                              className="flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 font-mono text-xs"
+                            />
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTplButton(btn.id)}
+                            className="rounded-lg px-2 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

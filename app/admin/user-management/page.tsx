@@ -1,211 +1,10 @@
 "use client";
 
 import BalanceTransferModal from "@/components/BalanceTransferModal";
+import ManageRatesModal from "@/components/ManageRatesModal";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-
-function ManageRatesModal({
-  user,
-  onClose,
-  onSuccess,
-}: {
-  user: any;
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
-  const [utilityRate, setUtilityRate] = useState(0.115);
-  const [serviceRate, setServiceRate] = useState(0.115);
-  const [authRate, setAuthRate] = useState(0.115);
-  const [marketingRate, setMarketingRate] = useState(0.785);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (user?.id) {
-      fetch(`/api/admin/rates?userId=${user.id}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.rates) {
-            setUtilityRate(data.rates.utility ?? 0.115);
-            setServiceRate(data.rates.service ?? 0.115);
-            setAuthRate(data.rates.authentication ?? 0.115);
-            setMarketingRate(data.rates.marketing ?? 0.785);
-          }
-        })
-        .catch((err) => console.error("Error fetching rates:", err));
-    }
-  }, [user]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const res = await fetch("/api/admin/rates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          rates: {
-            utility: utilityRate,
-            service: serviceRate,
-            authentication: authRate,
-            marketing: marketingRate,
-          },
-          utilityRate,
-          serviceRate,
-          authRate,
-          marketingRate,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        alert("Rates updated successfully!");
-        onSuccess();
-      } else {
-        alert(data.message || "Failed to update rates");
-      }
-    } catch (err) {
-      console.error("Error updating rates:", err);
-      alert("Network error.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 max-w-4xl w-full p-6 shadow-2xl space-y-4">
-        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">
-              Manage User Rates ({user.username || user.name})
-            </h3>
-            <p className="text-[11px] text-slate-500">
-              Configure per-unit selling rates against base cost.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 font-bold text-lg cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="overflow-x-auto rounded-xl border border-slate-200/80">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50 text-slate-600 border-b text-[10px] uppercase">
-                  <th className="p-3">COUNTRY INFO</th>
-                  <th className="p-3">CHANNEL TYPE</th>
-                  <th className="p-3">MY RATE / UNIT</th>
-                  <th className="p-3">SELLING RATE / UNIT</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                <tr>
-                  <td className="p-3 font-medium text-slate-800">🇮🇳 (91) INDIA – IN</td>
-                  <td className="p-3 text-slate-600">Utility</td>
-                  <td className="p-3">
-                    <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-semibold">
-                      0.1150
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={utilityRate}
-                      onChange={(e) => setUtilityRate(parseFloat(e.target.value))}
-                      className="border border-slate-300 rounded-lg p-2 w-32 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono font-medium"
-                      required
-                    />
-                  </td>
-                </tr>
-                <tr>
-                  <td className="p-3 font-medium text-slate-800">🇮🇳 (91) INDIA – IN</td>
-                  <td className="p-3 text-slate-600">Service</td>
-                  <td className="p-3">
-                    <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-semibold">
-                      0.1150
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={serviceRate}
-                      onChange={(e) => setServiceRate(parseFloat(e.target.value))}
-                      className="border border-slate-300 rounded-lg p-2 w-32 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono font-medium"
-                      required
-                    />
-                  </td>
-                </tr>
-                <tr>
-                  <td className="p-3 font-medium text-slate-800">🇮🇳 (91) INDIA – IN</td>
-                  <td className="p-3 text-slate-600">Authentication</td>
-                  <td className="p-3">
-                    <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-semibold">
-                      0.1150
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={authRate}
-                      onChange={(e) => setAuthRate(parseFloat(e.target.value))}
-                      className="border border-slate-300 rounded-lg p-2 w-32 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono font-medium"
-                      required
-                    />
-                  </td>
-                </tr>
-                <tr>
-                  <td className="p-3 font-medium text-slate-800">🇮🇳 (91) INDIA – IN</td>
-                  <td className="p-3 text-slate-600">Marketing</td>
-                  <td className="p-3">
-                    <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-semibold">
-                      0.7850
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={marketingRate}
-                      onChange={(e) => setMarketingRate(parseFloat(e.target.value))}
-                      className="border border-slate-300 rounded-lg p-2 w-32 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono font-medium"
-                      required
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-medium hover:bg-slate-200 cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold disabled:opacity-50 shadow-2xs cursor-pointer"
-            >
-              {loading ? "Saving..." : "Save Rates"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 export default function UserManagementPage() {
   const router = useRouter();
@@ -304,6 +103,23 @@ export default function UserManagementPage() {
     }
   };
 
+  const refreshSelectedUserFunds = async (userId: string) => {
+    const refRes = await fetch(`/api/admin/funds?userId=${encodeURIComponent(userId)}`);
+    const refData = await refRes.json();
+    if (refData.success) {
+      const nextActual = Number(refData.actualBalance ?? 0);
+      const nextVirtual = Number(refData.virtualBalance ?? 0);
+      setWalletBalance(nextActual);
+      setOversellBalance(nextVirtual);
+      setTransactions(refData.transactions || []);
+      setSelectedUser((prev: any) =>
+        prev && prev.id === userId
+          ? { ...prev, actualBalance: nextActual, virtualBalance: nextVirtual }
+          : prev
+      );
+    }
+  };
+
   const handleSuggestionSelect = (user: any) => {
     setSearchQuery(user.name || user.username || user.email || "");
     setShowSuggestions(false);
@@ -376,18 +192,18 @@ export default function UserManagementPage() {
 
   useEffect(() => {
     if (selectedUser?.id) {
-      fetch(`/api/admin/funds?userId=${selectedUser.id}`)
+      fetch(`/api/admin/funds?userId=${encodeURIComponent(selectedUser.id)}`)
         .then((res) => res.json())
         .then((data) => {
           if (data.success) {
-            setWalletBalance(data.actualBalance || 0);
-            setOversellBalance(data.virtualBalance || 0);
+            setWalletBalance(Number(data.actualBalance ?? 0));
+            setOversellBalance(Number(data.virtualBalance ?? 0));
             setTransactions(data.transactions || []);
           }
         })
         .catch((err) => console.error("Error loading user funds:", err));
 
-      fetch(`/api/admin/waba-accounts?userId=${selectedUser.id}`)
+      fetch(`/api/admin/waba-accounts?userId=${encodeURIComponent(selectedUser.id)}`)
         .then((res) => res.json())
         .then((data) => {
           if (data.success || Array.isArray(data)) {
@@ -419,7 +235,7 @@ export default function UserManagementPage() {
           ]);
         });
     }
-  }, [selectedUser]);
+  }, [selectedUser?.id]);
 
   const handleLoginAsUser = async () => {
     if (!selectedUser?.id) return;
@@ -1505,18 +1321,17 @@ export default function UserManagementPage() {
 
       {showFundModal && selectedUser && (
         <BalanceTransferModal
-          user={selectedUser}
+          user={{
+            ...selectedUser,
+            actualBalance: walletBalance,
+            virtualBalance: oversellBalance,
+          }}
           onClose={() => setShowFundModal(false)}
           onSuccess={async () => {
             setShowFundModal(false);
             if (selectedUser?.id) {
-              const refRes = await fetch(`/api/admin/funds?userId=${selectedUser.id}`);
-              const refData = await refRes.json();
-              if (refData.success) {
-                setWalletBalance(refData.actualBalance || 0);
-                setOversellBalance(refData.virtualBalance || 0);
-                setTransactions(refData.transactions || []);
-              }
+              await refreshSelectedUserFunds(selectedUser.id);
+              await fetchUsers();
             }
           }}
         />
@@ -1622,7 +1437,7 @@ export default function UserManagementPage() {
                   onChange={(e) => setNewUserData({ ...newUserData, role: e.target.value })}
                   className="w-full border border-slate-300 rounded-xl p-2.5 text-xs mt-1 bg-slate-50 focus:outline-none focus:border-emerald-500 font-medium"
                 >
-                  <option value="USER">User / Agent</option>
+                  <option value="USER">User</option>
                   <option value="RESELLER">Reseller</option>
                   <option value="WHITE_LABEL_RESELLER">White Label Reseller</option>
                 </select>

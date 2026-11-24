@@ -24,11 +24,18 @@ export async function POST(req: Request) {
     const { targetUserId, amount, confirmPassword, type, balanceType } = body;
 
     const transferAmount = parseFloat(amount);
-    const actionType = type || (transferAmount < 0 ? "DEBIT" : "CREDIT");
+    const actionType: "CREDIT" | "DEBIT" =
+      type === "DEBIT" || transferAmount < 0 ? "DEBIT" : "CREDIT";
     const absoluteAmount = Math.abs(transferAmount);
-    const selectedBalanceType = balanceType === "ACTUAL" ? "ACTUAL" : "VIRTUAL";
+    const selectedBalanceType: "ACTUAL" | "VIRTUAL" =
+      balanceType === "ACTUAL" ? "ACTUAL" : "VIRTUAL";
 
-    if (!targetUserId || isNaN(absoluteAmount) || absoluteAmount <= 0 || !confirmPassword) {
+    if (
+      !targetUserId ||
+      Number.isNaN(absoluteAmount) ||
+      absoluteAmount <= 0 ||
+      !confirmPassword
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -41,7 +48,8 @@ export async function POST(req: Request) {
     // 1. Fetch Sender
     let sender: any = null;
     const isEmergencyAdmin =
-      loggedInUserId === "emergency-admin-id" || loggedInUserId === "admin-fallback-id";
+      loggedInUserId === "emergency-admin-id" ||
+      loggedInUserId === "admin-fallback-id";
 
     if (isEmergencyAdmin) {
       sender = {
@@ -123,14 +131,21 @@ export async function POST(req: Request) {
         );
       }
 
-      if (actionType === "CREDIT" && Number(sender.virtualBalance || 0) < absoluteAmount) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Insufficient Virtual Balance in your reseller account.",
-          },
-          { status: 400 }
-        );
+      if (actionType === "CREDIT") {
+        const senderAvailable =
+          selectedBalanceType === "ACTUAL"
+            ? Number(sender.actualBalance || 0)
+            : Number(sender.virtualBalance || 0);
+
+        if (senderAvailable < absoluteAmount) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: `Insufficient ${selectedBalanceType} Balance in your reseller account.`,
+            },
+            { status: 400 }
+          );
+        }
       }
     } else if (sender.role !== "SUPER_ADMIN") {
       return NextResponse.json(
@@ -155,65 +170,102 @@ export async function POST(req: Request) {
     }
 
     // 5. Execute Atomic Transaction
-    await prisma.$transaction(async (tx) => {
+    const updatedTargetUser = await prisma.$transaction(async (tx) => {
       if (actionType === "CREDIT") {
         if (selectedBalanceType === "ACTUAL") {
-          await tx.user.update({
+          if (senderIsReseller && !isEmergencyAdmin) {
+            await tx.user.update({
+              where: { id: sender.id },
+              data: { actualBalance: { decrement: absoluteAmount } },
+            });
+          }
+          return tx.user.update({
             where: { id: targetUserId },
             data: {
               actualBalance: { increment: absoluteAmount },
               walletBalance: { increment: absoluteAmount },
             },
+            select: {
+              id: true,
+              actualBalance: true,
+              virtualBalance: true,
+              walletBalance: true,
+            },
           });
         } else {
-          await tx.user.update({
+          if (senderIsReseller && !isEmergencyAdmin) {
+            await tx.user.update({
+              where: { id: sender.id },
+              data: { virtualBalance: { decrement: absoluteAmount } },
+            });
+          }
+          return tx.user.update({
             where: { id: targetUserId },
             data: { virtualBalance: { increment: absoluteAmount } },
-          });
-        }
-
-        if (senderIsReseller && !isEmergencyAdmin) {
-          await tx.user.update({
-            where: { id: sender.id },
-            data: { virtualBalance: { decrement: absoluteAmount } },
+            select: {
+              id: true,
+              actualBalance: true,
+              virtualBalance: true,
+              walletBalance: true,
+            },
           });
         }
       } else {
         if (selectedBalanceType === "ACTUAL") {
-          const nextWallet = Math.max(0, Number(targetUser.walletBalance || 0) - absoluteAmount);
-          await tx.user.update({
+          const nextWallet = Math.max(
+            0,
+            Number(targetUser.walletBalance || 0) - absoluteAmount
+          );
+          if (senderIsReseller && !isEmergencyAdmin) {
+            await tx.user.update({
+              where: { id: sender.id },
+              data: { actualBalance: { increment: absoluteAmount } },
+            });
+          }
+          return tx.user.update({
             where: { id: targetUserId },
             data: {
               actualBalance: { decrement: absoluteAmount },
               walletBalance: nextWallet,
             },
+            select: {
+              id: true,
+              actualBalance: true,
+              virtualBalance: true,
+              walletBalance: true,
+            },
           });
         } else {
-          await tx.user.update({
+          if (senderIsReseller && !isEmergencyAdmin) {
+            await tx.user.update({
+              where: { id: sender.id },
+              data: { virtualBalance: { increment: absoluteAmount } },
+            });
+          }
+          return tx.user.update({
             where: { id: targetUserId },
             data: { virtualBalance: { decrement: absoluteAmount } },
-          });
-        }
-
-        if (senderIsReseller && !isEmergencyAdmin) {
-          await tx.user.update({
-            where: { id: sender.id },
-            data: { virtualBalance: { increment: absoluteAmount } },
+            select: {
+              id: true,
+              actualBalance: true,
+              virtualBalance: true,
+              walletBalance: true,
+            },
           });
         }
       }
+    });
 
-      await tx.walletTransaction.create({
-        data: {
-          userId: targetUserId,
-          amount: actionType === "CREDIT" ? absoluteAmount : -absoluteAmount,
-          type: `${selectedBalanceType}_${actionType}`,
-          balanceType: selectedBalanceType,
-          description: `${selectedBalanceType} balance ${
-            actionType === "CREDIT" ? "added" : "deducted"
-          } by ${sender.role === "SUPER_ADMIN" ? "Admin" : "Reseller"}`,
-        },
-      });
+    await prisma.walletTransaction.create({
+      data: {
+        userId: targetUserId,
+        amount: actionType === "CREDIT" ? absoluteAmount : -absoluteAmount,
+        type: `${selectedBalanceType}_${actionType}`,
+        balanceType: selectedBalanceType,
+        description: `${selectedBalanceType} balance ${
+          actionType === "CREDIT" ? "added" : "deducted"
+        } by ${sender.role === "SUPER_ADMIN" ? "Admin" : "Reseller"}`,
+      },
     });
 
     return NextResponse.json({
@@ -221,6 +273,7 @@ export async function POST(req: Request) {
       message: `Successfully ${
         actionType === "CREDIT" ? "added" : "deducted"
       } ₹${absoluteAmount.toFixed(2)} ${selectedBalanceType} Balance`,
+      user: updatedTargetUser,
     });
   } catch (error: any) {
     console.error("Transfer API Error:", error);

@@ -21,17 +21,25 @@ function normalizePhone(rawVal: any): string {
   return "";
 }
 
-function parseSpreadsheetRows(rows: any[][]) {
+function parseSpreadsheetRows(rows: any[][], uploadType: string) {
   if (!rows || rows.length === 0) {
     return {
-      numbers: [] as string[],
-      columns: [] as string[],
-      rowObjects: [] as Record<string, string>[],
-      totalRows: 0,
+      ok: false as const,
+      error: "Uploaded file is empty.",
     };
   }
 
-  const firstRow = rows[0].map((c) => String(c ?? "").trim());
+  const nonEmptyRows = rows.filter(
+    (r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== "")
+  );
+  if (nonEmptyRows.length === 0) {
+    return {
+      ok: false as const,
+      error: "No data rows found in file.",
+    };
+  }
+
+  const firstRow = nonEmptyRows[0].map((c) => String(c ?? "").trim());
   const hasHeader = firstRow.some((cell) =>
     /(phone|mobile|number|contact|wa|whatsapp|name|var\d*|col)/i.test(cell)
   );
@@ -40,27 +48,50 @@ function parseSpreadsheetRows(rows: any[][]) {
     ? firstRow.map((h, idx) => h || `Col_${idx + 1}`)
     : firstRow.map((_, idx) => `Col_${idx + 1}`);
 
-  const dataRows = hasHeader ? rows.slice(1) : rows;
+  const dataRows = hasHeader ? nonEmptyRows.slice(1) : nonEmptyRows;
+
+  // Count non-empty columns across rows
+  const activeColIndices: number[] = [];
+  headers.forEach((_, idx) => {
+    const hasValues = dataRows.some((r) => String(r[idx] ?? "").trim() !== "");
+    if (hasValues || (hasHeader && firstRow[idx])) {
+      activeColIndices.push(idx);
+    }
+  });
+
+  if (uploadType === "Single Number Column" && activeColIndices.length > 1) {
+    return {
+      ok: false as const,
+      error: "File must have only 'number' column when 'Single Number Column' is selected.",
+    };
+  }
+
   const phoneColIdx = headers.findIndex((h) =>
-    /(phone|mobile|number|contact|whatsapp|wa)/i.test(h)
+    /^(phone|mobile|number|contact|whatsapp|wa)$/i.test(h.trim())
   );
+  const fallbackPhoneColIdx =
+    phoneColIdx >= 0
+      ? phoneColIdx
+      : headers.findIndex((h) => /(phone|mobile|number|contact|whatsapp|wa)/i.test(h));
+
+  const targetColIdx = fallbackPhoneColIdx >= 0 ? fallbackPhoneColIdx : 0;
 
   const numbers: string[] = [];
   const rowObjects: Record<string, string>[] = [];
 
   for (const r of dataRows) {
-    if (!Array.isArray(r) || r.length === 0) continue;
-
     let phone = "";
-    if (phoneColIdx >= 0) {
-      phone = normalizePhone(r[phoneColIdx]);
-    }
-    if (!phone) {
-      for (const cell of r) {
-        const candidate = normalizePhone(cell);
-        if (candidate) {
-          phone = candidate;
-          break;
+    if (uploadType === "Single Number Column") {
+      phone = normalizePhone(r[targetColIdx]);
+    } else {
+      phone = normalizePhone(r[targetColIdx]);
+      if (!phone) {
+        for (const cell of r) {
+          const candidate = normalizePhone(cell);
+          if (candidate) {
+            phone = candidate;
+            break;
+          }
         }
       }
     }
@@ -76,10 +107,11 @@ function parseSpreadsheetRows(rows: any[][]) {
   }
 
   return {
+    ok: true as const,
     numbers,
     columns: headers,
     rowObjects,
-    totalRows: dataRows.filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== "")).length,
+    totalRows: dataRows.length,
   };
 }
 
@@ -105,6 +137,7 @@ function CampaignsContent() {
 
   // Audience & Numbers Processing
   const [numbersInput, setNumbersInput] = useState("");
+  const [fileProcessed, setFileProcessed] = useState(false);
   const [selectedSourceChips, setSelectedSourceChips] = useState<string[]>([]);
   const [removeDuplicates, setRemoveDuplicates] = useState(true);
   const [removeBlacklist, setRemoveBlacklist] = useState(true);
@@ -112,6 +145,9 @@ function CampaignsContent() {
     "910000000000",
     "0000000000",
   ]);
+
+  // Warning Toast State
+  const [warningMessage, setWarningMessage] = useState("");
 
   // Group Contacts Modal State
   const [showGroupsModal, setShowGroupsModal] = useState(false);
@@ -128,12 +164,13 @@ function CampaignsContent() {
   const [uploadedRows, setUploadedRows] = useState<Record<string, string>[]>([]);
   const [pendingFileData, setPendingFileData] = useState<{
     fileName: string;
+    fullFileName: string;
     numbers: string[];
     columns: string[];
     rowObjects: Record<string, string>[];
     totalRows: number;
     duplicatesCount: number;
-    blacklistedCount: number;
+    unsubscribedCount: number;
   } | null>(null);
 
   // Schedule Options State
@@ -154,6 +191,13 @@ function CampaignsContent() {
   const [variableMappings, setVariableMappings] = useState<{
     [key: string]: { type: string; value: string };
   }>({});
+
+  const showWarning = (msg: string) => {
+    setWarningMessage(msg);
+    setTimeout(() => {
+      setWarningMessage((prev) => (prev === msg ? "" : prev));
+    }, 5000);
+  };
 
   const activeTemplate = useMemo(() => {
     return allTemplates.find((t) => t.id === selectedTemplateId) || null;
@@ -183,7 +227,6 @@ function CampaignsContent() {
     });
   }, [allTemplates, wabaAccounts, selectedChannel, selectedCategory]);
 
-  // Default media auto-fetched whenever activeTemplate changes
   useEffect(() => {
     if (activeTemplate) {
       setHeaderMediaUrl(activeTemplate.headerMediaUrl || "");
@@ -229,7 +272,6 @@ function CampaignsContent() {
     return text;
   }, [activeTemplate, detectedVariables, variableMappings, uploadedRows]);
 
-  // Fetch user WABA, templates & optional blacklist
   useEffect(() => {
     const now = new Date();
     const day = String(now.getDate()).padStart(2, "0");
@@ -427,7 +469,7 @@ function CampaignsContent() {
       }
 
       if (collectedNumbers.length === 0) {
-        alert("No valid contact numbers found in selected group(s).");
+        showWarning("No valid contact numbers found in selected group(s).");
         return;
       }
 
@@ -435,19 +477,21 @@ function CampaignsContent() {
         prev ? `${prev}, ${collectedNumbers.join(", ")}` : collectedNumbers.join(", ")
       );
       setSelectedSourceChips((prev) => Array.from(new Set([...prev, ...groupNamesAdded])));
+      setFileProcessed(true);
       setShowGroupsModal(false);
     } catch (err) {
       console.error("Failed to load group contacts:", err);
-      alert("Error loading group contacts.");
+      showWarning("Error loading group contacts.");
     } finally {
       setAddingGroupContacts(false);
     }
   };
 
-  // Excel / CSV File Preview & Proceed
+  // Excel / CSV File Select & Validation
   const handleFileSelect = async (file: File) => {
     const lowerName = file.name.toLowerCase();
     const baseName = file.name.replace(/\.(xlsx|xls|csv)$/i, "");
+    setPendingFileData(null);
 
     try {
       let rows: any[][] = [];
@@ -463,29 +507,35 @@ function CampaignsContent() {
         rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as any[][];
       }
 
-      const parsed = parseSpreadsheetRows(rows);
+      const parsed = parseSpreadsheetRows(rows, uploadType);
+      if (!parsed.ok) {
+        showWarning(`✕ ${file.name}: ${parsed.error}`);
+        return;
+      }
+
       const seen = new Set<string>();
       let duplicatesCount = 0;
-      let blacklistedCount = 0;
+      let unsubscribedCount = 0;
 
       for (const n of parsed.numbers) {
         if (seen.has(n)) duplicatesCount++;
         else seen.add(n);
-        if (customBlacklist.includes(n)) blacklistedCount++;
+        if (customBlacklist.includes(n)) unsubscribedCount++;
       }
 
       setPendingFileData({
         fileName: baseName,
+        fullFileName: file.name,
         numbers: parsed.numbers,
         columns: parsed.columns,
         rowObjects: parsed.rowObjects,
         totalRows: parsed.totalRows,
         duplicatesCount,
-        blacklistedCount,
+        unsubscribedCount,
       });
     } catch (err) {
       console.error("Spreadsheet parse failed:", err);
-      alert("Could not read Excel/CSV file.");
+      showWarning(`✕ ${file.name}: Could not read file.`);
     }
   };
 
@@ -504,13 +554,22 @@ function CampaignsContent() {
           ? prev
           : [...prev, pendingFileData.fileName]
       );
+      setFileProcessed(true);
     }
 
     setPendingFileData(null);
     setShowUploadModal(false);
   };
 
-  // Change / Override Header Media Handler (keeps default or previous media if upload fails)
+  const handleResetAudienceInput = () => {
+    setNumbersInput("");
+    setFileProcessed(false);
+    setUploadedFileName("");
+    setUploadedColumns([]);
+    setUploadedRows([]);
+    setSelectedSourceChips([]);
+  };
+
   const handleHeaderMediaChange = async (file: File) => {
     const previousMedia = headerMediaUrl || activeTemplate?.headerMediaUrl || "";
     const previousFileName = overrideFileName;
@@ -546,7 +605,6 @@ function CampaignsContent() {
     }
   };
 
-  // Working Remove Duplicates & Remove BlackList
   const processedNumbers = useMemo(() => {
     if (!numbersInput.trim()) return [];
     let list = numbersInput
@@ -667,7 +725,24 @@ function CampaignsContent() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6">
+    <div className="w-full min-h-screen bg-gray-50/50 p-4 lg:p-6 text-xs font-sans space-y-6 relative">
+      {/* Top-Right Warning Toast */}
+      {warningMessage && (
+        <div className="fixed top-5 right-5 z-[60] bg-amber-50 border-l-4 border-amber-500 text-amber-950 px-4 py-3 rounded-xl shadow-lg max-w-sm flex items-start justify-between gap-3">
+          <div>
+            <div className="font-bold text-amber-800 text-[11px]">⚠ Warning</div>
+            <div className="text-xs mt-0.5">{warningMessage}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setWarningMessage("")}
+            className="text-amber-700 font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-2xl border shadow-xs gap-3 w-full">
         <div>
@@ -749,41 +824,44 @@ function CampaignsContent() {
 
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <label className="block font-bold text-gray-600">NUMBERS (COMMA-SEPARATED) *</label>
+                  <label className="block font-bold text-gray-600">NUMBERS *</label>
                   <span className="text-emerald-700 font-bold text-[11px] bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                    Total Count: {processedNumbers.length}
+                    Total Count ({processedNumbers.length})
                   </span>
                 </div>
 
-                {selectedSourceChips.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-2 bg-gray-50 border rounded-xl p-2">
-                    {selectedSourceChips.map((chip) => (
-                      <span
-                        key={chip}
-                        className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-900 font-bold px-2.5 py-1 rounded-lg text-[11px]"
-                      >
-                        <span>{chip}</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setSelectedSourceChips((prev) => prev.filter((item) => item !== chip))
-                          }
-                          className="text-emerald-700 hover:text-red-600 font-bold cursor-pointer"
+                {fileProcessed ? (
+                  <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {selectedSourceChips.map((chip) => (
+                        <span
+                          key={chip}
+                          className="inline-flex items-center gap-1.5 bg-emerald-600 text-white font-bold px-3 py-1 rounded-lg text-[11px]"
                         >
-                          ×
-                        </button>
+                          <span>{chip}</span>
+                        </span>
+                      ))}
+                      <span className="text-xs font-mono text-emerald-900 font-bold">
+                        Processed ({processedNumbers.length} numbers)
                       </span>
-                    ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetAudienceInput}
+                      className="text-xs font-bold text-red-600 hover:underline cursor-pointer"
+                    >
+                      Clear / Enter Manually
+                    </button>
                   </div>
+                ) : (
+                  <textarea
+                    rows={5}
+                    placeholder="Enter comma-separated mobile numbers (e.g. 919876543210, 919123456789)..."
+                    value={numbersInput}
+                    onChange={(e) => setNumbersInput(e.target.value)}
+                    className="w-full border rounded-xl p-3 bg-gray-50 text-xs font-mono focus:outline-none focus:bg-white focus:border-emerald-500"
+                  />
                 )}
-
-                <textarea
-                  rows={4}
-                  placeholder="Enter comma-separated mobile numbers (e.g. 919876543210, 919123456789) or upload Excel/Group..."
-                  value={numbersInput}
-                  onChange={(e) => setNumbersInput(e.target.value)}
-                  className="w-full border rounded-xl p-3 bg-gray-50 text-xs font-mono focus:outline-none focus:bg-white focus:border-emerald-500"
-                />
               </div>
 
               <div className="flex flex-wrap gap-3 pt-1">
@@ -1312,12 +1390,24 @@ function CampaignsContent() {
               <label className="block font-bold text-gray-700 text-xs">UPLOAD FORMAT</label>
               <select
                 value={uploadType}
-                onChange={(e) => setUploadType(e.target.value)}
+                onChange={(e) => {
+                  setUploadType(e.target.value);
+                  setPendingFileData(null);
+                }}
                 className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs focus:outline-none"
               >
                 <option value="Single Number Column">Single Number Column</option>
                 <option value="Multiple Data Columns">Multiple Data Columns</option>
               </select>
+
+              <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 text-[11px] text-gray-700 space-y-1">
+                <div>
+                  <span className="font-bold text-amber-800">Single Number List:</span> File must contain only one column named <span className="font-mono font-bold">number</span> with phone numbers.
+                </div>
+                <div>
+                  <span className="font-bold text-blue-800">Multiple Data Columns:</span> File can include multiple data columns and a <span className="font-mono font-bold">number</span> column.
+                </div>
+              </div>
 
               <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center bg-gray-50 hover:bg-gray-100 transition cursor-pointer relative">
                 <input
@@ -1326,6 +1416,7 @@ function CampaignsContent() {
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
                       handleFileSelect(e.target.files[0]);
+                      e.target.value = "";
                     }
                   }}
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
@@ -1335,10 +1426,13 @@ function CampaignsContent() {
               </div>
 
               {pendingFileData && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1 text-xs">
-                  <div className="font-bold text-emerald-900">{pendingFileData.fileName}</div>
-                  <div className="text-gray-700 font-mono text-[11px]">
-                    Total Rows: {pendingFileData.totalRows} | Valid Numbers: {pendingFileData.numbers.length} | Duplicates: {pendingFileData.duplicatesCount} | Blacklisted: {pendingFileData.blacklistedCount}
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1.5 text-xs">
+                  <div className="font-bold text-emerald-900">{pendingFileData.fullFileName}</div>
+                  <div className="h-1.5 w-full bg-emerald-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-600 w-full" />
+                  </div>
+                  <div className="text-gray-700 font-mono text-[11px] pt-1">
+                    <span className="font-bold">Overall Totals:</span> Total Rows: {pendingFileData.totalRows} | Duplicates: {pendingFileData.duplicatesCount} | Unsubscribed: {pendingFileData.unsubscribedCount}
                   </div>
                 </div>
               )}

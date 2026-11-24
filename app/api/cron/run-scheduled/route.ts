@@ -1,6 +1,74 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+function extractScheduledMeta(errorDetails: string | null) {
+  if (!errorDetails) return { variables: [] as string[], headerMediaUrl: "" };
+  const marker = " | META_VARS:";
+  const idx = errorDetails.indexOf(marker);
+  if (idx === -1) return { variables: [] as string[], headerMediaUrl: "" };
+  try {
+    const parsed = JSON.parse(errorDetails.slice(idx + marker.length));
+    return {
+      variables: Array.isArray(parsed.variables) ? parsed.variables.map(String) : [],
+      headerMediaUrl: parsed.headerMediaUrl ? String(parsed.headerMediaUrl) : "",
+    };
+  } catch {
+    return { variables: [] as string[], headerMediaUrl: "" };
+  }
+}
+
+function buildTemplateComponents(tpl: any, savedVars: string[], savedMediaUrl: string) {
+  const components: any[] = [];
+
+  const headerType = String(tpl?.headerType || "NONE").toUpperCase();
+  if (headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT") {
+    const mediaKey =
+      headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
+    let mediaVal = savedMediaUrl || tpl?.headerMediaUrl || "";
+    if (!mediaVal) {
+      mediaVal =
+        headerType === "VIDEO"
+          ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+          : headerType === "DOCUMENT"
+          ? "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+          : "https://images.unsplash.com/photo-1526947425960-945c6e72858f";
+    }
+    const isMetaId = /^\d+$/.test(String(mediaVal).trim());
+    components.push({
+      type: "header",
+      parameters: [
+        {
+          type: mediaKey,
+          [mediaKey]: isMetaId ? { id: String(mediaVal).trim() } : { link: String(mediaVal).trim() },
+        },
+      ],
+    });
+  }
+
+  // Detect placeholders like {{1}}, {{2}} in template body/components if available
+  const rawBodyText = String(
+    tpl?.bodyText ||
+      tpl?.body ||
+      tpl?.components?.find?.((c: any) => String(c?.type || "").toUpperCase() === "BODY")?.text ||
+      ""
+  );
+  const matches = rawBodyText.match(/\{\{\d+\}\}/g) || [];
+  const expectedVarCount = Math.max(matches.length, savedVars.length);
+
+  if (expectedVarCount > 0) {
+    const bodyParams = Array.from({ length: expectedVarCount }, (_, i) => ({
+      type: "text",
+      text: String(savedVars[i] ?? `Value${i + 1}`).trim() || " - ",
+    }));
+    components.push({
+      type: "body",
+      parameters: bodyParams,
+    });
+  }
+
+  return components;
+}
+
 async function processDueScheduledLogs() {
   const now = new Date();
   const dueLogs = await prisma.campaignLog.findMany({
@@ -60,8 +128,16 @@ async function processDueScheduledLogs() {
     }
 
     const tpl = await prisma.whatsAppTemplate.findFirst({
+      where: {
+        name: log.templateName,
+        ...(account?.wabaId ? { wabaId: account.wabaId } : {}),
+      },
+    }) || await prisma.whatsAppTemplate.findFirst({
       where: { name: log.templateName },
     });
+
+    const { variables: savedVars, headerMediaUrl: savedMediaUrl } = extractScheduledMeta(log.errorDetails);
+    const templateComponents = buildTemplateComponents(tpl, savedVars, savedMediaUrl);
 
     const payload = {
       messaging_product: "whatsapp",
@@ -71,6 +147,7 @@ async function processDueScheduledLogs() {
       template: {
         name: log.templateName,
         language: { code: tpl?.language || "en_US" },
+        ...(templateComponents.length > 0 ? { components: templateComponents } : {}),
       },
     };
 

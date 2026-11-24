@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
 
 // Declare global FB object for TypeScript
 declare global {
@@ -9,6 +10,129 @@ declare global {
     FB: any;
     fbAsyncInit: any;
   }
+}
+
+function normalizePhoneNumber(rawVal: any): string {
+  if (rawVal === null || rawVal === undefined) return "";
+  let digits = String(rawVal).trim().replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length === 11 && digits.startsWith("0")) {
+    digits = digits.slice(1);
+  }
+  if (digits.length === 10 && /^[6-9]\d{9}$/.test(digits)) {
+    return `91${digits}`;
+  }
+  if (digits.length >= 11 && digits.length <= 15) {
+    return digits;
+  }
+  return "";
+}
+
+function parseGroupImportSpreadsheet(
+  rows: any[][],
+  importMode: "SINGLE_NUMBER" | "MULTI_COLUMN"
+) {
+  const nonEmptyRows = (rows || []).filter(
+    (r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== "")
+  );
+  if (nonEmptyRows.length === 0) {
+    return {
+      ok: false as const,
+      error: "No valid rows found in file.",
+    };
+  }
+
+  const firstRow = nonEmptyRows[0].map((c) => String(c ?? "").trim());
+  const hasHeader = firstRow.some((cell) =>
+    /(phone|mobile|number|contact|wa|whatsapp|name|member)/i.test(cell)
+  );
+
+  const headers = hasHeader
+    ? firstRow.map((h, idx) => h || `Col_${idx + 1}`)
+    : firstRow.map((_, idx) => `Col_${idx + 1}`);
+
+  const dataRows = hasHeader ? nonEmptyRows.slice(1) : nonEmptyRows;
+
+  const activeColIndices: number[] = [];
+  headers.forEach((_, idx) => {
+    const hasValues = dataRows.some((r) => String(r[idx] ?? "").trim() !== "");
+    if (hasValues || (hasHeader && firstRow[idx])) {
+      activeColIndices.push(idx);
+    }
+  });
+
+  if (importMode === "SINGLE_NUMBER" && activeColIndices.length > 1) {
+    return {
+      ok: false as const,
+      error:
+        "Single Number Column mode allows only 1 column ('number'). For Number & Name, select 'Multiple Columns (Number & Name)'.",
+    };
+  }
+
+  const numberColIdx = headers.findIndex((h) =>
+    /^(phone|mobile|number|contact|whatsapp|wa)$/i.test(h.trim())
+  );
+  const fallbackNumberColIdx =
+    numberColIdx >= 0
+      ? numberColIdx
+      : headers.findIndex((h) => /(phone|mobile|number|contact|whatsapp|wa)/i.test(h));
+  const targetNumberIdx = fallbackNumberColIdx >= 0 ? fallbackNumberColIdx : 0;
+
+  const nameColIdx = headers.findIndex((h) =>
+    /^(name|member\s*name|contact\s*name|full\s*name|profile\s*name)$/i.test(h.trim())
+  );
+  const fallbackNameColIdx =
+    nameColIdx >= 0
+      ? nameColIdx
+      : headers.findIndex((h, idx) => idx !== targetNumberIdx && /name/i.test(h));
+
+  const parsedContacts: { number: string; name: string }[] = [];
+
+  for (const r of dataRows) {
+    let phone = normalizePhoneNumber(r[targetNumberIdx]);
+    if (!phone && importMode === "MULTI_COLUMN") {
+      for (const cell of r) {
+        const candidate = normalizePhoneNumber(cell);
+        if (candidate) {
+          phone = candidate;
+          break;
+        }
+      }
+    }
+
+    if (!phone) continue;
+
+    let memberName = "Member";
+    if (importMode === "MULTI_COLUMN") {
+      if (fallbackNameColIdx >= 0 && String(r[fallbackNameColIdx] ?? "").trim()) {
+        memberName = String(r[fallbackNameColIdx]).trim();
+      } else {
+        const otherCol = r.find(
+          (cell, idx) => idx !== targetNumberIdx && String(cell ?? "").trim() !== ""
+        );
+        if (otherCol !== undefined && String(otherCol).trim()) {
+          memberName = String(otherCol).trim();
+        }
+      }
+    }
+
+    parsedContacts.push({
+      number: phone,
+      name: memberName || "Member",
+    });
+  }
+
+  if (parsedContacts.length === 0) {
+    return {
+      ok: false as const,
+      error: "No valid phone numbers found in the uploaded file.",
+    };
+  }
+
+  return {
+    ok: true as const,
+    contacts: parsedContacts,
+  };
 }
 
 function ConfigContent() {
@@ -41,13 +165,19 @@ function ConfigContent() {
 
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
-  
+
   const [manageGroupObj, setManageGroupObj] = useState<any>(null);
   const [groupMembers, setGroupMembers] = useState<any[]>([]);
   const [newMemberNumber, setNewMemberNumber] = useState("");
   const [newMemberName, setNewMemberName] = useState("");
 
+  // Group Import Modal States (2 Options: Single Number Column & Multiple Columns Number & Name)
   const [importGroupObj, setImportGroupObj] = useState<any>(null);
+  const [groupImportMode, setGroupImportMode] = useState<"SINGLE_NUMBER" | "MULTI_COLUMN">("SINGLE_NUMBER");
+  const [groupImportFileName, setGroupImportFileName] = useState("");
+  const [groupImportRows, setGroupImportRows] = useState<{ number: string; name: string }[]>([]);
+  const [isImportingGroupFile, setIsImportingGroupFile] = useState(false);
+
   const [exportGroupObj, setExportGroupObj] = useState<any>(null);
   const [editGroupObj, setEditGroupObj] = useState<any>(null);
   const [editGroupNameVal, setEditGroupNameVal] = useState("");
@@ -60,7 +190,7 @@ function ConfigContent() {
   const [companyWebsite, setCompanyWebsite] = useState("");
   const [companyName, setCompanyName] = useState("");
 
-  // 🟢 WABA Action Menu & Business Profile States
+  // WABA Action Menu & Business Profile States
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [selectedProfileChannel, setSelectedProfileChannel] = useState<any>(null);
   const [profileForm, setProfileForm] = useState({
@@ -140,6 +270,80 @@ function ConfigContent() {
       .then(res => res.json())
       .then(data => { if(Array.isArray(data)) setBlacklist(data); })
       .catch(() => {});
+  };
+
+  const resetGroupImportModal = () => {
+    setImportGroupObj(null);
+    setGroupImportMode("SINGLE_NUMBER");
+    setGroupImportFileName("");
+    setGroupImportRows([]);
+    setIsImportingGroupFile(false);
+  };
+
+  const handleGroupImportFileSelect = async (file: File) => {
+    const lowerName = file.name.toLowerCase();
+    setGroupImportFileName(file.name);
+    setGroupImportRows([]);
+
+    try {
+      let rows: any[][] = [];
+      if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as any[][];
+      } else {
+        const text = await file.text();
+        const workbook = XLSX.read(text, { type: "string" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as any[][];
+      }
+
+      const parsed = parseGroupImportSpreadsheet(rows, groupImportMode);
+      if (!parsed.ok) {
+        alert(`⚠️ ${parsed.error}`);
+        return;
+      }
+
+      setGroupImportRows(parsed.contacts);
+    } catch (err) {
+      console.error("Group import file parse error:", err);
+      alert("❌ Could not parse file. Please upload a valid CSV or Excel file.");
+    }
+  };
+
+  const handleConfirmGroupImport = async () => {
+    if (!importGroupObj || groupImportRows.length === 0) return;
+
+    setIsImportingGroupFile(true);
+    try {
+      const res = await fetch("/api/configuration/groups/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupId: importGroupObj.id,
+          contacts: groupImportRows,
+        }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success !== false) {
+        alert(`✅ Imported ${data.addedCount || groupImportRows.length} member(s) into "${importGroupObj.groupName}"!`);
+        if (manageGroupObj && manageGroupObj.id === importGroupObj.id) {
+          const mRes = await fetch(`/api/configuration/groups/contacts?groupId=${importGroupObj.id}`);
+          const mData = await mRes.json();
+          if (Array.isArray(mData)) setGroupMembers(mData);
+        }
+        fetchAllData();
+        resetGroupImportModal();
+      } else {
+        alert("❌ Import failed: " + (data.error || "Unknown error"));
+      }
+    } catch {
+      alert("❌ Network error while importing group members.");
+    } finally {
+      setIsImportingGroupFile(false);
+    }
   };
 
   const filteredMedia = useMemo(() => {
@@ -268,10 +472,10 @@ function ConfigContent() {
       const res = await fetch("/api/configuration/business-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          id: selectedProfileChannel.id, 
+        body: JSON.stringify({
+          id: selectedProfileChannel.id,
           ...profileForm,
-          profilePicture: finalLogoUrl 
+          profilePicture: finalLogoUrl
         }),
       });
 
@@ -504,7 +708,7 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* 🟢 WHATSAPP COEXISTENCE ONBOARDING TAB (MATCHING 3RD IMAGE) */}
+      {/* WHATSAPP COEXISTENCE ONBOARDING TAB */}
       {activeSection === "onboarding" && (
         <div className="space-y-6">
           <div className="bg-white p-5 rounded-2xl border shadow-sm space-y-3">
@@ -531,15 +735,14 @@ function ConfigContent() {
                 <h3 className="font-bold text-gray-800 text-sm">WhatsApp Bridge with Facebook</h3>
                 <p className="text-gray-400 max-w-md mx-auto">Connect your WhatsApp Business API or Coexistence number to our platform via Facebook Embedded Signup.</p>
               </div>
-              <button 
-                onClick={() => setShowFacebookModal(true)} 
+              <button
+                onClick={() => setShowFacebookModal(true)}
                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl shadow cursor-pointer transition flex items-center gap-2"
               >
                 <span>🌐</span> Connect WhatsApp with Facebook
               </button>
             </div>
 
-            {/* Right Status Card */}
             <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
               <div className="border-b pb-3">
                 <h3 className="font-bold text-gray-800">WhatsApp Business Info</h3>
@@ -638,14 +841,14 @@ function ConfigContent() {
                         </td>
                         <td className="p-4 font-mono">
                           <a href={resolvedUrl} target="_blank" rel="noreferrer" onClick={(e) => {
-  if (m.url?.startsWith("data:image")) {
-    e.preventDefault();
-    const win = window.open();
-    win?.document.write(`<img src="${m.url}" style="max-width:100%;"/>`);
-  }
-}} className="text-blue-600 bg-blue-50 px-2.5 py-1 rounded border border-blue-100 hover:underline font-bold inline-block">
-  👁️ View File
-</a>
+                            if (m.url?.startsWith("data:image")) {
+                              e.preventDefault();
+                              const win = window.open();
+                              win?.document.write(`<img src="${m.url}" style="max-width:100%;"/>`);
+                            }
+                          }} className="text-blue-600 bg-blue-50 px-2.5 py-1 rounded border border-blue-100 hover:underline font-bold inline-block">
+                            👁️ View File
+                          </a>
                         </td>
                         <td className="p-4 font-medium text-gray-800">
                           <span className="bg-gray-100 px-2.5 py-1 rounded text-[11px] font-mono">{m.wabaNumber || "All"}</span>
@@ -656,19 +859,19 @@ function ConfigContent() {
                         </td>
                         <td className="p-4 text-right space-x-2">
                           <button
-  onClick={() => {
-    const raw = String(resolvedUrl || "").trim();
-    if (!raw) return;
-    const fullUrl = raw.startsWith("/")
-      ? `${window.location.origin}${raw}`
-      : raw;
-    navigator.clipboard.writeText(fullUrl);
-    alert("🔗 URL copied to clipboard!");
-  }}
-  className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-[11px] cursor-pointer shadow-xs transition"
->
-  📋 Copy URL
-</button>
+                            onClick={() => {
+                              const raw = String(resolvedUrl || "").trim();
+                              if (!raw) return;
+                              const fullUrl = raw.startsWith("/")
+                                ? `${window.location.origin}${raw}`
+                                : raw;
+                              navigator.clipboard.writeText(fullUrl);
+                              alert("🔗 URL copied to clipboard!");
+                            }}
+                            className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-[11px] cursor-pointer shadow-xs transition"
+                          >
+                            📋 Copy URL
+                          </button>
                           <button onClick={() => handleDeleteMedia(m.id)} className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold text-[11px] cursor-pointer shadow-xs transition">🗑️ Delete</button>
                         </td>
                       </tr>
@@ -772,8 +975,19 @@ function ConfigContent() {
                           } catch (err) {
                             console.error("Failed to fetch group members", err);
                           }
-                        }} className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold">⚙️ Manage</button>
-                        <button onClick={() => setImportGroupObj(g)} className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg font-bold">📥 Import</button>
+                        }} className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold cursor-pointer">⚙️ Manage</button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setImportGroupObj(g);
+                            setGroupImportMode("SINGLE_NUMBER");
+                            setGroupImportFileName("");
+                            setGroupImportRows([]);
+                          }}
+                          className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg font-bold cursor-pointer"
+                        >
+                          📥 Import
+                        </button>
                         <button onClick={() => {
                           const csvContent = "data:text/csv;charset=utf-8,Mobile Number,Profile Name\n919876543210,Sample User";
                           const encodedUri = encodeURI(csvContent);
@@ -783,13 +997,13 @@ function ConfigContent() {
                           document.body.appendChild(link);
                           link.click();
                           document.body.removeChild(link);
-                        }} className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg font-bold">📤 Export</button>
-                        <button onClick={() => { setEditGroupObj(g); setEditGroupNameVal(g.groupName); }} className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-lg font-bold">✏️ Edit</button>
+                        }} className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg font-bold cursor-pointer">📤 Export</button>
+                        <button onClick={() => { setEditGroupObj(g); setEditGroupNameVal(g.groupName); }} className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-lg font-bold cursor-pointer">✏️ Edit</button>
                         <button onClick={async () => {
                           if (!confirm(`Delete group "${g.groupName}"?`)) return;
                           await fetch(`/api/configuration/groups?id=${g.id}`, { method: "DELETE" });
                           fetchAllData();
-                        }} className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold">🗑️ Delete</button>
+                        }} className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold cursor-pointer">🗑️ Delete</button>
                       </td>
                     </tr>
                   ))
@@ -848,7 +1062,128 @@ function ConfigContent() {
 
       {/* --- ALL MODALS & POPUPS --- */}
 
-      {/* 🟢 REGISTER NEW WHATSAPP POPUP (MATCHING 1ST IMAGE) */}
+      {/* GROUP IMPORT MODAL (2 OPTIONS: SINGLE NUMBER COLUMN vs MULTIPLE COLUMNS NUMBER & NAME) */}
+      {importGroupObj && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 font-sans text-xs">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="font-bold text-gray-800 text-sm">
+                  Import Members to <span className="text-emerald-600">{importGroupObj.groupName}</span>
+                </h3>
+                <p className="text-[11px] text-gray-400">Choose import format and upload CSV / Excel file.</p>
+              </div>
+              <button
+                type="button"
+                onClick={resetGroupImportModal}
+                className="text-gray-400 font-bold cursor-pointer text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="block font-bold text-gray-700 text-xs">SELECT IMPORT OPTION *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGroupImportMode("SINGLE_NUMBER");
+                    setGroupImportFileName("");
+                    setGroupImportRows([]);
+                  }}
+                  className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                    groupImportMode === "SINGLE_NUMBER"
+                      ? "bg-emerald-50 border-emerald-500 text-emerald-900"
+                      : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  <div className="font-bold text-xs">1. Single Number Column</div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">Only phone numbers column</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGroupImportMode("MULTI_COLUMN");
+                    setGroupImportFileName("");
+                    setGroupImportRows([]);
+                  }}
+                  className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                    groupImportMode === "MULTI_COLUMN"
+                      ? "bg-blue-50 border-blue-500 text-blue-900"
+                      : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  <div className="font-bold text-xs">2. Multiple Columns</div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">Number & Name columns</div>
+                </button>
+              </div>
+
+              <div className="bg-slate-50 border rounded-xl p-3 text-[11px] text-gray-600">
+                {groupImportMode === "SINGLE_NUMBER" ? (
+                  <span>
+                    <strong className="text-emerald-700">Single Number Column:</strong> File should have a single column (e.g., <span className="font-mono">number</span>) with mobile numbers.
+                  </span>
+                ) : (
+                  <span>
+                    <strong className="text-blue-700">Multiple Columns (Number & Name):</strong> File should include <span className="font-mono">number</span> and <span className="font-mono">name</span> columns.
+                  </span>
+                )}
+              </div>
+
+              <div className="border-2 border-dashed border-gray-300 rounded-2xl p-5 text-center bg-gray-50 hover:bg-gray-100 transition cursor-pointer relative">
+                <input
+                  type="file"
+                  accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleGroupImportFileSelect(e.target.files[0]);
+                      e.target.value = "";
+                    }
+                  }}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+                <div className="text-emerald-700 font-bold text-xs mb-1">📁 Browse CSV / Excel File</div>
+                <div className="text-gray-400 text-[10px]">
+                  {groupImportFileName ? `Selected: ${groupImportFileName}` : "Supports .csv, .xlsx, .xls"}
+                </div>
+              </div>
+
+              {groupImportRows.length > 0 && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1 text-xs">
+                  <div className="font-bold text-emerald-900">
+                    ✓ Ready to Import: {groupImportRows.length} valid contact(s)
+                  </div>
+                  <div className="text-[11px] font-mono text-gray-700 truncate">
+                    Sample: {groupImportRows[0].number} — {groupImportRows[0].name}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                type="button"
+                onClick={resetGroupImportModal}
+                className="px-4 py-2 border rounded-xl font-bold cursor-pointer hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={groupImportRows.length === 0 || isImportingGroupFile}
+                onClick={handleConfirmGroupImport}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-bold cursor-pointer shadow disabled:opacity-50"
+              >
+                {isImportingGroupFile ? "Importing..." : `Import (${groupImportRows.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REGISTER NEW WHATSAPP POPUP */}
       {showFacebookModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans text-xs">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 relative max-h-[90vh] overflow-y-auto">
@@ -1040,11 +1375,11 @@ function ConfigContent() {
                 try {
                   const res = await fetch("/api/configuration/media", { method: "POST", body: formData });
                   const data = await res.json();
-                  if(data.success) { 
-                    alert("✅ Media uploaded successfully!"); 
+                  if(data.success) {
+                    alert("✅ Media uploaded successfully!");
                     setShowMediaModal(false);
                     setMediaFile(null);
-                    fetchAllData(); 
+                    fetchAllData();
                   } else {
                     alert("❌ Upload failed: " + (data.error || "Unknown error"));
                   }
@@ -1300,7 +1635,6 @@ function ConfigContent() {
                 </div>
               </div>
 
-              {/* Right Side Live Preview */}
               <div className="bg-slate-900 rounded-3xl p-4 text-white flex flex-col items-center justify-between shadow-xl">
                 <div className="w-full text-center border-b border-slate-800 pb-2">
                   <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">📱 Live WhatsApp Preview</span>

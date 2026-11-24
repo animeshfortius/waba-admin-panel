@@ -215,3 +215,13 @@ model Agent {
   status           String    @default("ACTIVE")
   createdAt        DateTime  @default(now())
 }
+model GroupContact {
+  id        String       @id @default(uuid())
+  groupId   String
+  number    String
+  name      String?      @default("Member")
+  createdAt DateTime     @default(now())
+  group     ContactGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+}

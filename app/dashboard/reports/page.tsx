@@ -34,11 +34,13 @@ export default function ReportsPage() {
   const [wabaChannels, setWabaChannels] = useState<any[]>([]);
   const [campaignFilter, setCampaignFilter] = useState("");
 
-  const [apiStats, setApiStats] = useState({ total: 1, sent: 0, delivered: 1, read: 1, failed: 0 });
+  const [apiStats, setApiStats] = useState({ total: 0, sent: 0, delivered: 0, read: 0, failed: 0 });
+  const [tabStatsMap, setTabStatsMap] = useState<Record<string, any>>({});
 
   const [campaignData, setCampaignData] = useState<any[]>([]);
   const [deliveryData, setDeliveryData] = useState<any[]>([]);
   const [scheduleData, setScheduleData] = useState<any[]>([]);
+  const [scheduleDeliveryData, setScheduleDeliveryData] = useState<any[]>([]);
   const [fallbackData, setFallbackData] = useState<any[]>([]);
   const [apiData, setApiData] = useState<any[]>([]);
   const [serviceData, setServiceData] = useState<any[]>([]);
@@ -55,7 +57,7 @@ export default function ReportsPage() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [activeTab, appliedDateRange, appliedCampaignStatus]);
+  }, [activeTab, appliedDateRange, appliedCampaignStatus, customStartDate, customEndDate]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -69,7 +71,7 @@ export default function ReportsPage() {
         dateRange: appliedDateRange,
         ...(appliedDateRange === "Custom" && customStartDate && { startDate: customStartDate }),
         ...(appliedDateRange === "Custom" && customEndDate && { endDate: customEndDate }),
-        ...(activeTab === "delivery" && appliedCampaignStatus && { status: appliedCampaignStatus }),
+        ...(appliedCampaignStatus && { status: appliedCampaignStatus }),
       });
 
       const res = await fetch(`/api/reports?${queryParams.toString()}`, {
@@ -80,11 +82,13 @@ export default function ReportsPage() {
         setCampaignData(data.campaigns || []);
         setDeliveryData(data.deliveries || []);
         setScheduleData(data.schedules || []);
+        setScheduleDeliveryData(data.scheduleDeliveries || []);
         setFallbackData(data.fallbacks || []);
         setApiData(data.apis || []);
         setServiceData(data.services || []);
         if (data.wabaAccounts) setWabaChannels(data.wabaAccounts);
         if (data.stats) setApiStats(data.stats);
+        if (data.tabStats) setTabStatsMap(data.tabStats);
       }
     } catch (err) {
       console.error("Failed to fetch live reports:", err);
@@ -129,8 +133,8 @@ export default function ReportsPage() {
     const csvContent =
       "data:text/csv;charset=utf-8," +
       [
-        "ID,Info/Name,Template,Status,Timestamp,Cost",
-        `"${item.id || 1}","${item.campaignInfo || item.number || "N/A"}","${item.templateName || item.templateInfo || "N/A"}","${item.status || "READ"}","${item.createdAt || item.date || "N/A"}","${item.cost || "0.00"}"`,
+        "ID,Info/Name,Template,Status,Error Code,Error Reason,Timestamp,Cost",
+        `"${item.id || 1}","${item.campaignInfo || item.campaignName || item.number || "N/A"}","${item.templateName || item.templateInfo || "N/A"}","${item.status || "READ"}","${item.errorCode || ""}","${String(item.errorReason || item.errorDetails || item.error || "").replace(/"/g, '""')}","${item.createdAt || item.date || "N/A"}","${item.cost || "0.00"}"`,
       ].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -141,13 +145,41 @@ export default function ReportsPage() {
     document.body.removeChild(link);
   };
 
+  const matchesCommonFilters = (item: any) => {
+    if (appliedChannel) {
+      const cleanSelected = appliedChannel.replace(/\D/g, "");
+      const cleanItemChannel = String(item.channel || "").replace(/\D/g, "");
+      if (
+        cleanSelected &&
+        cleanItemChannel &&
+        !cleanItemChannel.includes(cleanSelected) &&
+        !cleanSelected.includes(cleanItemChannel)
+      ) {
+        return false;
+      }
+    }
+    if (appliedCampaignStatus && String(item.status || "").toUpperCase() !== appliedCampaignStatus.toUpperCase()) {
+      return false;
+    }
+    if (appliedTemplateSearch) {
+      const t = String(item.templateName || item.templateInfo || "").toLowerCase();
+      if (!t.includes(appliedTemplateSearch.toLowerCase())) return false;
+    }
+    return true;
+  };
+
   const filteredCampaigns = useMemo(() => {
     return campaignData.filter((item) => {
       if (campaignFilter && item.campaignInfo !== campaignFilter) return false;
       if (appliedChannel) {
         const cleanSelected = appliedChannel.replace(/\D/g, "");
         const cleanItemChannel = String(item.channel || "").replace(/\D/g, "");
-        if (cleanSelected && cleanItemChannel && !cleanItemChannel.includes(cleanSelected) && !cleanSelected.includes(cleanItemChannel)) {
+        if (
+          cleanSelected &&
+          cleanItemChannel &&
+          !cleanItemChannel.includes(cleanSelected) &&
+          !cleanSelected.includes(cleanItemChannel)
+        ) {
           return false;
         }
       }
@@ -159,54 +191,26 @@ export default function ReportsPage() {
   const filteredDeliveries = useMemo(() => {
     return deliveryData.filter((item) => {
       if (campaignFilter && item.campaignName !== campaignFilter) return false;
-      if (appliedChannel) {
-        const cleanSelected = appliedChannel.replace(/\D/g, "");
-        const cleanItemChannel = String(item.channel || "").replace(/\D/g, "");
-        if (cleanSelected && cleanItemChannel && !cleanItemChannel.includes(cleanSelected) && !cleanSelected.includes(cleanItemChannel)) {
-          return false;
-        }
-      }
-      if (appliedCampaignStatus && item.status !== appliedCampaignStatus) return false;
-      if (appliedTemplateSearch && !item.templateName?.toLowerCase().includes(appliedTemplateSearch.toLowerCase())) return false;
-      return true;
+      return matchesCommonFilters(item);
     });
   }, [deliveryData, campaignFilter, appliedChannel, appliedCampaignStatus, appliedTemplateSearch]);
 
   const filteredSchedules = useMemo(() => {
-    return scheduleData.filter((item) => {
-      if (appliedChannel) {
-        const cleanSelected = appliedChannel.replace(/\D/g, "");
-        const cleanItemChannel = String(item.channel || "").replace(/\D/g, "");
-        if (cleanSelected && cleanItemChannel && !cleanItemChannel.includes(cleanSelected) && !cleanSelected.includes(cleanItemChannel)) {
-          return false;
-        }
-      }
-      if (appliedCampaignStatus && String(item.status || "").toUpperCase() !== appliedCampaignStatus.toUpperCase()) return false;
-      if (appliedTemplateSearch && !item.templateName?.toLowerCase().includes(appliedTemplateSearch.toLowerCase())) return false;
-      return true;
-    });
-  }, [scheduleData, appliedChannel, appliedCampaignStatus, appliedTemplateSearch]);
+    const sourceList = scheduleDeliveryData.length > 0 ? scheduleDeliveryData : scheduleData;
+    return sourceList.filter((item) => matchesCommonFilters(item));
+  }, [scheduleDeliveryData, scheduleData, appliedChannel, appliedCampaignStatus, appliedTemplateSearch]);
 
   const filteredFallbacks = useMemo(() => {
-    return fallbackData.filter((item) => {
-      if (appliedCampaignStatus && item.status !== appliedCampaignStatus) return false;
-      return true;
-    });
-  }, [fallbackData, appliedCampaignStatus]);
+    return fallbackData.filter((item) => matchesCommonFilters(item));
+  }, [fallbackData, appliedChannel, appliedCampaignStatus, appliedTemplateSearch]);
 
   const filteredApis = useMemo(() => {
-    return apiData.filter((item) => {
-      if (appliedCampaignStatus && item.status !== appliedCampaignStatus) return false;
-      return true;
-    });
-  }, [apiData, appliedCampaignStatus]);
+    return apiData.filter((item) => matchesCommonFilters(item));
+  }, [apiData, appliedChannel, appliedCampaignStatus, appliedTemplateSearch]);
 
   const filteredServices = useMemo(() => {
-    return serviceData.filter((item) => {
-      if (appliedCampaignStatus && item.status !== appliedCampaignStatus) return false;
-      return true;
-    });
-  }, [serviceData, appliedCampaignStatus]);
+    return serviceData.filter((item) => matchesCommonFilters(item));
+  }, [serviceData, appliedChannel, appliedCampaignStatus, appliedTemplateSearch]);
 
   const activeDataset = useMemo(() => {
     switch (activeTab) {
@@ -234,11 +238,17 @@ export default function ReportsPage() {
   }, [activeDataset, currentPage, rowsPerPage]);
 
   const stats = useMemo(() => {
-    let targetList = activeTab === "campaign" ? filteredCampaigns : filteredDeliveries;
-    if (activeTab !== "campaign" && activeTab !== "delivery") {
-      targetList = activeDataset;
+    if (tabStatsMap[activeTab] && !campaignFilter && !appliedChannel && !appliedCampaignStatus && !appliedTemplateSearch) {
+      return {
+        total: tabStatsMap[activeTab].total || 0,
+        sent: tabStatsMap[activeTab].sent || 0,
+        delivered: tabStatsMap[activeTab].delivered || 0,
+        read: tabStatsMap[activeTab].read || 0,
+        failed: tabStatsMap[activeTab].failed || 0,
+      };
     }
 
+    let targetList = activeTab === "campaign" ? filteredCampaigns : activeDataset;
     let total = targetList.length;
     let sent = 0,
       delivered = 0,
@@ -251,8 +261,6 @@ export default function ReportsPage() {
       delivered = apiStats.delivered;
       read = apiStats.read;
       failed = apiStats.failed;
-    } else if (activeTab === "schedule") {
-      total = filteredSchedules.reduce((acc, curr) => acc + (Number(curr.totalCount) || 1), 0);
     } else {
       targetList.forEach((item) => {
         const s = (item.status || "").toUpperCase();
@@ -265,7 +273,81 @@ export default function ReportsPage() {
     }
 
     return { total: total || 0, sent: sent || 0, delivered: delivered || 0, read: read || 0, failed: failed || 0 };
-  }, [activeTab, filteredCampaigns, filteredDeliveries, filteredSchedules, activeDataset, campaignFilter, apiStats]);
+  }, [activeTab, filteredCampaigns, activeDataset, campaignFilter, apiStats, tabStatsMap, appliedChannel, appliedCampaignStatus, appliedTemplateSearch]);
+
+  const renderFailureBadge = (item: any) => {
+    const isFailed = String(item.status || "").toUpperCase() === "FAILED";
+    if (!isFailed) return null;
+    const code = item.errorCode ? `Code: ${item.errorCode}` : "";
+    const reason = item.errorReason || item.errorDetails || item.error || "Failed by Meta";
+    return (
+      <div className="mt-1 text-[10px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 font-sans leading-snug max-w-[220px]">
+        {code && <div className="font-bold font-mono">{code}</div>}
+        <div>{reason}</div>
+      </div>
+    );
+  };
+
+  const renderDeliveryStyleTable = (rows: any[], emptyText: string) => (
+    <table className="w-full text-left border-collapse text-xs">
+      <thead>
+        <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
+          <th className="p-3">Received Date</th>
+          <th className="p-3">Campaign</th>
+          <th className="p-3">Channel</th>
+          <th className="p-3">Number</th>
+          <th className="p-3">Status</th>
+          <th className="p-3">Message ID</th>
+          <th className="p-3 w-[190px]">Acknowledgement</th>
+          <th className="p-3">Cost</th>
+          <th className="p-3 w-[230px]">TIMESTAMP</th>
+          <th className="p-3 text-center">Action</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-gray-100">
+        {rows.length === 0 ? (
+          <tr><td colSpan={10} className="p-8 text-center text-gray-400">{emptyText}</td></tr>
+        ) : (
+          rows.map((item) => {
+            const statusUpper = String(item.status || "").toUpperCase();
+            return (
+              <tr key={item.id} className="hover:bg-gray-50 transition">
+                <td className="p-3 font-mono">{item.date || item.scheduledAt || "N/A"}</td>
+                <td className="p-3 font-bold text-gray-800">{item.campaignName || item.campaignInfo || "N/A"}</td>
+                <td className="p-3 font-mono">{item.channel}</td>
+                <td className="p-3 font-mono font-bold text-gray-900">{item.number || "—"}</td>
+                <td className="p-3">
+                  <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${statusUpper === "READ" ? "bg-indigo-100 text-indigo-800" : statusUpper === "DELIVERED" ? "bg-emerald-100 text-emerald-800" : statusUpper === "SENT" ? "bg-blue-100 text-blue-800" : statusUpper === "SCHEDULED" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
+                    {item.status} {statusUpper === "READ" && "✓✓"}
+                  </span>
+                  {renderFailureBadge(item)}
+                </td>
+                <td className="p-3 font-mono text-gray-400 truncate max-w-[100px]" title={item.messageId}>{item.messageId || "N/A"}</td>
+                <td className="p-3 font-mono text-[10px] text-gray-600 w-[190px] break-words leading-tight">
+                  <div>{item.acknowledgement || "N/A"}</div>
+                  {renderFailureBadge(item)}
+                </td>
+                <td className="p-3 font-bold text-emerald-600">₹{item.cost ?? "0.000"}</td>
+                <td className="p-3 font-mono text-[11px] text-gray-700 w-[230px]">
+                  {item.createdAt ? new Date(item.createdAt).toLocaleString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: true,
+                  }) : (item.date || "N/A")}
+                </td>
+                <td className="p-3 text-center">
+                  <button onClick={() => { setSelectedItem(item); setShowPreviewModal(true); }} className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold hover:bg-blue-100 cursor-pointer">View</button>
+                </td>
+              </tr>
+            );
+          })
+        )}
+      </tbody>
+    </table>
+  );
 
   return (
     <div className="space-y-6 w-full p-4 lg:p-6 text-xs font-sans">
@@ -551,6 +633,7 @@ export default function ReportsPage() {
                             <span className={`font-bold px-2.5 py-1 rounded-full text-[10px] ${String(item.status || "").toUpperCase() === "SCHEDULED" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
                               {item.status}
                             </span>
+                            {renderFailureBadge(item)}
                           </td>
                           <td className="p-4 text-center space-x-1.5">
                             <button
@@ -573,101 +656,24 @@ export default function ReportsPage() {
               )}
 
               {/* DELIVERY REPORT TAB */}
-              {activeTab === "delivery" && (
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                      <th className="p-3">Received Date</th>
-                      <th className="p-3">Campaign</th>
-                      <th className="p-3">Channel</th>
-                      <th className="p-3">Number</th>
-                      <th className="p-3">Status</th>
-                      <th className="p-3">Message ID</th>
-                      <th className="p-3 w-[170px]">Acknowledgement</th>
-                      <th className="p-3">Cost</th>
-                      <th className="p-3 w-[230px]">TIMESTAMP</th>
-                      <th className="p-3 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {paginatedData.length === 0 ? (
-                      <tr><td colSpan={10} className="p-8 text-center text-gray-400">No delivery reports found.</td></tr>
-                    ) : (
-                      paginatedData.map((item) => (
-                        <tr key={item.id} className="hover:bg-gray-50 transition">
-                          <td className="p-3 font-mono">{item.date}</td>
-                          <td className="p-3 font-bold text-gray-800">{item.campaignName}</td>
-                          <td className="p-3 font-mono">{item.channel}</td>
-                          <td className="p-3 font-mono font-bold text-gray-900">{item.number}</td>
-                          <td className="p-3">
-                            <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${item.status === "READ" ? "bg-indigo-100 text-indigo-800" : item.status === "DELIVERED" ? "bg-emerald-100 text-emerald-800" : item.status === "SCHEDULED" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
-                              {item.status} {item.status === "READ" && "✓✓"}
-                            </span>
-                          </td>
-                          <td className="p-3 font-mono text-gray-400 truncate max-w-[100px]" title={item.messageId}>{item.messageId}</td>
+              {activeTab === "delivery" &&
+                renderDeliveryStyleTable(paginatedData, "No delivery reports found.")}
 
-                          <td className="p-3 font-mono text-[10px] text-gray-600 w-[170px] break-words leading-tight">
-                            {item.acknowledgement}
-                          </td>
+              {/* SCHEDULE REPORT TAB (DELIVERY STYLE LIVE REPORT) */}
+              {activeTab === "schedule" &&
+                renderDeliveryStyleTable(paginatedData, "No schedule reports found.")}
 
-                          <td className="p-3 font-bold text-emerald-600">₹{item.cost}</td>
+              {/* FALLBACK REPORT TAB */}
+              {activeTab === "fallback" &&
+                renderDeliveryStyleTable(paginatedData, "No fallback reports found.")}
 
-                          <td className="p-3 font-mono text-[11px] text-gray-700 w-[230px]">
-                            {item.createdAt ? new Date(item.createdAt).toLocaleString("en-IN", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              hour12: true,
-                            }) : (item.date || "N/A")}
-                          </td>
+              {/* API REPORT TAB */}
+              {activeTab === "api" &&
+                renderDeliveryStyleTable(paginatedData, "No API reports found.")}
 
-                          <td className="p-3 text-center">
-                            <button onClick={() => { setSelectedItem(item); setShowPreviewModal(true); }} className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold hover:bg-blue-100 cursor-pointer">View</button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              )}
-
-              {/* OTHER TABS */}
-              {["schedule", "fallback", "api", "service"].includes(activeTab) && (
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b font-bold text-[11px]">
-                      <th className="p-4">ID / Info</th>
-                      <th className="p-4">Template / Name</th>
-                      <th className="p-4">Channel</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4">TIMESTAMP</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {paginatedData.length === 0 ? (
-                      <tr><td colSpan={5} className="p-8 text-center text-gray-400">No {activeTab} reports found.</td></tr>
-                    ) : (
-                      paginatedData.map((item) => (
-                        <tr key={item.id} className="hover:bg-gray-50 transition">
-                          <td className="p-4 font-bold text-gray-900">{item.campaignInfo || item.id}</td>
-                          <td className="p-4 text-emerald-700 font-medium">{item.templateName || item.name || "N/A"}</td>
-                          <td className="p-4 font-mono">{item.channel || "N/A"}</td>
-                          <td className="p-4 font-bold">
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] ${String(item.status || "").toUpperCase() === "SCHEDULED" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
-                              {item.status || "COMPLETED"}
-                            </span>
-                          </td>
-                          <td className="p-4 font-mono text-[11px]">
-                            {item.scheduledAt || (item.createdAt ? new Date(item.createdAt).toLocaleString("en-IN") : item.date || "N/A")}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              )}
+              {/* SERVICE REPORT TAB */}
+              {activeTab === "service" &&
+                renderDeliveryStyleTable(paginatedData, "No service reports found.")}
             </>
           )}
         </div>
@@ -731,7 +737,7 @@ export default function ReportsPage() {
                   <div className="bg-white text-gray-900 p-3 rounded-xl shadow space-y-2">
                     <div className="font-bold text-emerald-800 text-xs">{selectedItem.templateName || selectedItem.campaignInfo}</div>
                     <p className="whitespace-pre-wrap text-[11px] leading-relaxed">{selectedItem.bodyText || "Please Recharge your PS LIC Software. Gpay & Phone pay fwd. Amount: 1180/-. Perfect Solution"}</p>
-                    <div className="text-[9px] text-right text-indigo-600 font-bold font-mono mt-1">✓✓ READ (11:35 AM)</div>
+                    <div className="text-[9px] text-right text-indigo-600 font-bold font-mono mt-1">✓✓ {selectedItem.status}</div>
                   </div>
                 </div>
               </div>
@@ -739,7 +745,13 @@ export default function ReportsPage() {
 
             <div className="mt-4 pt-3 border-t text-[11px] space-y-1 font-mono text-gray-600">
               <div><strong>Recipient:</strong> {selectedItem.number || "+917518900801"}</div>
-              <div><strong>Status:</strong> <span className="text-indigo-700 font-bold">{selectedItem.status}</span></div>
+              <div><strong>Status:</strong> <span className={`font-bold ${String(selectedItem.status || "").toUpperCase() === "FAILED" ? "text-red-600" : "text-indigo-700"}`}>{selectedItem.status}</span></div>
+              {String(selectedItem.status || "").toUpperCase() === "FAILED" && (
+                <div className="bg-red-50 border border-red-200 text-red-700 p-2 rounded-lg font-sans text-[10px]">
+                  {selectedItem.errorCode && <div className="font-bold font-mono">Error Code: {selectedItem.errorCode}</div>}
+                  <div>Reason: {selectedItem.errorReason || selectedItem.errorDetails || selectedItem.error || "Failed by Meta"}</div>
+                </div>
+              )}
               <div><strong>Timestamp:</strong> <span className="text-gray-800">{selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleString("en-IN") : "N/A"}</span></div>
               <div><strong>Cost:</strong> ₹{selectedItem.cost}</div>
             </div>

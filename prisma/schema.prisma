@@ -8,37 +8,37 @@ datasource db {
 }
 
 model User {
-  id                   String             @id @default(uuid())
-  name                 String
-  username             String?            @unique
-  email                String             @unique
-  password             String
-  phone                String?
-  image                String?            @db.Text // 👈 Profile picture/avatar save karne ke liye nayi field
-  expiryDate           String?
-  apiKey               String?            @unique
-  role                 Role               @default(USER)
-  walletBalance        Float              @default(0.0)
-  actualBalance        Float              @default(0.0)
-  virtualBalance       Float              @default(0.0)
-  perMsgRate           Float              @default(0.8046)
-  utilityRate          Float              @default(0.1550)
-  serviceRate          Float              @default(0.1550)
-  authRate             Float              @default(0.1550)
-  
-  // 👇 WhatsApp Account Settings Toggles
-  whatsappApiEnabled   Boolean            @default(true)
-  chatbotEnabled       Boolean            @default(true)
-  secureReporting      Boolean            @default(false)
-  internationalAccount Boolean            @default(false)
+  id             String  @id @default(uuid())
+  name           String
+  username       String? @unique
+  email          String  @unique
+  password       String
+  phone          String?
+  image          String? @db.Text // 👈 Profile picture/avatar save karne ke liye nayi field
+  expiryDate     String?
+  apiKey         String? @unique
+  role           Role    @default(USER)
+  walletBalance  Float   @default(0.0)
+  actualBalance  Float   @default(0.0)
+  virtualBalance Float   @default(0.0)
+  perMsgRate     Float   @default(0.8046)
+  utilityRate    Float   @default(0.1550)
+  serviceRate    Float   @default(0.1550)
+  authRate       Float   @default(0.1550)
 
-  createdById          String?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-  createdBy            User?              @relation("UserHierarchy", fields: [createdById], references: [id], onDelete: Cascade)
-  childUsers           User[]             @relation("UserHierarchy")
-  wabaAccounts         WabaAccount[]
-  transactions         WalletTransaction[]
+  // 👇 WhatsApp Account Settings Toggles
+  whatsappApiEnabled   Boolean @default(true)
+  chatbotEnabled       Boolean @default(true)
+  secureReporting      Boolean @default(false)
+  internationalAccount Boolean @default(false)
+
+  createdById  String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  createdBy    User?               @relation("UserHierarchy", fields: [createdById], references: [id], onDelete: Cascade)
+  childUsers   User[]              @relation("UserHierarchy")
+  wabaAccounts WabaAccount[]
+  transactions WalletTransaction[]
 }
 
 model WalletTransaction {
@@ -75,14 +75,14 @@ model WabaAccount {
 }
 
 model MediaLibrary {
-  id          String   @id @default(uuid())
-  userId      String
-  mediaName   String
-  url         String
-  wabaNumber  String   @default("All")
-  fileType    String?  @default("image")
-  expiresAt   DateTime 
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  mediaName  String
+  url        String
+  wabaNumber String   @default("All")
+  fileType   String?  @default("image")
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
 }
 
 model WhatsAppContact {
@@ -96,11 +96,12 @@ model WhatsAppContact {
 }
 
 model ContactGroup {
-  id            String   @id @default(uuid())
+  id            String         @id @default(uuid())
   userId        String
   groupName     String
-  totalContacts Int      @default(0)
-  createdAt     DateTime @default(now())
+  totalContacts Int            @default(0)
+  createdAt     DateTime       @default(now())
+  contacts      GroupContact[]
 }
 
 model BlacklistNumber {
@@ -124,14 +125,14 @@ model WhatsAppTemplate {
   metaTemplateId String?  @unique
   name           String
   language       String   @default("en_US")
-  category       String   
-  status         String   @default("PENDING") 
-  headerType     String?  @default("NONE") 
+  category       String
+  status         String   @default("PENDING")
+  headerType     String?  @default("NONE")
   headerText     String?
   bodyText       String
   footerText     String?
   buttons        Json?
-  components     Json?    
+  components     Json?
   rejectedReason String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -142,10 +143,10 @@ model CampaignLog {
   userId       String
   campaignName String
   templateName String
-  channel      String    
-  recipient    String    
-  status       String    
-  messageId    String?   
+  channel      String
+  recipient    String
+  status       String
+  messageId    String?
   cost         Float     @default(0.0)
   errorDetails String?   @default("N/A")
   sentAt       DateTime  @default(now())
@@ -159,32 +160,32 @@ model CampaignLog {
 
 model ChatSession {
   id            String        @id @default(uuid())
-  userId        String        
-  customerPhone String        
-  customerName  String?       
-  channel       String        
-  status        String        @default("OPEN") 
-  assignedTo    String?       
-  isBotActive   Boolean       @default(true) 
-  lastMessage   String?       
+  userId        String
+  customerPhone String
+  customerName  String?
+  channel       String
+  status        String        @default("OPEN")
+  assignedTo    String?
+  isBotActive   Boolean       @default(true)
+  lastMessage   String?
   lastMessageAt DateTime      @default(now())
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   messages      ChatMessage[]
-  notes         ChatNote[]    
+  notes         ChatNote[]
 }
 
 model ChatMessage {
   id            String      @id @default(uuid())
   chatSessionId String
   chatSession   ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
-  senderType    String      
-  senderName    String?     
-  messageBody   String      
-  messageType   String      @default("text") 
-  mediaUrl      String?     
-  status        String      @default("SENT") 
-  wabaMessageId String?     
+  senderType    String
+  senderName    String?
+  messageBody   String
+  messageType   String      @default("text")
+  mediaUrl      String?
+  status        String      @default("SENT")
+  wabaMessageId String?
   createdAt     DateTime    @default(now())
 }
 
@@ -192,8 +193,8 @@ model ChatNote {
   id            String      @id @default(uuid())
   chatSessionId String
   chatSession   ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
-  agentName     String      
-  noteBody      String      
+  agentName     String
+  noteBody      String
   createdAt     DateTime    @default(now())
 }
 
@@ -215,6 +216,7 @@ model Agent {
   status           String    @default("ACTIVE")
   createdAt        DateTime  @default(now())
 }
+
 model GroupContact {
   id        String       @id @default(uuid())
   groupId   String

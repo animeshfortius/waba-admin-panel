@@ -25,25 +25,35 @@ async function processDueScheduledLogs() {
   const wabaAccounts = await prisma.wabaAccount.findMany();
   let sent = 0;
   let failed = 0;
+  const failures: { id: string; recipient: string; reason: string }[] = [];
 
   for (const log of dueLogs) {
-    const account = wabaAccounts.find(
-      (acc) =>
-        acc.displayPhone === log.channel ||
-        acc.wabaId === log.channel ||
-        acc.phoneNumberId?.replace("PHONE_", "") === log.channel
-    );
+    const cleanChannel = String(log.channel || "").replace(/^\+/, "").trim();
+
+    const account = wabaAccounts.find((acc) => {
+      const accPhone = String(acc.displayPhone || "").replace(/^\+/, "").trim();
+      const accPhoneId = String(acc.phoneNumberId || "").replace("PHONE_", "").trim();
+      const accWabaId = String(acc.wabaId || "").trim();
+      return (
+        accPhone === cleanChannel ||
+        accWabaId === cleanChannel ||
+        accPhoneId === cleanChannel ||
+        acc.phoneNumberId === cleanChannel
+      );
+    });
 
     const token = (account?.accessToken || process.env.META_ACCESS_TOKEN || "").trim();
     const phoneId = (account?.phoneNumberId || "").replace("PHONE_", "").trim();
 
     if (!token || !phoneId) {
+      const reason = `Missing WABA phoneId (${phoneId || "none"}) or accessToken for channel ${log.channel}`;
       failed++;
+      failures.push({ id: log.id, recipient: log.recipient, reason });
       await prisma.campaignLog.update({
         where: { id: log.id },
         data: {
           status: "FAILED",
-          errorDetails: "Missing WABA phoneNumberId or accessToken during scheduled run",
+          errorDetails: reason,
         },
       });
       continue;
@@ -87,22 +97,26 @@ async function processDueScheduledLogs() {
           },
         });
       } else {
+        const reason = data.error?.message || "Meta API error during scheduled run";
         failed++;
+        failures.push({ id: log.id, recipient: log.recipient, reason });
         await prisma.campaignLog.update({
           where: { id: log.id },
           data: {
             status: "FAILED",
-            errorDetails: data.error?.message || "Meta API error during scheduled run",
+            errorDetails: reason,
           },
         });
       }
     } catch (err: any) {
+      const reason = err.message || "Network error during scheduled run";
       failed++;
+      failures.push({ id: log.id, recipient: log.recipient, reason });
       await prisma.campaignLog.update({
         where: { id: log.id },
         data: {
           status: "FAILED",
-          errorDetails: err.message || "Network error during scheduled run",
+          errorDetails: reason,
         },
       });
     }
@@ -113,6 +127,7 @@ async function processDueScheduledLogs() {
     processed: dueLogs.length,
     sent,
     failed,
+    failures,
   };
 }
 

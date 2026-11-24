@@ -1,5 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { processAutomationWebhook } from "@/lib/automationEngine";
+
+function serializeMetaError(firstErr: any) {
+  if (!firstErr) return "Message delivery failed by Meta";
+  return JSON.stringify({
+    code: firstErr.code || "",
+    title: firstErr.title || "",
+    message: firstErr.message || "",
+    details: firstErr.error_data?.details || "",
+  });
+}
 
 export async function GET(req: Request) {
   try {
@@ -28,27 +39,31 @@ export async function POST(req: Request) {
           if (change.field === "messages") {
             const value = change.value;
             const metadata = value.metadata;
-            const channelNumber = metadata?.display_phone_number || metadata?.phone_number_id || "Unknown";
+            const phoneNumberId = metadata?.phone_number_id || "";
+            const channelNumber = metadata?.display_phone_number || phoneNumberId || "Unknown";
 
-            // 1️⃣ HANDLE INCOMING MESSAGES FOR LIVE AGENT CHAT MODULE
+            // 1️⃣ HANDLE INCOMING MESSAGES FOR LIVE AGENT CHAT MODULE + AUTOMATION ENGINE
             if (value.messages) {
               for (const msgObj of value.messages) {
                 const customerPhone = msgObj.from?.trim();
                 const messageId = msgObj.id?.trim();
                 const timestamp = msgObj.timestamp ? new Date(Number(msgObj.timestamp) * 1000) : new Date();
-                
-                // Extract text body or media caption
-                const messageText = msgObj.text?.body || msgObj.button?.text || msgObj.interactive?.button_reply?.title || "[Media / Interactive Message]";
+
+                const messageText =
+                  msgObj.text?.body ||
+                  msgObj.button?.text ||
+                  msgObj.interactive?.button_reply?.title ||
+                  msgObj.interactive?.list_reply?.title ||
+                  "[Media / Interactive Message]";
 
                 if (customerPhone) {
                   try {
                     const cleanChannelDigits = channelNumber.replace(/\D/g, "").slice(-10);
 
-                    // Find or create chat session for live inbox
                     let session = await prisma.chatSession.findFirst({
-                      where: { 
-                        customerPhone, 
-                        channel: { contains: cleanChannelDigits } 
+                      where: {
+                        customerPhone,
+                        channel: { contains: cleanChannelDigits },
                       },
                     });
 
@@ -60,7 +75,7 @@ export async function POST(req: Request) {
                           customerName: value.contacts?.[0]?.profile?.name || null,
                           channel: channelNumber,
                           status: "OPEN",
-                          isBotActive: false, // Default bot inactive for live agent handling
+                          isBotActive: true,
                           lastMessage: messageText,
                           lastMessageAt: timestamp,
                         },
@@ -72,12 +87,11 @@ export async function POST(req: Request) {
                           customerName: value.contacts?.[0]?.profile?.name || session.customerName,
                           lastMessage: messageText,
                           lastMessageAt: timestamp,
-                          status: "OPEN", // Re-open chat on new customer message
+                          status: "OPEN",
                         },
                       });
                     }
 
-                    // Save incoming customer message
                     await prisma.chatMessage.create({
                       data: {
                         chatSessionId: session.id,
@@ -91,8 +105,35 @@ export async function POST(req: Request) {
                     });
 
                     console.log(`💬 LIVE CHAT INBOUND -> From: ${customerPhone} | Msg: ${messageText}`);
+
+                    // Trigger Chatbot Builder (Chat Flow / AI Chatbot) if active on session
+                    if (session.isBotActive && messageText && messageText !== "[Media / Interactive Message]") {
+                      const wabaAccount = await prisma.wabaAccount.findFirst({
+                        where: {
+                          OR: [
+                            ...(phoneNumberId ? [{ phoneNumberId }] : []),
+                            ...(cleanChannelDigits ? [{ displayPhone: { contains: cleanChannelDigits } }] : []),
+                          ],
+                        },
+                      });
+
+                      const accessToken =
+                        wabaAccount?.accessToken ||
+                        process.env.WHATSAPP_ACCESS_TOKEN ||
+                        process.env.META_ACCESS_TOKEN ||
+                        "";
+
+                      if (accessToken) {
+                        await processAutomationWebhook({
+                          phoneNumberId: wabaAccount?.phoneNumberId || phoneNumberId,
+                          customerPhone,
+                          incomingText: messageText,
+                          accessToken,
+                        });
+                      }
+                    }
                   } catch (chatErr: any) {
-                    console.error(`❌ Live Chat Webhook Error:`, chatErr.message);
+                    console.error(`❌ Live Chat / Automation Webhook Error:`, chatErr.message);
                   }
                 }
               }
@@ -113,29 +154,30 @@ export async function POST(req: Request) {
                 if (rawStatus === "READ") status = "READ";
                 if (rawStatus === "FAILED") status = "FAILED";
 
+                const serializedErr =
+                  status === "FAILED" ? serializeMetaError(statusObj.errors?.[0]) : "N/A";
+
                 try {
                   const cleanWebhook = recipientId ? recipientId.replace(/\D/g, "").slice(-10) : "";
                   let matchedLogs: any[] = [];
 
-                  // Step 1: Match by exact wamid (messageId)
                   if (messageId) {
                     const byWamid = await prisma.campaignLog.findMany({
-                      where: { messageId: messageId }
+                      where: { messageId: messageId },
                     });
                     if (byWamid.length > 0) {
                       matchedLogs = byWamid;
                     }
                   }
 
-                  // Step 2: Match by last 10 digits in recent unread logs
                   if (matchedLogs.length === 0 && cleanWebhook.length >= 10) {
                     const recentLogs = await prisma.campaignLog.findMany({
                       where: { status: { not: "READ" } },
                       orderBy: { createdAt: "desc" },
-                      take: 300
+                      take: 300,
                     });
 
-                    matchedLogs = recentLogs.filter(log => {
+                    matchedLogs = recentLogs.filter((log) => {
                       const cleanDb = log.recipient ? log.recipient.replace(/\D/g, "").slice(-10) : "";
                       return cleanDb === cleanWebhook;
                     });
@@ -150,11 +192,11 @@ export async function POST(req: Request) {
                       updateData.readAt = timestamp;
                       updateData.status = "READ";
                     }
-                    if (status === "FAILED" && statusObj.errors?.[0]) {
-                      updateData.errorDetails = statusObj.errors[0].message;
+                    if (status === "FAILED") {
+                      updateData.errorDetails = serializedErr;
                     }
 
-                    const logIds = matchedLogs.map(l => l.id);
+                    const logIds = matchedLogs.map((l) => l.id);
                     await prisma.campaignLog.updateMany({
                       where: { id: { in: logIds } },
                       data: updateData,
@@ -162,7 +204,6 @@ export async function POST(req: Request) {
 
                     console.log(`🔥 STATUS UPDATE -> Phone: ${cleanWebhook} | Updated ${logIds.length} rows to ${status}`);
                   } else {
-                    // Step 3: Fallback creation if log not found
                     await prisma.campaignLog.create({
                       data: {
                         userId: "admin",
@@ -176,8 +217,8 @@ export async function POST(req: Request) {
                         sentAt: timestamp,
                         deliveredAt: status === "DELIVERED" || status === "READ" ? timestamp : null,
                         readAt: status === "READ" ? timestamp : null,
-                        errorDetails: status === "FAILED" ? statusObj.errors?.[0]?.message || "Failed" : "N/A"
-                      }
+                        errorDetails: serializedErr,
+                      },
                     });
                     console.log(`🚀 FALLBACK CREATED -> Recipient: ${recipientId} | Status: ${status}`);
                   }

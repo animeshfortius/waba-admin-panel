@@ -14,7 +14,7 @@ model User {
   email          String  @unique
   password       String
   phone          String?
-  image          String? @db.Text // 👈 Profile picture/avatar save karne ke liye nayi field
+  image          String? @db.Text
   expiryDate     String?
   apiKey         String? @unique
   role           Role    @default(USER)
@@ -26,7 +26,7 @@ model User {
   serviceRate    Float   @default(0.1550)
   authRate       Float   @default(0.1550)
 
-  // 👇 WhatsApp Account Settings Toggles
+  // WhatsApp Account Settings Toggles
   whatsappApiEnabled   Boolean @default(true)
   chatbotEnabled       Boolean @default(true)
   secureReporting      Boolean @default(false)
@@ -226,4 +226,83 @@ model GroupContact {
   group     ContactGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@index([groupId])
+}
+
+// Automation Tools Models (Chatbot Builder, AI Chatbot, WhatsApp Flows, QR Codes)
+model ChatbotConfig {
+  id             String        @id @default(cuid())
+  userId         String        @default("admin")
+  wabaAccountId  String?
+  phoneNumberId  String?
+  name           String
+  mode           String        @default("CHAT_FLOW") // "CHAT_FLOW" | "AI_CHATBOT"
+  triggerType    String        @default("KEYWORD")   // "KEYWORD" | "ALL_MESSAGES" | "WELCOME"
+  keywords       String?
+  isActive       Boolean       @default(true)
+  aiProvider     String        @default("OPENAI")    // "OPENAI" | "GEMINI"
+  aiModel        String        @default("gpt-4o-mini")
+  aiApiKey       String?
+  aiSystemPrompt String?       @db.Text
+  fallbackText   String?       @db.Text
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  nodes          ChatbotNode[]
+}
+
+model ChatbotNode {
+  id          String        @id @default(cuid())
+  chatbotId   String
+  chatbot     ChatbotConfig @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
+  nodeKey     String
+  title       String
+  messageType String        @default("TEXT") // "TEXT" | "BUTTONS" | "LIST" | "FLOW"
+  bodyText    String        @db.Text
+  headerText  String?
+  footerText  String?
+  optionsJson String?       @db.Text
+  flowId      String?
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+}
+
+model WhatsAppFlowRecord {
+  id            String   @id @default(cuid())
+  userId        String   @default("admin")
+  wabaId        String
+  phoneNumberId String?
+  metaFlowId    String?  @unique
+  name          String
+  categories    String   @default("[\"OTHER\"]")
+  status        String   @default("DRAFT")
+  endpointUri   String?
+  flowJson      String?  @db.Text
+  syncedAt      DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model WhatsAppQrCode {
+  id            String   @id @default(cuid())
+  userId        String   @default("admin")
+  phoneNumberId String
+  code          String?  @unique
+  prefilledText String   @db.Text
+  generateQrImg String   @default("PNG")
+  qrImageUrl    String?  @db.Text
+  deepLinkUrl   String?
+  syncedAt      DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AutomationSessionState {
+  id            String   @id @default(cuid())
+  phoneNumberId String
+  customerPhone String
+  chatbotId     String?
+  currentNodeKey String?
+  contextJson   String?  @db.Text
+  updatedAt     DateTime @updatedAt
+
+  @@unique([phoneNumberId, customerPhone])
 }

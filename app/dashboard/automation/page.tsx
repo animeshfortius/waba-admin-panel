@@ -1,581 +1,770 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 
-interface FlowComponent {
-  id: string;
-  type: "text" | "textarea" | "select" | "radio" | "checkbox";
-  label: string;
-  placeholder?: string;
-  required: boolean;
-  options?: string[];
-}
-
-interface FlowScreen {
-  id: string;
+interface FlowNodeDraft {
+  nodeKey: string;
   title: string;
-  nextScreenId?: string;
-  components: FlowComponent[];
+  messageType: "TEXT" | "BUTTONS" | "LIST" | "FLOW";
+  bodyText: string;
+  flowId?: string;
+  nextLabel?: string;
+  nextNodeKey?: string;
 }
 
-export default function AutomationPage() {
-  const [activeTab, setActiveTab] = useState<"overview" | "chatbot_flows" | "whatsapp_flows" | "qr_codes" | "form_builder">("overview");
+export default function AutomationToolsPage() {
+  const [activeTool, setActiveTool] = useState<"chatbot" | "flows" | "qr">("chatbot");
 
-  // Chatbot states
-  const [showAddFlowModal, setShowAddFlowModal] = useState(false);
-  const [flows, setFlows] = useState([
-    { id: 1676, name: "Testing", channel: "15553945963", created: "10 Oct 2026", active: true, isLive: true }
-  ]);
-  const [botName, setBotName] = useState("");
-  const [channelNumber, setChannelNumber] = useState("15553945963");
-
-  // WhatsApp Flow states
-  const [whatsappForms, setWhatsappForms] = useState<any[]>([
-    { id: 1, name: "Lead Generation Flow", status: "Draft", channel: "15553945963" }
-  ]);
-  const [showNewFormModal, setShowNewFormModal] = useState(false);
-  const [newFormName, setNewFormName] = useState("");
-
-  // WhatsApp Form / Multi-Screen Builder States
-  const [activeForm, setActiveForm] = useState<any>(null);
-  const [screens, setScreens] = useState<FlowScreen[]>([
+  // Chatbot Builder & AI Chatbot state
+  const [chatbots, setChatbots] = useState<any[]>([]);
+  const [botId, setBotId] = useState<string>("");
+  const [botName, setBotName] = useState<string>("Main Customer Bot");
+  const [botMode, setBotMode] = useState<"CHAT_FLOW" | "AI_CHATBOT">("CHAT_FLOW");
+  const [triggerType, setTriggerType] = useState<string>("KEYWORD");
+  const [keywords, setKeywords] = useState<string>("hi, hello, start, menu");
+  const [isActive, setIsActive] = useState<boolean>(true);
+  const [aiProvider, setAiProvider] = useState<string>("OPENAI");
+  const [aiModel, setAiModel] = useState<string>("gpt-4o-mini");
+  const [aiApiKey, setAiApiKey] = useState<string>("");
+  const [aiSystemPrompt, setAiSystemPrompt] = useState<string>(
+    "You are a helpful WhatsApp assistant for our business. Answer clearly and concisely."
+  );
+  const [nodes, setNodes] = useState<FlowNodeDraft[]>([
     {
-      id: "SCREEN_1",
-      title: "Personal Details",
-      nextScreenId: "SCREEN_2",
-      components: [
-        { id: "comp_1", type: "text", label: "Full Name", placeholder: "Enter full name", required: true },
-        { id: "comp_2", type: "text", label: "Phone Number", placeholder: "+91 9876543210", required: true },
-      ]
+      nodeKey: "welcome",
+      title: "Welcome & Menu",
+      messageType: "BUTTONS",
+      bodyText: "Welcome! How can we help you today?",
+      nextLabel: "Support",
+      nextNodeKey: "support",
     },
     {
-      id: "SCREEN_2",
-      title: "Service Selection",
-      nextScreenId: "SUCCESS",
-      components: [
-        { id: "comp_3", type: "select", label: "Choose Requirement", required: true, options: ["WABA Onboarding", "Custom Chatbot", "API Integration"] },
-        { id: "comp_4", type: "textarea", label: "Additional Remarks", placeholder: "Tell us more...", required: false }
-      ]
-    }
-  ]);
-  const [selectedScreenId, setSelectedScreenId] = useState<string>("SCREEN_1");
-  const [selectedCompId, setSelectedCompId] = useState<string | null>("comp_1");
-  const [showAddScreenModal, setShowAddScreenModal] = useState(false);
-  const [newScreenTitle, setNewScreenTitle] = useState("");
-
-  // QR CODE CREATOR STATES
-  const [selectedWabaNumber, setSelectedWabaNumber] = useState("15553945963");
-  const [qrName, setQrName] = useState("Storefront Contact QR");
-  const [prefilledMessage, setPrefilledMessage] = useState("Hi, I want to inquire about your services.");
-  const [showGenerateQrModal, setShowGenerateQrModal] = useState(false);
-  const [qrCodesList, setQrCodesList] = useState([
-    {
-      id: 1,
-      name: "Storefront Contact QR",
-      number: "15553945963",
-      message: "Hi, I want to inquire about your services.",
-      created: "12 Oct 2026",
-      clicks: 42,
-    }
+      nodeKey: "support",
+      title: "Support Reply",
+      messageType: "TEXT",
+      bodyText: "Our support team has received your request and will reply shortly.",
+    },
   ]);
 
-  const currentScreen = screens.find((s) => s.id === selectedScreenId) || screens[0];
-  const selectedComp = currentScreen?.components.find((c) => c.id === selectedCompId);
+  // WhatsApp Flows state
+  const [flows, setFlows] = useState<any[]>([]);
+  const [flowName, setFlowName] = useState<string>("");
+  const [flowCategory, setFlowCategory] = useState<string>("LEAD_GENERATION");
+  const [flowEndpoint, setFlowEndpoint] = useState<string>("");
+  const [publishFlow, setPublishFlow] = useState<boolean>(false);
 
-  const handleAddNewScreen = () => {
-    if (!newScreenTitle) return alert("Please enter Screen Title!");
-    const newScreenId = `SCREEN_${screens.length + 1}`;
-    const newScreen: FlowScreen = { id: newScreenId, title: newScreenTitle, nextScreenId: "SUCCESS", components: [] };
-    setScreens([...screens, newScreen]);
-    setSelectedScreenId(newScreenId);
-    setShowAddScreenModal(false);
-    setNewScreenTitle("");
+  // QR Codes state
+  const [qrCodes, setQrCodes] = useState<any[]>([]);
+  const [qrMessage, setQrMessage] = useState<string>("Hi! I want more details about your services.");
+  const [qrFormat, setQrFormat] = useState<"PNG" | "SVG">("PNG");
+
+  const [statusMsg, setStatusMsg] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+
+  const loadAllData = useCallback(async (syncMeta = false) => {
+    setLoading(true);
+    try {
+      const [botRes, flowRes, qrRes] = await Promise.all([
+        fetch("/api/automation/chatbots", { cache: "no-store" }),
+        fetch(`/api/automation/flows?sync=${syncMeta ? "true" : "false"}`, { cache: "no-store" }),
+        fetch(`/api/automation/qr-codes?sync=${syncMeta ? "true" : "false"}`, { cache: "no-store" }),
+      ]);
+
+      const [botJson, flowJson, qrJson] = await Promise.all([
+        botRes.json(),
+        flowRes.json(),
+        qrRes.json(),
+      ]);
+
+      if (botJson.success) setChatbots(botJson.chatbots || []);
+      if (flowJson.success) setFlows(flowJson.flows || []);
+      if (qrJson.success) setQrCodes(qrJson.qrCodes || []);
+    } catch (err: any) {
+      setStatusMsg(err.message || "Error loading automation data");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAllData(false);
+  }, [loadAllData]);
+
+  const handleSaveChatbot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusMsg("");
+    const payloadNodes = nodes.map((n) => ({
+      nodeKey: n.nodeKey,
+      title: n.title,
+      messageType: n.messageType,
+      bodyText: n.bodyText,
+      flowId: n.flowId || null,
+      options:
+        n.nextLabel && n.nextNodeKey
+          ? [{ id: n.nextNodeKey, label: n.nextLabel, nextNodeKey: n.nextNodeKey }]
+          : [],
+    }));
+
+    const res = await fetch("/api/automation/chatbots", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: botId || undefined,
+        name: botName,
+        mode: botMode,
+        triggerType,
+        keywords,
+        isActive,
+        aiProvider,
+        aiModel,
+        aiApiKey,
+        aiSystemPrompt,
+        nodes: payloadNodes,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setBotId(data.chatbot.id);
+      setStatusMsg("Chatbot saved to database!");
+      loadAllData(false);
+    } else {
+      setStatusMsg(data.error || "Failed to save chatbot");
+    }
   };
 
-  const addComponentToScreen = (type: FlowComponent["type"]) => {
-    if (!currentScreen) return;
-    const newComp: FlowComponent = {
-      id: `comp_${Date.now()}`,
-      type,
-      label: type === "text" ? "Text Question" : type === "textarea" ? "Long Answer" : type === "select" ? "Dropdown Selection" : "Option Selection",
-      placeholder: "Type placeholder here...",
-      required: false,
-      options: type === "select" || type === "radio" ? ["Option A", "Option B"] : undefined,
-    };
-    setScreens(
-      screens.map((s) =>
-        s.id === selectedScreenId ? { ...s, components: [...s.components, newComp] } : s
-      )
-    );
-    setSelectedCompId(newComp.id);
+  const handleEditBot = (bot: any) => {
+    setBotId(bot.id);
+    setBotName(bot.name);
+    setBotMode(bot.mode || "CHAT_FLOW");
+    setTriggerType(bot.triggerType || "KEYWORD");
+    setKeywords(bot.keywords || "");
+    setIsActive(Boolean(bot.isActive));
+    setAiProvider(bot.aiProvider || "OPENAI");
+    setAiModel(bot.aiModel || "gpt-4o-mini");
+    setAiApiKey(bot.aiApiKey || "");
+    setAiSystemPrompt(bot.aiSystemPrompt || "");
+    if (Array.isArray(bot.nodes) && bot.nodes.length > 0) {
+      setNodes(
+        bot.nodes.map((n: any) => {
+          let opts: any[] = [];
+          try {
+            opts = JSON.parse(n.optionsJson || "[]");
+          } catch {
+            opts = [];
+          }
+          return {
+            nodeKey: n.nodeKey,
+            title: n.title,
+            messageType: n.messageType || "TEXT",
+            bodyText: n.bodyText,
+            flowId: n.flowId || "",
+            nextLabel: opts[0]?.label || "",
+            nextNodeKey: opts[0]?.nextNodeKey || "",
+          };
+        })
+      );
+    }
   };
 
-  const updateComponent = (field: string, value: any) => {
-    if (!selectedCompId || !currentScreen) return;
-    setScreens(
-      screens.map((s) =>
-        s.id === selectedScreenId
-          ? {
-              ...s,
-              components: s.components.map((c) =>
-                c.id === selectedCompId ? { ...c, [field]: value } : c
-              ),
-            }
-          : s
-      )
-    );
+  const handleCreateFlow = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusMsg("");
+    const res = await fetch("/api/automation/flows", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: flowName,
+        categories: [flowCategory],
+        endpointUri: flowEndpoint || undefined,
+        publish: publishFlow,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setFlowName("");
+      setStatusMsg("WhatsApp Flow created & saved!");
+      loadAllData(false);
+    } else {
+      setStatusMsg(data.error || "Failed to create flow");
+    }
   };
 
-  const handleCreateQrCode = () => {
-    if (!qrName || !selectedWabaNumber) return alert("Please fill QR Name & select WABA Number!");
-    const newQr = {
-      id: Date.now(),
-      name: qrName,
-      number: selectedWabaNumber,
-      message: prefilledMessage,
-      created: "12 Oct 2026",
-      clicks: 0,
-    };
-    setQrCodesList([...qrCodesList, newQr]);
-    setShowGenerateQrModal(false);
-    setQrName("");
-    alert("Official Meta WhatsApp QR Code generated successfully!");
+  const handleCreateQr = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusMsg("");
+    const res = await fetch("/api/automation/qr-codes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prefilledText: qrMessage,
+        generateQrImg: qrFormat,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setStatusMsg("WhatsApp QR Code generated & saved!");
+      loadAllData(false);
+    } else {
+      setStatusMsg(data.error || "Failed to generate QR code");
+    }
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Top Header & Breadcrumb */}
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
+    <div className="p-6 space-y-6 bg-slate-50 min-h-screen text-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-xs text-gray-400">
-            WhatsApp Message › Automation {activeTab !== "overview" && `› ${activeTab === "chatbot_flows" ? "Chatbot Builder" : activeTab === "whatsapp_flows" ? "WhatsApp Flows" : activeTab === "form_builder" ? "Flow Multi-Screen Builder" : "QR Codes Creator"}`}
-          </div>
-          <h1 className="text-xl font-bold text-gray-800">
-            {activeTab === "overview" && "Automation"}
-            {activeTab === "chatbot_flows" && "WhatsApp Chatbot Flows"}
-            {activeTab === "whatsapp_flows" && "WhatsApp Flows Manager"}
-            {activeTab === "qr_codes" && "Official WhatsApp QR Codes Creator"}
-            {activeTab === "form_builder" && `WhatsApp Flow Builder: ${activeForm?.name}`}
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Automation Tools
+          </p>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Chatbot Builder, WhatsApp Flows & QR Codes
           </h1>
         </div>
-        {activeTab !== "overview" && (
-          <button
-            onClick={() => setActiveTab(activeTab === "form_builder" ? "whatsapp_flows" : "overview")}
-            className="text-xs border px-3 py-1.5 rounded-lg font-medium text-gray-600 hover:bg-gray-50 flex items-center space-x-1"
-          >
-            <span>⬅</span>
-            <span>Back</span>
-          </button>
-        )}
+
+        <button
+          onClick={() => loadAllData(true)}
+          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium cursor-pointer"
+        >
+          {loading ? "Syncing..." : "🔄 Live Sync From Meta"}
+        </button>
       </div>
 
-      {/* 1. AUTOMATION OVERVIEW MENU */}
-      {activeTab === "overview" && (
-        <div className="space-y-6">
-          <div className="space-y-3">
-            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Automation Tools</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl">
-              <div onClick={() => setActiveTab("chatbot_flows")} className="bg-white p-6 rounded-2xl border shadow-sm hover:shadow-md cursor-pointer text-center space-y-3 group">
-                <div className="text-4xl group-hover:scale-110 transition duration-200">🤖</div>
-                <h3 className="font-bold text-sm text-gray-800">Chatbot Builder</h3>
-                <p className="text-xs text-gray-400">Build chatbots to automate conversations.</p>
-              </div>
-
-              <div onClick={() => setActiveTab("whatsapp_flows")} className="bg-white p-6 rounded-2xl border shadow-sm hover:shadow-md cursor-pointer text-center space-y-3 group">
-                <div className="text-4xl group-hover:scale-110 transition duration-200">🔀</div>
-                <h3 className="font-bold text-sm text-gray-800">WhatsApp Flows</h3>
-                <p className="text-xs text-gray-400">Design and control WhatsApp Flows.</p>
-              </div>
-
-              <div onClick={() => setActiveTab("qr_codes")} className="bg-white p-6 rounded-2xl border shadow-sm hover:shadow-md cursor-pointer text-center space-y-3 group">
-                <div className="text-4xl group-hover:scale-110 transition duration-200">📲</div>
-                <h3 className="font-bold text-sm text-gray-800">QR Codes</h3>
-                <p className="text-xs text-gray-400">Design and control WhatsApp QR Codes.</p>
-              </div>
-            </div>
-          </div>
+      {statusMsg && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2.5 rounded-xl text-sm font-medium">
+          {statusMsg}
         </div>
       )}
 
-      {/* 2. CHATBOT MANAGER */}
-      {activeTab === "chatbot_flows" && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
-            <button onClick={() => setShowAddFlowModal(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow transition">
-              + Add Chatbot Flow
-            </button>
-          </div>
+      {/* 3 Tool Cards matching Automation Tools */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <button
+          onClick={() => setActiveTool("chatbot")}
+          className={`text-left p-5 rounded-2xl border transition cursor-pointer ${
+            activeTool === "chatbot"
+              ? "bg-white border-emerald-500 ring-2 ring-emerald-500/20"
+              : "bg-white border-slate-200 hover:border-slate-300"
+          }`}
+        >
+          <div className="text-2xl mb-2">🤖</div>
+          <div className="font-bold text-slate-900">Chatbot Builder</div>
+          <p className="text-xs text-slate-500 mt-1">
+            Build Chat Flows & configure AI Chatbot with API keys and live automation.
+          </p>
+        </button>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {flows.map((fl) => (
-              <div key={fl.id} className="bg-white p-5 rounded-2xl border shadow-sm space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-base text-gray-800">{fl.name}</h3>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${fl.active ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
-                    {fl.active ? "ACTIVE 🟢" : "INACTIVE 🔴"}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500 font-mono">Channel: {fl.channel}</p>
-                <div className="flex justify-between items-center pt-3 border-t">
-                  <span className="text-xs text-gray-400 italic">Chatbot Engine (Video review pending)</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+        <button
+          onClick={() => setActiveTool("flows")}
+          className={`text-left p-5 rounded-2xl border transition cursor-pointer ${
+            activeTool === "flows"
+              ? "bg-white border-blue-500 ring-2 ring-blue-500/20"
+              : "bg-white border-slate-200 hover:border-slate-300"
+          }`}
+        >
+          <div className="text-2xl mb-2">🔀</div>
+          <div className="font-bold text-slate-900">WhatsApp Flows</div>
+          <p className="text-xs text-slate-500 mt-1">
+            Design, sync, and control Meta WhatsApp Flows with live status.
+          </p>
+        </button>
 
-      {/* 3. WHATSAPP FLOW MANAGER */}
-      {activeTab === "whatsapp_flows" && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
-            <span className="text-xs font-bold text-gray-600">Total Flows: {whatsappForms.length}</span>
-            <button onClick={() => alert("Retrieving Meta Flows from Graph API...")} className="bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-lg">
-              🔄 Retrieve Meta Flows
-            </button>
-          </div>
+        <button
+          onClick={() => setActiveTool("qr")}
+          className={`text-left p-5 rounded-2xl border transition cursor-pointer ${
+            activeTool === "qr"
+              ? "bg-white border-purple-500 ring-2 ring-purple-500/20"
+              : "bg-white border-slate-200 hover:border-slate-300"
+          }`}
+        >
+          <div className="text-2xl mb-2">📱</div>
+          <div className="font-bold text-slate-900">QR Codes</div>
+          <p className="text-xs text-slate-500 mt-1">
+            Generate, sync, and manage WhatsApp QR codes & prefilled messages.
+          </p>
+        </button>
+      </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div
-              onClick={() => setShowNewFormModal(true)}
-              className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/20 transition flex flex-col items-center justify-center space-y-2 min-h-[160px]"
-            >
-              <span className="text-2xl font-bold text-emerald-600">+</span>
-              <span className="text-xs font-bold text-gray-700">New Form</span>
-            </div>
-
-            {whatsappForms.map((frm) => (
-              <div key={frm.id} className="bg-white p-5 rounded-2xl border shadow-sm space-y-3">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-sm text-gray-800">{frm.name}</h3>
-                  <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded">{frm.status}</span>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t">
-                  <button
-                    onClick={() => { setActiveForm(frm); setActiveTab("form_builder"); }}
-                    className="text-xs text-emerald-600 font-bold hover:underline"
-                  >
-                    Edit Multi-Screen Flow ➔
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 4. MULTI-SCREEN WHATSAPP FLOW BUILDER */}
-      {activeTab === "form_builder" && (
-        <div className="space-y-6">
-          <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between overflow-x-auto">
-            <div className="flex items-center space-x-3">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Flow Screens:</span>
-              <div className="flex items-center space-x-2">
-                {screens.map((scr, idx) => (
-                  <button
-                    key={scr.id}
-                    onClick={() => {
-                      setSelectedScreenId(scr.id);
-                      setSelectedCompId(scr.components[0]?.id || null);
-                    }}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 ${
-                      selectedScreenId === scr.id
-                        ? "bg-emerald-600 text-white shadow-md"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                  >
-                    <span>📱 Screen {idx + 1}: {scr.title}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowAddScreenModal(true)}
-              className="bg-emerald-50 text-emerald-700 border border-emerald-300 px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-100 transition whitespace-nowrap"
-            >
-              + Add New Screen
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <div className="bg-white p-5 rounded-2xl border shadow-sm space-y-5">
-              <h3 className="font-bold text-sm text-gray-800 border-b pb-2">➕ Add Components</h3>
-              <div className="grid grid-cols-1 gap-2">
-                <button onClick={() => addComponentToScreen("text")} className="w-full text-left p-3 border rounded-xl text-xs font-bold text-gray-700 hover:bg-emerald-50 flex items-center space-x-2">
-                  <span>🔤</span><span>Text Input</span>
-                </button>
-                <button onClick={() => addComponentToScreen("textarea")} className="w-full text-left p-3 border rounded-xl text-xs font-bold text-gray-700 hover:bg-emerald-50 flex items-center space-x-2">
-                  <span>📝</span><span>Text Area</span>
-                </button>
-                <button onClick={() => addComponentToScreen("select")} className="w-full text-left p-3 border rounded-xl text-xs font-bold text-gray-700 hover:bg-emerald-50 flex items-center space-x-2">
-                  <span>🔽</span><span>Dropdown Menu</span>
-                </button>
-              </div>
-
-              <div className="pt-4 border-t">
+      {/* 1. CHATBOT BUILDER (CHAT FLOW + AI CHATBOT) */}
+      {activeTool === "chatbot" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <form
+            onSubmit={handleSaveChatbot}
+            className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 space-y-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+              <h2 className="text-lg font-bold text-slate-900">
+                {botId ? "Edit Chatbot" : "Create Chatbot"}
+              </h2>
+              <div className="flex gap-2">
                 <button
-                  onClick={() => {
-                    setWhatsappForms(whatsappForms.map(f => f.id === activeForm.id ? { ...f, status: "Published" } : f));
-                    alert("Flow JSON Schema Published to Meta Cloud API!");
-                  }}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs shadow transition"
+                  type="button"
+                  onClick={() => setBotMode("CHAT_FLOW")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                    botMode === "CHAT_FLOW"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-slate-100 text-slate-700"
+                  }`}
                 >
-                  🚀 Publish Flow JSON to Meta
+                  Chat Flow
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBotMode("AI_CHATBOT")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                    botMode === "AI_CHATBOT"
+                      ? "bg-indigo-600 text-white"
+                      : "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  AI Chatbot
                 </button>
               </div>
             </div>
 
-            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-white p-5 rounded-2xl border shadow-sm space-y-4">
-                <div className="flex justify-between items-center border-b pb-3">
-                  <h3 className="font-bold text-sm text-gray-800">Canvas: {currentScreen?.title}</h3>
-                  <span className="text-xs text-gray-400 font-mono">ID: {currentScreen?.id}</span>
-                </div>
-
-                <div className="space-y-3">
-                  {currentScreen?.components.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400 text-xs border-2 border-dashed rounded-xl">
-                      No components added in {currentScreen?.title}. Click left options.
-                    </div>
-                  ) : (
-                    currentScreen?.components.map((comp) => (
-                      <div
-                        key={comp.id}
-                        onClick={() => setSelectedCompId(comp.id)}
-                        className={`p-4 border rounded-xl transition cursor-pointer flex justify-between items-center ${
-                          selectedCompId === comp.id ? "border-emerald-500 bg-emerald-50/30 ring-1 ring-emerald-500" : "bg-gray-50 hover:bg-gray-100"
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="font-bold text-xs text-gray-800">{comp.label}</span>
-                            {comp.required && <span className="text-red-500 font-bold text-xs">*</span>}
-                          </div>
-                          <p className="text-[11px] text-gray-400 capitalize mt-0.5">Type: {comp.type}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {selectedComp && (
-                <div className="bg-white p-5 rounded-2xl border shadow-sm space-y-4">
-                  <h3 className="font-bold text-xs text-gray-800 border-b pb-2 uppercase tracking-wider">⚙️ Field Settings</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <label className="block font-semibold text-gray-600 mb-1">Field Label</label>
-                      <input
-                        type="text"
-                        value={selectedComp.label}
-                        onChange={(e) => updateComponent("label", e.target.value)}
-                        className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-gray-600 mb-1">Placeholder</label>
-                      <input
-                        type="text"
-                        value={selectedComp.placeholder || ""}
-                        onChange={(e) => updateComponent("placeholder", e.target.value)}
-                        className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="lg:col-span-1">
-              <div className="sticky top-6 bg-slate-900 p-4 rounded-3xl border-4 border-slate-700 shadow-xl w-full max-w-sm mx-auto text-white space-y-4">
-                <div className="text-center text-xs text-slate-400 font-mono pb-2 border-b border-slate-800">
-                  📱 Live Mobile Flow Preview
-                </div>
-                <div className="bg-slate-800 p-4 rounded-2xl space-y-4 text-xs">
-                  <h4 className="font-bold text-white text-sm">{activeForm?.name}</h4>
-                  <p className="text-[10px] text-emerald-400 font-bold">{currentScreen?.title}</p>
-                  <div className="space-y-3">
-                    {currentScreen?.components.map((comp) => (
-                      <div key={comp.id} className="space-y-1">
-                        <label className="block text-[11px] font-medium text-slate-200">{comp.label}</label>
-                        <input type="text" readOnly placeholder={comp.placeholder} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-[11px] text-slate-300" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 5. OFFICIAL META QR CODES CREATOR */}
-      {activeTab === "qr_codes" && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
-            <div className="flex items-center space-x-2">
-              <span className="text-2xl">📲</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
-                <h3 className="font-bold text-sm text-gray-800">WhatsApp Business QR Code Generator</h3>
-                <p className="text-xs text-gray-400">Generate trackable Meta QR codes linked to your WABA phone numbers.</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowGenerateQrModal(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow transition"
-            >
-              + Generate New QR Code
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {qrCodesList.map((qr) => (
-              <div key={qr.id} className="bg-white p-6 rounded-2xl border shadow-sm space-y-4 text-center">
-                <div className="flex justify-between items-center border-b pb-2">
-                  <h4 className="font-bold text-sm text-gray-800">{qr.name}</h4>
-                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">Meta Verified</span>
-                </div>
-
-                <div className="bg-gray-50 border-2 border-slate-200 p-4 rounded-xl inline-block shadow-inner mx-auto">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://wa.me/${qr.number}?text=${encodeURIComponent(qr.message)}`}
-                    alt="WhatsApp QR Code"
-                    className="w-36 h-36 mx-auto rounded-lg"
-                  />
-                </div>
-
-                <div className="space-y-1 text-xs text-gray-500 text-left bg-gray-50 p-3 rounded-xl border">
-                  <p><span className="font-bold text-gray-700">WABA Number:</span> +{qr.number}</p>
-                  <p className="truncate"><span className="font-bold text-gray-700">Message:</span> "{qr.message}"</p>
-                </div>
-
-                <div className="pt-2 border-t">
-                  <button
-                    onClick={() => alert(`Downloading QR Code Image for ${qr.name}...`)}
-                    className="w-full bg-emerald-50 text-emerald-700 border border-emerald-300 font-bold px-3 py-2 rounded-lg hover:bg-emerald-100 text-xs"
-                  >
-                    ⬇️ Download PNG
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: ADD NEW SCREEN */}
-      {showAddScreenModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-base text-gray-800">Add New Flow Screen</h3>
-              <button onClick={() => setShowAddScreenModal(false)} className="text-gray-400">✕</button>
-            </div>
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-gray-600 mb-1">Screen Title *</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Chatbot Name
+                </label>
                 <input
-                  type="text"
-                  placeholder="e.g. Address Details"
-                  value={newScreenTitle}
-                  onChange={(e) => setNewScreenTitle(e.target.value)}
-                  className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
+                  value={botName}
+                  onChange={(e) => setBotName(e.target.value)}
+                  required
+                  className="w-full border rounded-lg px-3 py-2"
                 />
               </div>
-            </div>
-            <div className="flex justify-end space-x-2 pt-3 border-t">
-              <button onClick={() => setShowAddScreenModal(false)} className="px-4 py-2 border rounded-lg text-xs font-semibold">Cancel</button>
-              <button onClick={handleAddNewScreen} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow">Add Screen</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: NEW FORM */}
-      {showNewFormModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-base text-gray-800">Create New WhatsApp Form</h3>
-              <button onClick={() => setShowNewFormModal(false)} className="text-gray-400">✕</button>
-            </div>
-            <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-gray-600 mb-1">Form Name *</label>
-                <input type="text" placeholder="e.g. Lead Generation Flow" value={newFormName} onChange={(e) => setNewFormName(e.target.value)} className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none" />
-              </div>
-            </div>
-            <div className="flex justify-end space-x-2 pt-3 border-t">
-              <button onClick={() => setShowNewFormModal(false)} className="px-4 py-2 border rounded-lg text-xs font-semibold">Cancel</button>
-              <button onClick={() => {
-                if (!newFormName) return alert("Please enter Form Name!");
-                const createdForm = { id: Date.now(), name: newFormName, status: "Draft", channel: "15553945963" };
-                setWhatsappForms([...whatsappForms, createdForm]);
-                setShowNewFormModal(false);
-                setNewFormName("");
-                setActiveForm(createdForm);
-                setActiveTab("form_builder");
-              }} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow">Create Form</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: GENERATE META QR CODE */}
-      {showGenerateQrModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-base text-gray-800">Generate Meta WhatsApp QR Code</h3>
-              <button onClick={() => setShowGenerateQrModal(false)} className="text-gray-400">✕</button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-gray-600 mb-1">Select WABA Phone Number *</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Trigger Type
+                </label>
                 <select
-                  value={selectedWabaNumber}
-                  onChange={(e) => setSelectedWabaNumber(e.target.value)}
-                  className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none font-bold text-gray-800"
+                  value={triggerType}
+                  onChange={(e) => setTriggerType(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
                 >
-                  <option value="15553945963">+1 (555) 394-5963</option>
-                  <option value="919876543210">+91 9876543210</option>
+                  <option value="KEYWORD">Keyword Match</option>
+                  <option value="ALL_MESSAGES">All Incoming Messages</option>
+                  <option value="WELCOME">Welcome Trigger</option>
                 </select>
               </div>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
-                <label className="block font-semibold text-gray-600 mb-1">QR Title / Campaign Name *</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Keywords (comma separated)
+                </label>
                 <input
-                  type="text"
-                  placeholder="e.g. Store Banner QR Code"
-                  value={qrName}
-                  onChange={(e) => setQrName(e.target.value)}
-                  className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
+                  value={keywords}
+                  onChange={(e) => setKeywords(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2"
                 />
               </div>
-
-              <div>
-                <label className="block font-semibold text-gray-600 mb-1">Pre-filled Customer Welcome Message *</label>
-                <textarea
-                  rows={3}
-                  value={prefilledMessage}
-                  onChange={(e) => setPrefilledMessage(e.target.value)}
-                  className="w-full border rounded-lg p-2.5 bg-gray-50 focus:outline-none"
-                />
+              <div className="flex items-end pb-2">
+                <label className="inline-flex items-center gap-2 text-sm font-medium cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                  />
+                  <span>Active on Live Webhook</span>
+                </label>
               </div>
             </div>
 
-            <div className="flex justify-end space-x-2 pt-3 border-t">
-              <button onClick={() => setShowGenerateQrModal(false)} className="px-4 py-2 border rounded-lg text-xs font-semibold">Cancel</button>
-              <button onClick={handleCreateQrCode} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow">
-                📲 Generate Meta QR Code
+            {botMode === "AI_CHATBOT" ? (
+              <div className="space-y-3 bg-indigo-50/50 border border-indigo-100 rounded-xl p-4">
+                <div className="text-sm font-bold text-indigo-900">
+                  AI Chatbot Configuration (API Key & Prompt)
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      AI Provider
+                    </label>
+                    <select
+                      value={aiProvider}
+                      onChange={(e) => setAiProvider(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 bg-white"
+                    >
+                      <option value="OPENAI">OpenAI</option>
+                      <option value="GEMINI">Google Gemini</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Model
+                    </label>
+                    <input
+                      value={aiModel}
+                      onChange={(e) => setAiModel(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 bg-white"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    API Key
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Enter API key or leave blank to use server env key"
+                    value={aiApiKey}
+                    onChange={(e) => setAiApiKey(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 bg-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    System Instructions / Prompt
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={aiSystemPrompt}
+                    onChange={(e) => setAiSystemPrompt(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 bg-white text-sm"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-bold text-slate-800">
+                    Chat Flow Steps
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNodes((prev) => [
+                        ...prev,
+                        {
+                          nodeKey: `step_${prev.length + 1}`,
+                          title: `Step ${prev.length + 1}`,
+                          messageType: "TEXT",
+                          bodyText: "",
+                        },
+                      ])
+                    }
+                    className="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg font-semibold cursor-pointer"
+                  >
+                    + Add Step
+                  </button>
+                </div>
+
+                {nodes.map((node, i) => (
+                  <div
+                    key={i}
+                    className="border border-slate-200 rounded-xl p-3.5 space-y-2.5 bg-slate-50/50"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                      <input
+                        placeholder="Node Key (e.g. welcome)"
+                        value={node.nodeKey}
+                        onChange={(e) => {
+                          const copy = [...nodes];
+                          copy[i].nodeKey = e.target.value;
+                          setNodes(copy);
+                        }}
+                        className="border rounded-lg px-2.5 py-1.5 bg-white font-mono"
+                      />
+                      <input
+                        placeholder="Step Title"
+                        value={node.title}
+                        onChange={(e) => {
+                          const copy = [...nodes];
+                          copy[i].title = e.target.value;
+                          setNodes(copy);
+                        }}
+                        className="border rounded-lg px-2.5 py-1.5 bg-white"
+                      />
+                      <select
+                        value={node.messageType}
+                        onChange={(e) => {
+                          const copy = [...nodes];
+                          copy[i].messageType = e.target.value as any;
+                          setNodes(copy);
+                        }}
+                        className="border rounded-lg px-2.5 py-1.5 bg-white"
+                      >
+                        <option value="TEXT">Text Message</option>
+                        <option value="BUTTONS">Interactive Buttons</option>
+                        <option value="LIST">Interactive List</option>
+                        <option value="FLOW">WhatsApp Flow CTA</option>
+                      </select>
+                    </div>
+
+                    <textarea
+                      rows={2}
+                      placeholder="Message body text..."
+                      value={node.bodyText}
+                      onChange={(e) => {
+                        const copy = [...nodes];
+                        copy[i].bodyText = e.target.value;
+                        setNodes(copy);
+                      }}
+                      className="w-full border rounded-lg px-2.5 py-1.5 bg-white text-xs"
+                    />
+
+                    {node.messageType === "FLOW" && (
+                      <input
+                        placeholder="Meta Flow ID"
+                        value={node.flowId || ""}
+                        onChange={(e) => {
+                          const copy = [...nodes];
+                          copy[i].flowId = e.target.value;
+                          setNodes(copy);
+                        }}
+                        className="w-full border rounded-lg px-2.5 py-1.5 bg-white text-xs font-mono"
+                      />
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <input
+                        placeholder="Button/Option Label (optional)"
+                        value={node.nextLabel || ""}
+                        onChange={(e) => {
+                          const copy = [...nodes];
+                          copy[i].nextLabel = e.target.value;
+                          setNodes(copy);
+                        }}
+                        className="border rounded-lg px-2.5 py-1.5 bg-white"
+                      />
+                      <input
+                        placeholder="Next Node Key (optional)"
+                        value={node.nextNodeKey || ""}
+                        onChange={(e) => {
+                          const copy = [...nodes];
+                          copy[i].nextNodeKey = e.target.value;
+                          setNodes(copy);
+                        }}
+                        className="border rounded-lg px-2.5 py-1.5 bg-white font-mono"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold cursor-pointer"
+              >
+                Save Chatbot
               </button>
+              {botId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBotId("");
+                    setBotName("New Bot");
+                  }}
+                  className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm cursor-pointer"
+                >
+                  New Bot
+                </button>
+              )}
+            </div>
+          </form>
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+            <h3 className="font-bold text-slate-900">Saved Chatbots ({chatbots.length})</h3>
+            {chatbots.length === 0 ? (
+              <p className="text-xs text-slate-400">No chatbots saved yet.</p>
+            ) : (
+              chatbots.map((b) => (
+                <div
+                  key={b.id}
+                  className="border border-slate-100 rounded-xl p-3 space-y-1.5 bg-slate-50/50"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-800">{b.name}</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">
+                      {b.mode}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Trigger: {b.triggerType} {b.keywords ? `(${b.keywords})` : ""}
+                  </div>
+                  <button
+                    onClick={() => handleEditBot(b)}
+                    className="text-xs text-blue-600 font-semibold hover:underline cursor-pointer"
+                  >
+                    Configure / Edit
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 2. WHATSAPP FLOWS */}
+      {activeTool === "flows" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <form
+            onSubmit={handleCreateFlow}
+            className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3"
+          >
+            <h2 className="font-bold text-slate-900">Create WhatsApp Flow</h2>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Flow Name</label>
+              <input
+                value={flowName}
+                onChange={(e) => setFlowName(e.target.value)}
+                required
+                placeholder="e.g. Lead_Capture_Flow"
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Category</label>
+              <select
+                value={flowCategory}
+                onChange={(e) => setFlowCategory(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+              >
+                <option value="LEAD_GENERATION">Lead Generation</option>
+                <option value="APPOINTMENT_BOOKING">Appointment Booking</option>
+                <option value="SIGN_UP">Sign Up</option>
+                <option value="CUSTOMER_SUPPORT">Customer Support</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Endpoint URI (optional)
+              </label>
+              <input
+                value={flowEndpoint}
+                onChange={(e) => setFlowEndpoint(e.target.value)}
+                placeholder="https://your-domain.com/api/flow-endpoint"
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <label className="inline-flex items-center gap-2 text-xs font-medium cursor-pointer">
+              <input
+                type="checkbox"
+                checked={publishFlow}
+                onChange={(e) => setPublishFlow(e.target.checked)}
+              />
+              <span>Publish immediately on Meta</span>
+            </label>
+            <button
+              type="submit"
+              className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold cursor-pointer"
+            >
+              Create Flow
+            </button>
+          </form>
+
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+            <h2 className="font-bold text-slate-900">Synced WhatsApp Flows ({flows.length})</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b text-slate-500 uppercase">
+                    <th className="py-2 px-3">Flow Name</th>
+                    <th className="py-2 px-3">Meta Flow ID</th>
+                    <th className="py-2 px-3">Status</th>
+                    <th className="py-2 px-3">Category</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {flows.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-slate-400">
+                        No WhatsApp Flows found. Click "Live Sync From Meta".
+                      </td>
+                    </tr>
+                  ) : (
+                    flows.map((f) => (
+                      <tr key={f.id}>
+                        <td className="py-2.5 px-3 font-semibold text-slate-800">{f.name}</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-500">{f.metaFlowId || "—"}</td>
+                        <td className="py-2.5 px-3">
+                          <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold">
+                            {f.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600">{f.categories}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       )}
 
+      {/* 3. QR CODES */}
+      {activeTool === "qr" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <form
+            onSubmit={handleCreateQr}
+            className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3"
+          >
+            <h2 className="font-bold text-slate-900">Create WhatsApp QR Code</h2>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Prefilled Message
+              </label>
+              <textarea
+                rows={3}
+                value={qrMessage}
+                onChange={(e) => setQrMessage(e.target.value)}
+                required
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Image Format</label>
+              <select
+                value={qrFormat}
+                onChange={(e) => setQrFormat(e.target.value as "PNG" | "SVG")}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+              >
+                <option value="PNG">PNG</option>
+                <option value="SVG">SVG</option>
+              </select>
+            </div>
+            <button
+              type="submit"
+              className="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold cursor-pointer"
+            >
+              Generate QR Code
+            </button>
+          </form>
+
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+            <h2 className="font-bold text-slate-900">WhatsApp QR Codes ({qrCodes.length})</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {qrCodes.length === 0 ? (
+                <p className="text-xs text-slate-400">No QR codes found yet.</p>
+              ) : (
+                qrCodes.map((q) => (
+                  <div key={q.id} className="border rounded-xl p-3.5 space-y-2 bg-slate-50/40">
+                    <div className="text-xs font-mono text-slate-500">Code: {q.code || "—"}</div>
+                    <div className="text-sm font-medium text-slate-800">{q.prefilledText}</div>
+                    {q.qrImageUrl && (
+                      <img
+                        src={q.qrImageUrl}
+                        alt={q.code || "WhatsApp QR"}
+                        className="w-32 h-32 object-contain border rounded-lg bg-white p-1"
+                      />
+                    )}
+                    {q.deepLinkUrl && (
+                      <div className="text-[11px] font-mono text-blue-600 break-all">
+                        {q.deepLinkUrl}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

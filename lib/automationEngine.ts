@@ -51,7 +51,7 @@ function buildPayloadFromNode(
     node.bodyText ||
     nodeConfig?.bodyText ||
     botFallbackText ||
-    "Thanks for showing interest with us! How can we help you?";
+    "Thanks for showing interest with us! How can we help you today?";
   const bodyText = interpolateTemplate(rawBody, vars);
   const headerText = node.headerText ? interpolateTemplate(node.headerText, vars) : undefined;
   const footerText = node.footerText ? interpolateTemplate(node.footerText, vars) : undefined;
@@ -226,7 +226,7 @@ export async function processAutomationWebhook(params: {
   if (!matchedBot) return null;
 
   const baseVars: Record<string, any> = {
-    ...safeParseJson<Record<string, any>>(session?.variablesJson, {}),
+    ...safeParseJson<Record<string, any>>(session?.contextJson, {}),
     customerPhone: params.customerPhone,
     lastInput: rawText,
   };
@@ -463,14 +463,14 @@ export async function processAutomationWebhook(params: {
     update: {
       chatbotId: matchedBot.id,
       currentNodeKey: autoNextKey,
-      variablesJson: JSON.stringify(updatedVars),
+      contextJson: JSON.stringify(updatedVars),
     },
     create: {
       phoneNumberId: params.phoneNumberId,
       customerPhone: params.customerPhone,
       chatbotId: matchedBot.id,
       currentNodeKey: autoNextKey,
-      variablesJson: JSON.stringify(updatedVars),
+      contextJson: JSON.stringify(updatedVars),
     },
   });
 

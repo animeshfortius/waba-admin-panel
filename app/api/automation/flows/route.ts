@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { fetchMetaFlows, fetchMetaFlowAssets, createOrPublishMetaFlow } from "@/lib/metaAutomation";
+import {
+  fetchMetaFlows,
+  fetchMetaFlowAssets,
+  createOrPublishMetaFlow,
+} from "@/lib/metaAutomation";
 
 async function resolveMetaCredentials(wabaId?: string, phoneNumberId?: string) {
   const accounts = await prisma.wabaAccount.findMany();
   const matched =
-    accounts.find((a: any) => (wabaId && a.wabaId === wabaId) || (phoneNumberId && a.phoneNumberId === phoneNumberId)) ||
-    accounts[0];
+    accounts.find(
+      (a: any) =>
+        (wabaId && a.wabaId === wabaId) ||
+        (phoneNumberId && a.phoneNumberId === phoneNumberId)
+    ) || accounts[0];
 
   const accessToken =
     (matched as any)?.accessToken ||
@@ -84,7 +91,10 @@ export async function POST(req: Request) {
     const { wabaId, phoneNumberId, name, categories, endpointUri, flowJson, publish } = body;
 
     if (!name || !String(name).trim()) {
-      return NextResponse.json({ success: false, error: "Flow name is required" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Flow name is required" },
+        { status: 400 }
+      );
     }
 
     const creds = await resolveMetaCredentials(wabaId, phoneNumberId);

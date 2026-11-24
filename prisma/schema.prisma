@@ -228,22 +228,25 @@ model GroupContact {
   @@index([groupId])
 }
 
-// Automation Tools Models (Chatbot Builder, AI Chatbot, WhatsApp Flows, QR Codes)
+// Automation Tools Models (Visual Flow Builder, AI Chatbot, WhatsApp Flows, QR Codes)
 model ChatbotConfig {
   id             String        @id @default(cuid())
   userId         String        @default("admin")
   wabaAccountId  String?
   phoneNumberId  String?
+  channelNumber  String?
   name           String
   mode           String        @default("CHAT_FLOW") // "CHAT_FLOW" | "AI_CHATBOT"
   triggerType    String        @default("KEYWORD")   // "KEYWORD" | "ALL_MESSAGES" | "WELCOME"
   keywords       String?
   isActive       Boolean       @default(true)
+  isPublished    Boolean       @default(false)
   aiProvider     String        @default("OPENAI")    // "OPENAI" | "GEMINI"
   aiModel        String        @default("gpt-4o-mini")
   aiApiKey       String?
   aiSystemPrompt String?       @db.Text
   fallbackText   String?       @db.Text
+  canvasJson     String?       @db.Text
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   nodes          ChatbotNode[]
@@ -255,12 +258,15 @@ model ChatbotNode {
   chatbot     ChatbotConfig @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
   nodeKey     String
   title       String
-  messageType String        @default("TEXT") // "TEXT" | "BUTTONS" | "LIST" | "FLOW"
+  messageType String        @default("SEND_MESSAGE")
   bodyText    String        @db.Text
   headerText  String?
   footerText  String?
   optionsJson String?       @db.Text
   flowId      String?
+  posX        Float         @default(320)
+  posY        Float         @default(120)
+  parentKey   String?
   sortOrder   Int           @default(0)
   createdAt   DateTime      @default(now())
 }
@@ -296,13 +302,13 @@ model WhatsAppQrCode {
 }
 
 model AutomationSessionState {
-  id            String   @id @default(cuid())
-  phoneNumberId String
-  customerPhone String
-  chatbotId     String?
+  id             String   @id @default(cuid())
+  phoneNumberId  String
+  customerPhone  String
+  chatbotId      String?
   currentNodeKey String?
-  contextJson   String?  @db.Text
-  updatedAt     DateTime @updatedAt
+  contextJson    String?  @db.Text
+  updatedAt      DateTime @updatedAt
 
   @@unique([phoneNumberId, customerPhone])
 }

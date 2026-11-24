@@ -8,24 +8,33 @@ async function generateAiReply(params: {
   systemPrompt?: string | null;
   userMessage: string;
 }) {
-  const key = params.apiKey || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || "";
+  const key =
+    params.apiKey ||
+    process.env.OPENAI_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    "";
+
   if (!key) {
-    return "AI Chatbot is enabled, please configure an API key in Chatbot Builder.";
+    return "AI Chatbot is enabled. Please configure an API key in Chatbot Builder.";
   }
 
-  const sys =
+  const systemInstruction =
     params.systemPrompt ||
-    "You are a helpful WhatsApp business assistant. Keep responses clear, concise, and polite.";
+    "You are a helpful WhatsApp business assistant. Keep responses clear, polite, and concise.";
 
-  if (params.provider === "GEMINI") {
+  if (String(params.provider).toUpperCase() === "GEMINI") {
     const modelName = params.model || "gemini-2.0-flash";
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(key)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: `${sys}\n\nCustomer: ${params.userMessage}` }] }],
+          contents: [
+            {
+              parts: [{ text: `${systemInstruction}\n\nCustomer: ${params.userMessage}` }],
+            },
+          ],
         }),
       }
     );
@@ -45,7 +54,7 @@ async function generateAiReply(params: {
     body: JSON.stringify({
       model: params.model || "gpt-4o-mini",
       messages: [
-        { role: "system", content: sys },
+        { role: "system", content: systemInstruction },
         { role: "user", content: params.userMessage },
       ],
     }),
@@ -55,6 +64,15 @@ async function generateAiReply(params: {
     data?.choices?.[0]?.message?.content ||
     "Sorry, I could not generate a response right now."
   );
+}
+
+function safeParseJson<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
 }
 
 export async function processAutomationWebhook(params: {
@@ -85,7 +103,9 @@ export async function processAutomationWebhook(params: {
   const matchedBot =
     bots.find((b) => b.id === session?.chatbotId) ||
     bots.find((b) => {
-      if (b.triggerType === "ALL_MESSAGES" || b.triggerType === "WELCOME") return true;
+      if (b.triggerType === "ALL_MESSAGES" || b.triggerType === "WELCOME") {
+        return true;
+      }
       const kws = (b.keywords || "")
         .split(",")
         .map((k) => k.trim().toLowerCase())
@@ -114,10 +134,10 @@ export async function processAutomationWebhook(params: {
         text: { body: replyText },
       },
     });
+
     return { handledBy: "AI_CHATBOT", botId: matchedBot.id };
   }
 
-  // CHAT_FLOW mode
   const nodes = matchedBot.nodes || [];
   if (nodes.length === 0) return null;
 
@@ -125,37 +145,85 @@ export async function processAutomationWebhook(params: {
     nodes.find((n) => n.nodeKey === session?.currentNodeKey) || nodes[0];
 
   if (session?.currentNodeKey) {
-    let parsedOpts: any[] = [];
-    try {
-      parsedOpts = JSON.parse(currentNode.optionsJson || "[]");
-    } catch {
-      parsedOpts = [];
-    }
-    const matchedOpt = parsedOpts.find(
+    const prevConfig = safeParseJson<any>(currentNode.optionsJson, {});
+    const prevOpts = Array.isArray(prevConfig)
+      ? prevConfig
+      : Array.isArray(prevConfig?.options)
+      ? prevConfig.options
+      : [];
+
+    const matchedOpt = prevOpts.find(
       (opt: any) =>
         String(opt.label || "").toLowerCase() === cleanMsg ||
+        String(opt.title || "").toLowerCase() === cleanMsg ||
         String(opt.id || "").toLowerCase() === cleanMsg ||
         String(opt.key || "").toLowerCase() === cleanMsg
     );
+
     if (matchedOpt?.nextNodeKey) {
       const next = nodes.find((n) => n.nodeKey === matchedOpt.nextNodeKey);
+      if (next) currentNode = next;
+    } else if (prevConfig?.nextNodeKey) {
+      const next = nodes.find((n) => n.nodeKey === prevConfig.nextNodeKey);
       if (next) currentNode = next;
     }
   }
 
-  let parsedOptions: any[] = [];
-  try {
-    parsedOptions = JSON.parse(currentNode.optionsJson || "[]");
-  } catch {
-    parsedOptions = [];
+  const nodeConfig = safeParseJson<any>(currentNode.optionsJson, {});
+  const optionsList = Array.isArray(nodeConfig)
+    ? nodeConfig
+    : Array.isArray(nodeConfig?.options)
+    ? nodeConfig.options
+    : [];
+
+  const msgType = String(currentNode.messageType || "TEXT").toUpperCase();
+
+  if (msgType === "DELAY") {
+    const delaySec = Math.min(Math.max(Number(nodeConfig?.delaySeconds || 2), 0), 10);
+    if (delaySec > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delaySec * 1000));
+    }
+  }
+
+  if ((msgType === "WEBHOOK" || msgType === "WEBHOOK_CONFIG") && nodeConfig?.webhookUrl) {
+    try {
+      await fetch(nodeConfig.webhookUrl, {
+        method: nodeConfig.method || "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(nodeConfig.headers || {}),
+        },
+        ...(nodeConfig.method !== "GET"
+          ? {
+              body: JSON.stringify({
+                customerPhone: params.customerPhone,
+                message: params.incomingText,
+                nodeKey: currentNode.nodeKey,
+              }),
+            }
+          : {}),
+      });
+    } catch (err) {
+      console.error("Chatbot webhook node error:", err);
+    }
   }
 
   let msgPayload: Record<string, any> = {
     type: "text",
-    text: { body: currentNode.bodyText || matchedBot.fallbackText || "Hello!" },
+    text: {
+      body:
+        currentNode.bodyText ||
+        matchedBot.fallbackText ||
+        "Thanks for your message!",
+    },
   };
 
-  if (currentNode.messageType === "BUTTONS" && parsedOptions.length > 0) {
+  if (
+    (msgType === "BUTTONS" ||
+      msgType === "QUESTION_BUTTON_MESSAGE" ||
+      msgType === "ACTION_BUTTON") &&
+    optionsList.length > 0
+  ) {
     msgPayload = {
       type: "interactive",
       interactive: {
@@ -163,22 +231,27 @@ export async function processAutomationWebhook(params: {
         ...(currentNode.headerText
           ? { header: { type: "text", text: currentNode.headerText } }
           : {}),
-        body: { text: currentNode.bodyText },
+        body: { text: currentNode.bodyText || "Please choose an option:" },
         ...(currentNode.footerText
           ? { footer: { text: currentNode.footerText } }
           : {}),
         action: {
-          buttons: parsedOptions.slice(0, 3).map((opt: any, i: number) => ({
+          buttons: optionsList.slice(0, 3).map((opt: any, idx: number) => ({
             type: "reply",
             reply: {
-              id: opt.id || opt.key || `btn_${i + 1}`,
-              title: String(opt.label || opt.title || `Option ${i + 1}`).slice(0, 20),
+              id: opt.id || opt.key || `btn_${idx + 1}`,
+              title: String(opt.label || opt.title || `Option ${idx + 1}`).slice(0, 20),
             },
           })),
         },
       },
     };
-  } else if (currentNode.messageType === "LIST" && parsedOptions.length > 0) {
+  } else if (
+    (msgType === "LIST" ||
+      msgType === "MULTI_LIST" ||
+      msgType === "DYNAMIC_LIST") &&
+    optionsList.length > 0
+  ) {
     msgPayload = {
       type: "interactive",
       interactive: {
@@ -186,28 +259,26 @@ export async function processAutomationWebhook(params: {
         ...(currentNode.headerText
           ? { header: { type: "text", text: currentNode.headerText } }
           : {}),
-        body: { text: currentNode.bodyText },
+        body: { text: currentNode.bodyText || "Select from list:" },
         ...(currentNode.footerText
           ? { footer: { text: currentNode.footerText } }
           : {}),
         action: {
-          button: "Select Option",
+          button: nodeConfig?.menuLabel || "Select Option",
           sections: [
             {
-              title: "Menu Options",
-              rows: parsedOptions.slice(0, 10).map((opt: any, i: number) => ({
-                id: opt.id || opt.key || `row_${i + 1}`,
-                title: String(opt.label || opt.title || `Option ${i + 1}`).slice(0, 24),
-                description: opt.description
-                  ? String(opt.description).slice(0, 72)
-                  : undefined,
+              title: nodeConfig?.sectionTitle || "Menu",
+              rows: optionsList.slice(0, 10).map((opt: any, idx: number) => ({
+                id: opt.id || opt.key || `row_${idx + 1}`,
+                title: String(opt.label || opt.title || `Option ${idx + 1}`).slice(0, 24),
+                description: opt.description ? String(opt.description).slice(0, 72) : undefined,
               })),
             },
           ],
         },
       },
     };
-  } else if (currentNode.messageType === "FLOW" && currentNode.flowId) {
+  } else if ((msgType === "FLOW" || msgType === "SEND_FLOW_MESSAGE") && currentNode.flowId) {
     msgPayload = {
       type: "interactive",
       interactive: {
@@ -223,10 +294,13 @@ export async function processAutomationWebhook(params: {
           name: "flow",
           parameters: {
             flow_message_version: "3",
-            flow_token: `token_${Date.now()}`,
+            flow_token: `flow_${Date.now()}`,
             flow_id: currentNode.flowId,
-            flow_cta: currentNode.footerText || "Open Form",
+            flow_cta: nodeConfig?.buttonText || "Open Flow",
             flow_action: "navigate",
+            ...(nodeConfig?.screenId
+              ? { flow_action_payload: { screen: nodeConfig.screenId } }
+              : {}),
           },
         },
       },
@@ -240,6 +314,9 @@ export async function processAutomationWebhook(params: {
     payload: msgPayload,
   });
 
+  const nextNodeKey =
+    optionsList[0]?.nextNodeKey || nodeConfig?.nextNodeKey || currentNode.nodeKey;
+
   await prisma.automationSessionState.upsert({
     where: {
       phoneNumberId_customerPhone: {
@@ -249,15 +326,19 @@ export async function processAutomationWebhook(params: {
     },
     update: {
       chatbotId: matchedBot.id,
-      currentNodeKey: currentNode.nodeKey,
+      currentNodeKey: nextNodeKey,
     },
     create: {
       phoneNumberId: params.phoneNumberId,
       customerPhone: params.customerPhone,
       chatbotId: matchedBot.id,
-      currentNodeKey: currentNode.nodeKey,
+      currentNodeKey: nextNodeKey,
     },
   });
 
-  return { handledBy: "CHAT_FLOW", botId: matchedBot.id, nodeKey: currentNode.nodeKey };
+  return {
+    handledBy: "CHAT_FLOW",
+    botId: matchedBot.id,
+    nodeKey: currentNode.nodeKey,
+  };
 }

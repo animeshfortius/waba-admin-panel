@@ -53,7 +53,9 @@ export async function POST(req: Request) {
                   msgObj.text?.body ||
                   msgObj.button?.text ||
                   msgObj.interactive?.button_reply?.title ||
+                  msgObj.interactive?.button_reply?.id ||
                   msgObj.interactive?.list_reply?.title ||
+                  msgObj.interactive?.list_reply?.id ||
                   "[Media / Interactive Message]";
 
                 if (customerPhone) {

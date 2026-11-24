@@ -2,7 +2,86 @@
 
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import * as XLSX from "xlsx";
 import { getAgentPermittedChannels } from "@/lib/agentChannelFilter";
+
+function normalizePhone(rawVal: any): string {
+  if (rawVal === null || rawVal === undefined) return "";
+  let digits = String(rawVal).trim().replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length === 11 && digits.startsWith("0")) {
+    digits = digits.slice(1);
+  }
+  if (digits.length === 10 && /^[6-9]\d{9}$/.test(digits)) {
+    return `91${digits}`;
+  }
+  if (digits.length >= 11 && digits.length <= 15) {
+    return digits;
+  }
+  return "";
+}
+
+function parseSpreadsheetRows(rows: any[][]) {
+  if (!rows || rows.length === 0) {
+    return {
+      numbers: [] as string[],
+      columns: [] as string[],
+      rowObjects: [] as Record<string, string>[],
+      totalRows: 0,
+    };
+  }
+
+  const firstRow = rows[0].map((c) => String(c ?? "").trim());
+  const hasHeader = firstRow.some((cell) =>
+    /(phone|mobile|number|contact|wa|whatsapp|name|var\d*|col)/i.test(cell)
+  );
+
+  const headers = hasHeader
+    ? firstRow.map((h, idx) => h || `Col_${idx + 1}`)
+    : firstRow.map((_, idx) => `Col_${idx + 1}`);
+
+  const dataRows = hasHeader ? rows.slice(1) : rows;
+  const phoneColIdx = headers.findIndex((h) =>
+    /(phone|mobile|number|contact|whatsapp|wa)/i.test(h)
+  );
+
+  const numbers: string[] = [];
+  const rowObjects: Record<string, string>[] = [];
+
+  for (const r of dataRows) {
+    if (!Array.isArray(r) || r.length === 0) continue;
+
+    let phone = "";
+    if (phoneColIdx >= 0) {
+      phone = normalizePhone(r[phoneColIdx]);
+    }
+    if (!phone) {
+      for (const cell of r) {
+        const candidate = normalizePhone(cell);
+        if (candidate) {
+          phone = candidate;
+          break;
+        }
+      }
+    }
+
+    if (phone) {
+      numbers.push(phone);
+      const rowObj: Record<string, string> = { _phone: phone };
+      headers.forEach((col, idx) => {
+        rowObj[col] = r[idx] !== undefined && r[idx] !== null ? String(r[idx]).trim() : "";
+      });
+      rowObjects.push(rowObj);
+    }
+  }
+
+  return {
+    numbers,
+    columns: headers,
+    rowObjects,
+    totalRows: dataRows.filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== "")).length,
+  };
+}
 
 function CampaignsContent() {
   const searchParams = useSearchParams();
@@ -16,7 +95,7 @@ function CampaignsContent() {
   const [allTemplates, setAllTemplates] = useState<any[]>([]);
   const [selectedChannel, setSelectedChannel] = useState("");
 
-  // User Pricing Rates State (Dynamic per user from DB)
+  // User Pricing Rates State
   const [userRates, setUserRates] = useState({
     marketing: 0.135,
     utility: 0.100,
@@ -26,15 +105,36 @@ function CampaignsContent() {
 
   // Audience & Numbers Processing
   const [numbersInput, setNumbersInput] = useState("");
+  const [selectedSourceChips, setSelectedSourceChips] = useState<string[]>([]);
   const [removeDuplicates, setRemoveDuplicates] = useState(true);
   const [removeBlacklist, setRemoveBlacklist] = useState(true);
+  const [customBlacklist, setCustomBlacklist] = useState<string[]>([
+    "910000000000",
+    "0000000000",
+  ]);
 
-  const blacklistedNumbers = ["910000000000", "0000000000"];
+  // Group Contacts Modal State
+  const [showGroupsModal, setShowGroupsModal] = useState(false);
+  const [groupsList, setGroupsList] = useState<any[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [addingGroupContacts, setAddingGroupContacts] = useState(false);
 
   // File Upload Modal State
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadType, setUploadType] = useState("Single Number Column");
   const [uploadedFileName, setUploadedFileName] = useState("");
+  const [uploadedColumns, setUploadedColumns] = useState<string[]>([]);
+  const [uploadedRows, setUploadedRows] = useState<Record<string, string>[]>([]);
+  const [pendingFileData, setPendingFileData] = useState<{
+    fileName: string;
+    numbers: string[];
+    columns: string[];
+    rowObjects: Record<string, string>[];
+    totalRows: number;
+    duplicatesCount: number;
+    blacklistedCount: number;
+  } | null>(null);
 
   // Schedule Options State
   const [isScheduled, setIsScheduled] = useState(false);
@@ -45,7 +145,7 @@ function CampaignsContent() {
   const [templateType, setTemplateType] = useState("All");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
 
-  // Header Media State (Auto-fetched or Overridden File)
+  // Header Media State
   const [headerMediaUrl, setHeaderMediaUrl] = useState("");
   const [overrideFileName, setOverrideFileName] = useState("");
 
@@ -59,7 +159,6 @@ function CampaignsContent() {
   }, [allTemplates, selectedTemplateId]);
 
   const filteredApprovedTemplates = useMemo(() => {
-    // Resolve selected WABA Account to get both wabaId & phoneNumberId & displayPhone
     const activeAcc = wabaAccounts.find(
       (a) =>
         a.phoneNumberId === selectedChannel ||
@@ -69,7 +168,6 @@ function CampaignsContent() {
 
     return allTemplates.filter((tpl) => {
       const isApproved = tpl.status?.toUpperCase() === "APPROVED";
-
       const matchesWaba =
         !selectedChannel ||
         tpl.wabaId === selectedChannel ||
@@ -77,22 +175,16 @@ function CampaignsContent() {
         (activeAcc &&
           (tpl.wabaId === activeAcc.wabaId ||
             tpl.wabaNumber === activeAcc.displayPhone));
-
       const matchesCat =
         !selectedCategory ||
         tpl.category?.toUpperCase() === selectedCategory.toUpperCase();
-
       return isApproved && matchesWaba && matchesCat;
     });
   }, [allTemplates, wabaAccounts, selectedChannel, selectedCategory]);
 
   useEffect(() => {
     if (activeTemplate) {
-      if (activeTemplate.headerMediaUrl) {
-        setHeaderMediaUrl(activeTemplate.headerMediaUrl);
-      } else {
-        setHeaderMediaUrl("");
-      }
+      setHeaderMediaUrl(activeTemplate.headerMediaUrl || "");
       setOverrideFileName("");
     }
   }, [activeTemplate]);
@@ -120,15 +212,19 @@ function CampaignsContent() {
     if (!activeTemplate) return "There is no template added yet";
     let text = activeTemplate.bodyText || "";
     detectedVariables.forEach((v) => {
-      const mappedVal = variableMappings[v]?.value;
-      if (mappedVal) {
-        text = text.split(v).join(mappedVal);
+      const mapping = variableMappings[v];
+      let replacement = mapping?.value || "";
+      if (mapping?.type === "Map Column Value" && mapping.value && uploadedRows.length > 0) {
+        replacement = uploadedRows[0][mapping.value] || replacement;
+      }
+      if (replacement) {
+        text = text.split(v).join(replacement);
       }
     });
     return text;
-  }, [activeTemplate, detectedVariables, variableMappings]);
+  }, [activeTemplate, detectedVariables, variableMappings, uploadedRows]);
 
-  // Set Default System Date & Time Campaign Name + Fetch User WABA & Templates
+  // Fetch user WABA, templates & optional blacklist
   useEffect(() => {
     const now = new Date();
     const day = String(now.getDate()).padStart(2, "0");
@@ -140,6 +236,23 @@ function CampaignsContent() {
     setCampaignName(`Camp_${day}${month}${year}_${hours}${mins}`);
 
     const storedUserId = localStorage.getItem("userId") || "";
+    const activeUid = storedUserId || "admin";
+
+    fetch(`/api/configuration/blacklist?userId=${encodeURIComponent(activeUid)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const list = Array.isArray(data) ? data : data?.blacklist || data?.numbers || data?.data || [];
+        const normalized = list
+          .map((item: any) =>
+            normalizePhone(typeof item === "string" ? item : item.number || item.phone || item.mobile)
+          )
+          .filter(Boolean);
+        if (normalized.length > 0) {
+          setCustomBlacklist((prev) => Array.from(new Set([...prev, ...normalized])));
+        }
+      })
+      .catch(() => {});
+
     if (storedUserId) {
       setUserId(storedUserId);
       fetchWabaAndTemplates(storedUserId);
@@ -232,33 +345,189 @@ function CampaignsContent() {
     }
   };
 
+  // Group Contacts Modal Handlers
+  const openGroupContactsModal = async () => {
+    setShowGroupsModal(true);
+    setLoadingGroups(true);
+    setSelectedGroupIds([]);
+
+    try {
+      const uid = userId || localStorage.getItem("userId") || "admin";
+      const res = await fetch(`/api/configuration/groups?userId=${encodeURIComponent(uid)}`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
+      const rawGroups = Array.isArray(data)
+        ? data
+        : data.groups || data.contactGroups || data.data || [];
+      setGroupsList(rawGroups);
+    } catch (err) {
+      console.error("Failed to load groups:", err);
+      setGroupsList([]);
+    } finally {
+      setLoadingGroups(false);
+    }
+  };
+
+  const toggleGroupSelection = (groupKey: string) => {
+    setSelectedGroupIds((prev) =>
+      prev.includes(groupKey) ? prev.filter((id) => id !== groupKey) : [...prev, groupKey]
+    );
+  };
+
+  const handleLoadSelectedGroupContacts = async () => {
+    if (selectedGroupIds.length === 0) return;
+
+    setAddingGroupContacts(true);
+    try {
+      const uid = userId || localStorage.getItem("userId") || "admin";
+      const collectedNumbers: string[] = [];
+      const groupNamesAdded: string[] = [];
+
+      for (const gid of selectedGroupIds) {
+        const matchedGroup = groupsList.find(
+          (g: any) => String(g.id ?? g.groupId ?? g.name) === gid
+        );
+        if (matchedGroup) {
+          groupNamesAdded.push(matchedGroup.name || matchedGroup.groupName || gid);
+        }
+
+        if (Array.isArray(matchedGroup?.contacts)) {
+          for (const c of matchedGroup.contacts) {
+            const p = normalizePhone(
+              typeof c === "string" ? c : c.phone || c.mobile || c.number || c.recipient
+            );
+            if (p) collectedNumbers.push(p);
+          }
+        }
+
+        const res = await fetch(
+          `/api/configuration/groups/contacts?groupId=${encodeURIComponent(gid)}&userId=${encodeURIComponent(uid)}`,
+          { cache: "no-store" }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data)
+            ? data
+            : data.contacts || data.members || data.data || [];
+          for (const item of list) {
+            const p = normalizePhone(
+              typeof item === "string"
+                ? item
+                : item.phone || item.mobile || item.number || item.recipient || item.contactNumber
+            );
+            if (p) collectedNumbers.push(p);
+          }
+        }
+      }
+
+      if (collectedNumbers.length === 0) {
+        alert("No valid contact numbers found in selected group(s).");
+        return;
+      }
+
+      setNumbersInput((prev) =>
+        prev ? `${prev}, ${collectedNumbers.join(", ")}` : collectedNumbers.join(", ")
+      );
+      setSelectedSourceChips((prev) => Array.from(new Set([...prev, ...groupNamesAdded])));
+      setShowGroupsModal(false);
+    } catch (err) {
+      console.error("Failed to load group contacts:", err);
+      alert("Error loading group contacts.");
+    } finally {
+      setAddingGroupContacts(false);
+    }
+  };
+
+  // Excel / CSV File Preview & Proceed
+  const handleFileSelect = async (file: File) => {
+    const lowerName = file.name.toLowerCase();
+    const baseName = file.name.replace(/\.(xlsx|xls|csv)$/i, "");
+
+    try {
+      let rows: any[][] = [];
+      if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as any[][];
+      } else {
+        const text = await file.text();
+        const workbook = XLSX.read(text, { type: "string" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as any[][];
+      }
+
+      const parsed = parseSpreadsheetRows(rows);
+      const seen = new Set<string>();
+      let duplicatesCount = 0;
+      let blacklistedCount = 0;
+
+      for (const n of parsed.numbers) {
+        if (seen.has(n)) duplicatesCount++;
+        else seen.add(n);
+        if (customBlacklist.includes(n)) blacklistedCount++;
+      }
+
+      setPendingFileData({
+        fileName: baseName,
+        numbers: parsed.numbers,
+        columns: parsed.columns,
+        rowObjects: parsed.rowObjects,
+        totalRows: parsed.totalRows,
+        duplicatesCount,
+        blacklistedCount,
+      });
+    } catch (err) {
+      console.error("Spreadsheet parse failed:", err);
+      alert("Could not read Excel/CSV file.");
+    }
+  };
+
+  const handleProceedUploadedFile = () => {
+    if (!pendingFileData) return;
+    setUploadedFileName(pendingFileData.fileName);
+    setUploadedColumns(pendingFileData.columns);
+    setUploadedRows(pendingFileData.rowObjects);
+
+    if (pendingFileData.numbers.length > 0) {
+      setNumbersInput((prev) =>
+        prev ? `${prev}, ${pendingFileData.numbers.join(", ")}` : pendingFileData.numbers.join(", ")
+      );
+      setSelectedSourceChips((prev) =>
+        prev.includes(pendingFileData.fileName)
+          ? prev
+          : [...prev, pendingFileData.fileName]
+      );
+    }
+
+    setPendingFileData(null);
+    setShowUploadModal(false);
+  };
+
+  // Working Remove Duplicates & Remove BlackList
   const processedNumbers = useMemo(() => {
     if (!numbersInput.trim()) return [];
-    let rawList = numbersInput
-      .split(",")
-      .map((num) => num.trim().replace(/[^0-9]/g, ""))
+    let list = numbersInput
+      .split(/[\s,;\r\n]+/)
+      .map((num) => normalizePhone(num))
       .filter((num) => num.length >= 10);
 
-    if (removeDuplicates) {
-      rawList = Array.from(new Set(rawList));
-    }
     if (removeBlacklist) {
-      rawList = rawList.filter((num) => !blacklistedNumbers.includes(num));
+      list = list.filter((num) => !customBlacklist.includes(num));
     }
-    return rawList;
-  }, [numbersInput, removeDuplicates, removeBlacklist]);
+    if (removeDuplicates) {
+      list = Array.from(new Set(list));
+    }
+    return list;
+  }, [numbersInput, removeDuplicates, removeBlacklist, customBlacklist]);
 
   const { ratePerMessage, totalEstimatedCost } = useMemo(() => {
     const cat = activeTemplate?.category?.toUpperCase() || "UTILITY";
     let rate = userRates.utility;
-
-    if (cat === "MARKETING") {
-      rate = userRates.marketing;
-    } else if (cat === "AUTHENTICATION") {
-      rate = userRates.authentication;
-    } else if (cat === "SERVICE") {
-      rate = userRates.service;
-    }
+    if (cat === "MARKETING") rate = userRates.marketing;
+    else if (cat === "AUTHENTICATION") rate = userRates.authentication;
+    else if (cat === "SERVICE") rate = userRates.service;
 
     return {
       ratePerMessage: rate,
@@ -276,7 +545,7 @@ function CampaignsContent() {
       return;
     }
     if (processedNumbers.length === 0) {
-      alert("Please enter at least one valid mobile number (comma-separated).");
+      alert("Please enter or upload at least one valid mobile number.");
       return;
     }
     if (isScheduled && !scheduleDate) {
@@ -316,9 +585,13 @@ function CampaignsContent() {
 
     setSending(true);
     try {
-      const orderedVars = detectedVariables.map(
-        (v) => variableMappings[v]?.value || ""
-      );
+      const orderedVars = detectedVariables.map((v) => {
+        const mapping = variableMappings[v];
+        if (mapping?.type === "Map Column Value" && mapping.value && uploadedRows.length > 0) {
+          return uploadedRows[0][mapping.value] || mapping.value;
+        }
+        return mapping?.value || "";
+      });
 
       const res = await fetch("/api/campaigns/send", {
         method: "POST",
@@ -368,33 +641,21 @@ function CampaignsContent() {
       {/* Step Indicator Bar */}
       <div className="flex items-center justify-between bg-white p-4 rounded-2xl border shadow-xs max-w-3xl mx-auto">
         <div className={`flex items-center space-x-2 font-bold ${step === 1 ? "text-emerald-600" : "text-gray-400"}`}>
-          <span
-            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
-              step === 1 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"
-            }`}
-          >
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step === 1 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"}`}>
             1
           </span>
           <span>STEP 1: Campaign</span>
         </div>
         <span className="text-gray-300">────────</span>
         <div className={`flex items-center space-x-2 font-bold ${step === 2 ? "text-emerald-600" : "text-gray-400"}`}>
-          <span
-            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
-              step === 2 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"
-            }`}
-          >
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step === 2 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"}`}>
             2
           </span>
           <span>STEP 2: Template</span>
         </div>
         <span className="text-gray-300">────────</span>
         <div className={`flex items-center space-x-2 font-bold ${step === 3 ? "text-emerald-600" : "text-gray-400"}`}>
-          <span
-            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
-              step === 3 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"
-            }`}
-          >
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step === 3 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"}`}>
             3
           </span>
           <span>STEP 3: Verify & Send</span>
@@ -452,9 +713,32 @@ function CampaignsContent() {
                     Total Count: {processedNumbers.length}
                   </span>
                 </div>
+
+                {selectedSourceChips.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 bg-gray-50 border rounded-xl p-2">
+                    {selectedSourceChips.map((chip) => (
+                      <span
+                        key={chip}
+                        className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-900 font-bold px-2.5 py-1 rounded-lg text-[11px]"
+                      >
+                        <span>{chip}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedSourceChips((prev) => prev.filter((item) => item !== chip))
+                          }
+                          className="text-emerald-700 hover:text-red-600 font-bold cursor-pointer"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 <textarea
-                  rows={5}
-                  placeholder="Enter comma-separated mobile numbers (e.g. 919876543210, 919123456789)..."
+                  rows={4}
+                  placeholder="Enter comma-separated mobile numbers (e.g. 919876543210, 919123456789) or upload Excel/Group..."
                   value={numbersInput}
                   onChange={(e) => setNumbersInput(e.target.value)}
                   className="w-full border rounded-xl p-3 bg-gray-50 text-xs font-mono focus:outline-none focus:bg-white focus:border-emerald-500"
@@ -464,18 +748,23 @@ function CampaignsContent() {
               <div className="flex flex-wrap gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={() => alert("Group Contacts selector opened.")}
+                  onClick={openGroupContactsModal}
                   className="bg-emerald-50 text-emerald-700 border border-emerald-300 font-bold px-4 py-2 rounded-xl hover:bg-emerald-100 cursor-pointer"
                 >
                   👥 Group Contacts
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowUploadModal(true)}
+                  onClick={() => {
+                    setPendingFileData(null);
+                    setShowUploadModal(true);
+                  }}
                   className="bg-blue-50 text-blue-700 border border-blue-300 font-bold px-4 py-2 rounded-xl hover:bg-blue-100 cursor-pointer flex items-center space-x-1"
                 >
                   <span>📁 Upload File (CSV / Excel)</span>
-                  {uploadedFileName && <span className="text-emerald-600 font-bold ml-2">✓ ({uploadedFileName})</span>}
+                  {uploadedFileName && (
+                    <span className="text-emerald-600 font-bold ml-2">✓ ({uploadedFileName})</span>
+                  )}
                 </button>
               </div>
 
@@ -657,7 +946,7 @@ function CampaignsContent() {
                           if (e.target.files && e.target.files[0]) {
                             const file = e.target.files[0];
                             setOverrideFileName(file.name);
-                            
+
                             const uploadData = new FormData();
                             uploadData.append("file", file);
                             uploadData.append("wabaId", selectedChannel);
@@ -699,48 +988,75 @@ function CampaignsContent() {
                       This template has no dynamic variables. Ready to proceed!
                     </div>
                   ) : (
-                    detectedVariables.map((variableKey) => (
-                      <div key={variableKey} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-                        <div className="font-mono font-bold text-gray-700 text-xs bg-white border px-3 py-2 rounded-xl text-center">
-                          {variableKey}
+                    detectedVariables.map((variableKey) => {
+                      const currentType = variableMappings[variableKey]?.type || "Assign Const Value";
+                      return (
+                        <div key={variableKey} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+                          <div className="font-mono font-bold text-gray-700 text-xs bg-white border px-3 py-2 rounded-xl text-center">
+                            {variableKey}
+                          </div>
+                          <select
+                            value={currentType}
+                            onChange={(e) =>
+                              setVariableMappings((prev) => ({
+                                ...prev,
+                                [variableKey]: {
+                                  type: e.target.value,
+                                  value: "",
+                                },
+                              }))
+                            }
+                            className="border rounded-xl p-2 bg-white text-xs font-semibold focus:outline-none"
+                          >
+                            <option value="Assign Const Value">Assign Const Value</option>
+                            <option value="Map Column Value">Map Column Value</option>
+                          </select>
+
+                          {currentType === "Map Column Value" && uploadedColumns.length > 0 ? (
+                            <select
+                              value={variableMappings[variableKey]?.value || ""}
+                              onChange={(e) =>
+                                setVariableMappings((prev) => ({
+                                  ...prev,
+                                  [variableKey]: {
+                                    type: "Map Column Value",
+                                    value: e.target.value,
+                                  },
+                                }))
+                              }
+                              className="border rounded-xl p-2 bg-white text-xs font-mono focus:outline-none focus:border-emerald-500"
+                            >
+                              <option value="">Select column</option>
+                              {uploadedColumns.map((col) => (
+                                <option key={col} value={col}>
+                                  {col}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              placeholder={
+                                currentType === "Assign Const Value"
+                                  ? `Enter value for ${variableKey}...`
+                                  : `Enter column name...`
+                              }
+                              value={variableMappings[variableKey]?.value || ""}
+                              onChange={(e) =>
+                                setVariableMappings((prev) => ({
+                                  ...prev,
+                                  [variableKey]: {
+                                    type: currentType,
+                                    value: e.target.value,
+                                  },
+                                }))
+                              }
+                              className="border rounded-xl p-2 bg-white text-xs font-mono focus:outline-none focus:border-emerald-500"
+                            />
+                          )}
                         </div>
-                        <select
-                          value={variableMappings[variableKey]?.type || "Assign Const Value"}
-                          onChange={(e) =>
-                            setVariableMappings((prev) => ({
-                              ...prev,
-                              [variableKey]: {
-                                ...prev[variableKey],
-                                type: e.target.value,
-                              },
-                            }))
-                          }
-                          className="border rounded-xl p-2 bg-white text-xs font-semibold focus:outline-none"
-                        >
-                          <option value="Assign Const Value">Assign Const Value</option>
-                          <option value="Map Column Value">Map Column Value</option>
-                        </select>
-                        <input
-                          type="text"
-                          placeholder={
-                            (variableMappings[variableKey]?.type || "Assign Const Value") === "Assign Const Value"
-                              ? `Enter value for ${variableKey}...`
-                              : `Enter CSV column name...`
-                          }
-                          value={variableMappings[variableKey]?.value || ""}
-                          onChange={(e) =>
-                            setVariableMappings((prev) => ({
-                              ...prev,
-                              [variableKey]: {
-                                type: prev[variableKey]?.type || "Assign Const Value",
-                                value: e.target.value,
-                              },
-                            }))
-                          }
-                          className="border rounded-xl p-2 bg-white text-xs font-mono focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               )}
@@ -875,14 +1191,92 @@ function CampaignsContent() {
         </div>
       </div>
 
+      {/* Group Contacts Modal */}
+      {showGroupsModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-lg w-full space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-gray-800 text-sm">Select Contact Groups</h3>
+              <button
+                onClick={() => setShowGroupsModal(false)}
+                className="text-gray-500 font-bold px-2 py-1 hover:bg-gray-100 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto space-y-2">
+              {loadingGroups ? (
+                <div className="p-6 text-center text-gray-500 text-xs">Loading panel groups...</div>
+              ) : groupsList.length === 0 ? (
+                <div className="p-6 text-center text-gray-400 text-xs">
+                  No contact groups found in panel.
+                </div>
+              ) : (
+                groupsList.map((grp: any, idx: number) => {
+                  const gKey = String(grp.id ?? grp.groupId ?? grp.name ?? idx);
+                  const gName = grp.name || grp.groupName || `Group ${idx + 1}`;
+                  const countLabel =
+                    typeof grp.contactCount === "number"
+                      ? `${grp.contactCount} contacts`
+                      : Array.isArray(grp.contacts)
+                      ? `${grp.contacts.length} contacts`
+                      : "";
+
+                  return (
+                    <label
+                      key={gKey}
+                      className="flex items-center justify-between p-3 border rounded-xl hover:bg-gray-50 cursor-pointer"
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedGroupIds.includes(gKey)}
+                          onChange={() => toggleGroupSelection(gKey)}
+                          className="accent-emerald-600"
+                        />
+                        <span className="font-bold text-gray-800">{gName}</span>
+                      </div>
+                      {countLabel && (
+                        <span className="text-[11px] font-mono text-gray-500">{countLabel}</span>
+                      )}
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                onClick={() => setShowGroupsModal(false)}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={addingGroupContacts || selectedGroupIds.length === 0}
+                onClick={handleLoadSelectedGroupContacts}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs cursor-pointer disabled:opacity-50"
+              >
+                {addingGroupContacts ? "Loading..." : "Proceed"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* File Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-lg w-full space-y-4 animate-in fade-in duration-200">
+          <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-lg w-full space-y-4">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-gray-800 text-sm">Select File (CSV / Excel)</h3>
+              <h3 className="font-bold text-gray-800 text-sm">Select File</h3>
               <button
-                onClick={() => setShowUploadModal(false)}
+                onClick={() => {
+                  setPendingFileData(null);
+                  setShowUploadModal(false);
+                }}
                 className="text-gray-500 font-bold px-2 py-1 hover:bg-gray-100 rounded-lg cursor-pointer"
               >
                 ✕
@@ -897,7 +1291,7 @@ function CampaignsContent() {
                 className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs focus:outline-none"
               >
                 <option value="Single Number Column">Single Number Column</option>
-                <option value="Multiple Data Columns">Multiple Data Columns (Name, Number, Variables)</option>
+                <option value="Multiple Data Columns">Multiple Data Columns</option>
               </select>
 
               <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center bg-gray-50 hover:bg-gray-100 transition cursor-pointer relative">
@@ -906,40 +1300,42 @@ function CampaignsContent() {
                   accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
-                      const file = e.target.files[0];
-                      setUploadedFileName(file.name);
-                      const reader = new FileReader();
-                      reader.onload = (event) => {
-                        const content = event.target?.result as string;
-                        if (content) {
-                          const extracted = content
-                            .split(/[\r\n,]+/)
-                            .map((item) => item.trim().replace(/[^0-9]/g, ""))
-                            .filter((num) => num.length >= 10);
-                          if (extracted.length > 0) {
-                            setNumbersInput((prev) =>
-                              prev ? `${prev}, ${extracted.join(", ")}` : extracted.join(", ")
-                            );
-                          }
-                        }
-                      };
-                      reader.readAsText(file);
-                      setShowUploadModal(false);
+                      handleFileSelect(e.target.files[0]);
                     }
                   }}
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                 />
-                <div className="text-emerald-700 font-bold text-xs mb-1">📁 Browse File or Drag & Drop Here</div>
-                <div className="text-gray-400 text-[10px]">Supports .csv, .xlsx, .xls files up to 5,000 rows</div>
+                <div className="text-emerald-700 font-bold text-xs mb-1">📁 Browse File</div>
+                <div className="text-gray-400 text-[10px]">Supports .csv, .xlsx, .xls files</div>
               </div>
+
+              {pendingFileData && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1 text-xs">
+                  <div className="font-bold text-emerald-900">{pendingFileData.fileName}</div>
+                  <div className="text-gray-700 font-mono text-[11px]">
+                    Total Rows: {pendingFileData.totalRows} | Valid Numbers: {pendingFileData.numbers.length} | Duplicates: {pendingFileData.duplicatesCount} | Blacklisted: {pendingFileData.blacklistedCount}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-end pt-3 border-t">
+            <div className="flex justify-end gap-2 pt-3 border-t">
               <button
-                onClick={() => setShowUploadModal(false)}
+                onClick={() => {
+                  setPendingFileData(null);
+                  setShowUploadModal(false);
+                }}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
               >
                 Close
+              </button>
+              <button
+                type="button"
+                disabled={!pendingFileData}
+                onClick={handleProceedUploadedFile}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-xl text-xs cursor-pointer disabled:opacity-50"
+              >
+                Proceed
               </button>
             </div>
           </div>

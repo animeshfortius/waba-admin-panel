@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+function parseRateValue(val: unknown, fallback: number): number {
+  const num = Number(val);
+  if (Number.isNaN(num) || !Number.isFinite(num) || num < 0) {
+    return fallback;
+  }
+  return Number(num.toFixed(4));
+}
+
 // 1. GET: User ke sabhi 4 categories ke rates fetch karna
 export async function GET(req: Request) {
   try {
@@ -17,6 +25,7 @@ export async function GET(req: Request) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
+        id: true,
         perMsgRate: true,
         utilityRate: true,
         serviceRate: true,
@@ -24,13 +33,20 @@ export async function GET(req: Request) {
       },
     });
 
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "User not found" },
+        { status: 404 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       rates: {
-        utility: user?.utilityRate ?? 0.1150,
-        service: user?.serviceRate ?? 0.1150,
-        authentication: user?.authRate ?? 0.1150,
-        marketing: user?.perMsgRate ?? 0.7850,
+        utility: user.utilityRate ?? 0.115,
+        service: user.serviceRate ?? 0.115,
+        authentication: user.authRate ?? 0.115,
+        marketing: user.perMsgRate ?? 0.785,
       },
     });
   } catch (error: any) {
@@ -42,7 +58,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST: Saare 4 rates ko Neon DB me save karna (Updated Standards)
+// 2. POST: Saare 4 rates ko database me save karna
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -55,19 +71,36 @@ export async function POST(req: Request) {
       );
     }
 
-    // Support both body.rates object and direct flat properties from frontend modal
-    const utility = rates?.utility ?? body.utilityRate ?? 0.1150;
-    const service = rates?.service ?? body.serviceRate ?? 0.1150;
-    const authentication = rates?.authentication ?? body.authRate ?? 0.1150;
-    const marketing = rates?.marketing ?? body.marketingRate ?? 0.7850;
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+
+    if (!existingUser) {
+      return NextResponse.json(
+        { success: false, message: "User not found" },
+        { status: 404 }
+      );
+    }
+
+    const utility = parseRateValue(rates?.utility ?? body.utilityRate, 0.115);
+    const service = parseRateValue(rates?.service ?? body.serviceRate, 0.115);
+    const authentication = parseRateValue(
+      rates?.authentication ?? body.authRate,
+      0.115
+    );
+    const marketing = parseRateValue(
+      rates?.marketing ?? body.marketingRate,
+      0.785
+    );
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
-        utilityRate: parseFloat(utility),
-        serviceRate: parseFloat(service),
-        authRate: parseFloat(authentication),
-        perMsgRate: parseFloat(marketing),
+        utilityRate: utility,
+        serviceRate: service,
+        authRate: authentication,
+        perMsgRate: marketing,
       },
     });
 

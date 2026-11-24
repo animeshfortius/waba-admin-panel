@@ -93,7 +93,12 @@ export async function POST(req: Request) {
       );
     }
 
+    const ownerUserId =
+      session.userId && session.userId !== "admin"
+        ? session.userId
+        : wabaAccount.userId || "admin";
     const cleanPhoneId = wabaAccount.phoneNumberId.replace("PHONE_", "").trim();
+    const channelNumber = wabaAccount.displayPhone || session.channel || wabaAccount.wabaId;
     const recipientPhone = session.customerPhone.replace(/\D/g, "");
 
     let wabaMessageId: string | null = null;
@@ -101,6 +106,7 @@ export async function POST(req: Request) {
     let finalMsgType = messageType;
     let savedMediaUrl: string | null = null;
     let metaErrorMessage: string | null = null;
+    let resolvedTemplateName = "Direct_Chat";
 
     try {
       let metaPayload: any = null;
@@ -159,20 +165,21 @@ export async function POST(req: Request) {
           messageBody.trim() ? " - " + messageBody.trim() : ""
         }`;
       } else if (messageType === "template") {
-        // Lookup exact template language, media header, and body variables from DB
-        const dbTemplate = await prisma.whatsAppTemplate.findFirst({
-          where: {
-            name: messageBody.trim(),
-            OR: [{ wabaId: wabaAccount.wabaId }, { wabaId: cleanPhoneId }],
-          },
-        }) || await prisma.whatsAppTemplate.findFirst({
-          where: { name: messageBody.trim() },
-        });
+        resolvedTemplateName = messageBody.trim();
+        const dbTemplate =
+          (await prisma.whatsAppTemplate.findFirst({
+            where: {
+              name: resolvedTemplateName,
+              OR: [{ wabaId: wabaAccount.wabaId }, { wabaId: cleanPhoneId }],
+            },
+          })) ||
+          (await prisma.whatsAppTemplate.findFirst({
+            where: { name: resolvedTemplateName },
+          }));
 
         const resolvedLang = templateLanguage || dbTemplate?.language || "en_US";
         const components: any[] = [];
 
-        // 1. Handle Media Header if template requires IMAGE / VIDEO / DOCUMENT
         const headerType = (dbTemplate as any)?.headerType?.toUpperCase() || "NONE";
         if (headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT") {
           const mediaKey =
@@ -192,7 +199,6 @@ export async function POST(req: Request) {
           });
         }
 
-        // 2. Handle Body Variables {{1}}, {{2}}... if template has placeholders
         const bodyText = dbTemplate?.bodyText || "";
         const varMatches = bodyText.match(/\{\{\d+\}\}/g);
         if (varMatches && varMatches.length > 0) {
@@ -213,12 +219,12 @@ export async function POST(req: Request) {
           to: recipientPhone,
           type: "template",
           template: {
-            name: messageBody.trim(),
+            name: resolvedTemplateName,
             language: { code: resolvedLang },
             ...(components.length > 0 ? { components } : {}),
           },
         };
-        displayBody = `[Template Sent]: ${messageBody.trim()}`;
+        displayBody = `[Template Sent]: ${resolvedTemplateName}`;
       } else {
         metaPayload = {
           messaging_product: "whatsapp",
@@ -258,6 +264,9 @@ export async function POST(req: Request) {
       metaErrorMessage = metaErr.message || "Network timeout while contacting Meta API.";
     }
 
+    const sentAt = new Date();
+    const msgStatus = wabaMessageId ? "SENT" : "FAILED";
+
     const newMessage = await prisma.chatMessage.create({
       data: {
         chatSessionId: sessionId,
@@ -266,16 +275,40 @@ export async function POST(req: Request) {
         messageBody: displayBody,
         messageType: finalMsgType,
         mediaUrl: savedMediaUrl,
-        status: wabaMessageId ? "SENT" : "FAILED",
+        status: msgStatus,
         wabaMessageId,
       },
     });
+
+    // Track message in CampaignLog with cost = 0 so webhook bills on DELIVERED and refunds on FAILED
+    if (wabaMessageId) {
+      try {
+        await prisma.campaignLog.create({
+          data: {
+            userId: ownerUserId,
+            campaignName: "Live_Agent_Chat",
+            templateName: messageType === "template" ? resolvedTemplateName : "Chat_Message",
+            channel: channelNumber,
+            recipient: recipientPhone,
+            status: "SENT",
+            messageId: wabaMessageId,
+            cost: 0,
+            errorDetails: "N/A",
+            sentAt,
+            deliveredAt: null,
+            readAt: null,
+          },
+        });
+      } catch (logErr: any) {
+        console.error("Chat CampaignLog create error:", logErr.message);
+      }
+    }
 
     await prisma.chatSession.update({
       where: { id: sessionId },
       data: {
         lastMessage: displayBody,
-        lastMessageAt: new Date(),
+        lastMessageAt: sentAt,
         isBotActive: false,
       },
     });

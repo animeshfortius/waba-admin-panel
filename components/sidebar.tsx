@@ -4,10 +4,22 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+interface SidebarBranding {
+  brandName?: string;
+  logoUrl?: string | null;
+  primaryColor?: string;
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const [isAgentMode, setIsAgentMode] = useState(false);
   const [agentData, setAgentData] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string>("");
+  const [branding, setBranding] = useState<SidebarBranding>({
+    brandName: "Fortius Infocom",
+    logoUrl: null,
+    primaryColor: "#059669",
+  });
 
   useEffect(() => {
     const agent = localStorage.getItem("currentAgent");
@@ -19,15 +31,67 @@ export default function Sidebar() {
       } catch (e) {
         console.error("Failed to parse agent data", e);
       }
+    } else {
+      setIsAgentMode(false);
+      setAgentData(null);
     }
   }, [pathname]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const host = window.location.hostname;
+    if (!host || host === "localhost" || host === "127.0.0.1") return;
+
+    fetch(`/api/admin/branding?domain=${encodeURIComponent(host)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.success && data?.config?.isActive) {
+          setBranding({
+            brandName: data.config.brandName || "Partner Portal",
+            logoUrl: data.config.logoUrl || null,
+            primaryColor: data.config.primaryColor || "#059669",
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user?.role) {
+          setUserRole(String(data.user.role).toUpperCase());
+        }
+      })
+      .catch(() => {});
+  }, [pathname]);
+
+  const canAccessAdmin =
+    userRole === "SUPER_ADMIN" ||
+    userRole === "WHITE_LABEL_RESELLER" ||
+    userRole === "RESELLER";
+
+  const headerTitle = isAgentMode
+    ? "Agent Portal"
+    : branding.brandName || "WABA Panel";
 
   return (
     <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between border-r border-slate-800 font-sans min-h-screen">
       <div className="space-y-1">
-        <div className="p-5 font-bold text-xl text-white flex items-center space-x-2 border-b border-slate-800">
-          <span className="bg-emerald-600 text-white px-2 py-1 rounded text-sm font-extrabold">WA</span>
-          <span>{isAgentMode ? "Agent Portal" : "WABA Panel"}</span>
+        <div className="p-5 font-bold text-lg text-white flex items-center space-x-2.5 border-b border-slate-800">
+          {branding.logoUrl && !isAgentMode ? (
+            <img
+              src={branding.logoUrl}
+              alt={headerTitle}
+              className="w-8 h-8 rounded-lg object-cover border border-slate-700 shrink-0"
+            />
+          ) : (
+            <span className="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-extrabold shrink-0">
+              WA
+            </span>
+          )}
+          <span className="truncate">{headerTitle}</span>
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto text-sm font-medium">
@@ -37,19 +101,22 @@ export default function Sidebar() {
               <Link
                 href="/dashboard/chat"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                  pathname.includes("/dashboard/chat") ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  pathname.includes("/dashboard/chat")
+                    ? "bg-emerald-600 text-white font-bold"
+                    : "hover:bg-slate-800 text-slate-300"
                 }`}
               >
                 <span>💬</span>
                 <span>Live Chat</span>
               </Link>
 
-              {/* Show Manage Template ONLY if sendTemplate is explicitly true */}
               {agentData?.sendTemplate === true && (
                 <Link
                   href="/dashboard/templates"
                   className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                    pathname.includes("/dashboard/templates") ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                    pathname.includes("/dashboard/templates")
+                      ? "bg-emerald-600 text-white font-bold"
+                      : "hover:bg-slate-800 text-slate-300"
                   }`}
                 >
                   <span>📄</span>
@@ -57,12 +124,13 @@ export default function Sidebar() {
                 </Link>
               )}
 
-              {/* Show Campaigns & Broadcast ONLY if sendCampaign is explicitly true */}
               {agentData?.sendCampaign === true && (
                 <Link
                   href="/dashboard/campaigns"
                   className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                    pathname.includes("/dashboard/campaigns") ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                    pathname.includes("/dashboard/campaigns")
+                      ? "bg-emerald-600 text-white font-bold"
+                      : "hover:bg-slate-800 text-slate-300"
                   }`}
                 >
                   <span>📢</span>
@@ -82,12 +150,28 @@ export default function Sidebar() {
               </button>
             </>
           ) : (
-            /* ADMIN VIEW: Full Menus */
+            /* ADMIN / CLIENT VIEW: Full Menus */
             <>
+              {canAccessAdmin && (
+                <Link
+                  href="/admin"
+                  className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+                    pathname.startsWith("/admin")
+                      ? "bg-indigo-600 text-white font-bold"
+                      : "hover:bg-slate-800 text-indigo-300"
+                  }`}
+                >
+                  <span>🛡️</span>
+                  <span>Admin Panel</span>
+                </Link>
+              )}
+
               <Link
                 href="/dashboard"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                  pathname === "/dashboard" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  pathname === "/dashboard"
+                    ? "bg-emerald-600 text-white font-bold"
+                    : "hover:bg-slate-800 text-slate-300"
                 }`}
               >
                 <span>🏠</span>
@@ -97,7 +181,9 @@ export default function Sidebar() {
               <Link
                 href="/dashboard/templates"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                  pathname === "/dashboard/templates" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  pathname === "/dashboard/templates"
+                    ? "bg-emerald-600 text-white font-bold"
+                    : "hover:bg-slate-800 text-slate-300"
                 }`}
               >
                 <span>📄</span>
@@ -107,7 +193,9 @@ export default function Sidebar() {
               <Link
                 href="/dashboard/campaigns"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                  pathname === "/dashboard/campaigns" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  pathname === "/dashboard/campaigns"
+                    ? "bg-emerald-600 text-white font-bold"
+                    : "hover:bg-slate-800 text-slate-300"
                 }`}
               >
                 <span>📢</span>
@@ -117,7 +205,9 @@ export default function Sidebar() {
               <Link
                 href="/dashboard/agents"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                  pathname === "/dashboard/agents" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  pathname === "/dashboard/agents"
+                    ? "bg-emerald-600 text-white font-bold"
+                    : "hover:bg-slate-800 text-slate-300"
                 }`}
               >
                 <span>👥</span>
@@ -127,7 +217,9 @@ export default function Sidebar() {
               <Link
                 href="/dashboard/automation"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                  pathname === "/dashboard/automation" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  pathname === "/dashboard/automation"
+                    ? "bg-emerald-600 text-white font-bold"
+                    : "hover:bg-slate-800 text-slate-300"
                 }`}
               >
                 <span>⚡</span>
@@ -137,7 +229,9 @@ export default function Sidebar() {
               <Link
                 href="/dashboard/reports"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                  pathname === "/dashboard/reports" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  pathname === "/dashboard/reports"
+                    ? "bg-emerald-600 text-white font-bold"
+                    : "hover:bg-slate-800 text-slate-300"
                 }`}
               >
                 <span>📊</span>
@@ -147,7 +241,9 @@ export default function Sidebar() {
               <Link
                 href="/dashboard/chat"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                  pathname === "/dashboard/chat" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  pathname === "/dashboard/chat"
+                    ? "bg-emerald-600 text-white font-bold"
+                    : "hover:bg-slate-800 text-slate-300"
                 }`}
               >
                 <span>💬</span>
@@ -157,7 +253,9 @@ export default function Sidebar() {
               <Link
                 href="/dashboard/api-docs"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                  pathname === "/dashboard/api-docs" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  pathname === "/dashboard/api-docs"
+                    ? "bg-emerald-600 text-white font-bold"
+                    : "hover:bg-slate-800 text-slate-300"
                 }`}
               >
                 <span>🔌</span>
@@ -167,7 +265,9 @@ export default function Sidebar() {
               <Link
                 href="/dashboard/configuration"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                  pathname === "/dashboard/configuration" ? "bg-emerald-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  pathname === "/dashboard/configuration"
+                    ? "bg-emerald-600 text-white font-bold"
+                    : "hover:bg-slate-800 text-slate-300"
                 }`}
               >
                 <span>⚙️</span>

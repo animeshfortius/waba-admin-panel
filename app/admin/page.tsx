@@ -1,65 +1,208 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+
+interface ResellerUser {
+  id: string;
+  name: string;
+  username?: string | null;
+  email: string;
+  role: string;
+  isWhiteLabel?: boolean;
+  whiteLabelConfig?: {
+    domain?: string;
+    brandName?: string;
+    logoUrl?: string | null;
+    primaryColor?: string;
+    supportEmail?: string | null;
+    supportPhone?: string | null;
+    serverIp?: string | null;
+    sslStatus?: string;
+    isActive?: boolean;
+  } | null;
+}
 
 export default function AdminDashboardPage() {
   const [activeSection, setActiveSection] = useState<string>("hub");
-
-  // User Management & Search States
-  const [searchUsername, setSearchUsername] = useState("agent1");
-  const [isUserSearched, setIsUserSearched] = useState(true);
-  const [userActiveTab, setUserActiveTab] = useState<string>("profile");
-  const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [showFundModal, setShowFundModal] = useState(false);
-  const [showRateModal, setShowRateModal] = useState(false);
-
-  // Site Branding Tabs State
   const [activeBrandingTab, setActiveBrandingTab] = useState<string>("domain");
 
-  // Database se live users laane ke liye state
-  const [clients, setClients] = useState<any[]>([]);
+  const [resellers, setResellers] = useState<ResellerUser[]>([]);
+  const [selectedResellerId, setSelectedResellerId] = useState<string>("");
 
-  useEffect(() => {
-    fetch("/api/admin/users")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          const formattedClients = data.users.map((u: any) => ({
-            id: u.id,
-            clientName: u.name,
-            phone: u.phone || "N/A",
-            email: u.email,
-            plan: u.role || "USER",
-            status: "Active",
-          }));
-          setClients(formattedClients);
-        }
-      })
-      .catch((err) => console.error("Error fetching users:", err));
+  // White-Label Domain & Branding Form State
+  const [domainInput, setDomainInput] = useState("");
+  const [brandNameInput, setBrandNameInput] = useState("");
+  const [logoUrlInput, setLogoUrlInput] = useState("");
+  const [primaryColorInput, setPrimaryColorInput] = useState("#059669");
+  const [supportEmailInput, setSupportEmailInput] = useState("");
+  const [supportPhoneInput, setSupportPhoneInput] = useState("");
+  const [serverIpInput, setServerIpInput] = useState("171.50.181.171");
+  const [sslStatusInput, setSslStatusInput] = useState("PENDING");
+  const [isActiveBranding, setIsActiveBranding] = useState(true);
+  const [savingBranding, setSavingBranding] = useState(false);
+
+  // Notification & SMTP Form State
+  const [notifyEmail, setNotifyEmail] = useState(true);
+  const [notifyLowBalance, setNotifyLowBalance] = useState(true);
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("587");
+  const [smtpUser, setSmtpUser] = useState("");
+  const [smtpPass, setSmtpPass] = useState("");
+
+  const populateFromUser = useCallback((u: ResellerUser) => {
+    const cfg = u.whiteLabelConfig;
+    setDomainInput(cfg?.domain || "");
+    setBrandNameInput(cfg?.brandName || u.name || u.username || "");
+    setLogoUrlInput(cfg?.logoUrl || "");
+    setPrimaryColorInput(cfg?.primaryColor || "#059669");
+    setSupportEmailInput(cfg?.supportEmail || u.email || "");
+    setSupportPhoneInput(cfg?.supportPhone || "");
+    setServerIpInput(cfg?.serverIp || "171.50.181.171");
+    setSslStatusInput(cfg?.sslStatus || "PENDING");
+    setIsActiveBranding(cfg?.isActive ?? true);
   }, []);
 
+  const loadResellers = useCallback(async (preferredId?: string) => {
+    try {
+      const res = await fetch("/api/admin/users");
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.users)) {
+        const eligible = data.users.filter((u: ResellerUser) =>
+          ["SUPER_ADMIN", "WHITE_LABEL_RESELLER", "RESELLER"].includes(String(u.role))
+        );
+        setResellers(eligible);
+
+        if (eligible.length > 0) {
+          const target =
+            eligible.find((item: ResellerUser) => item.id === (preferredId || selectedResellerId)) ||
+            eligible[0];
+          setSelectedResellerId(target.id);
+          populateFromUser(target);
+        }
+      }
+    } catch (err) {
+      console.error("Error loading resellers:", err);
+    }
+  }, [populateFromUser, selectedResellerId]);
+
+  useEffect(() => {
+    loadResellers();
+  }, [loadResellers]);
+
+  const handleResellerChange = async (userId: string) => {
+    setSelectedResellerId(userId);
+    const localMatch = resellers.find((r) => r.id === userId);
+    if (localMatch) {
+      populateFromUser(localMatch);
+    }
+
+    try {
+      const res = await fetch(`/api/admin/branding?userId=${encodeURIComponent(userId)}`);
+      const data = await res.json();
+      if (data?.success && data?.config) {
+        const cfg = data.config;
+        setDomainInput(cfg.domain || "");
+        setBrandNameInput(cfg.brandName || localMatch?.name || "");
+        setLogoUrlInput(cfg.logoUrl || "");
+        setPrimaryColorInput(cfg.primaryColor || "#059669");
+        setSupportEmailInput(cfg.supportEmail || "");
+        setSupportPhoneInput(cfg.supportPhone || "");
+        setServerIpInput(cfg.serverIp || "171.50.181.171");
+        setSslStatusInput(cfg.sslStatus || "PENDING");
+        setIsActiveBranding(cfg.isActive ?? true);
+      }
+    } catch (err) {
+      console.error("Failed to fetch branding config:", err);
+    }
+  };
+
+  const handleSaveWhiteLabelBranding = async () => {
+    if (!domainInput.trim()) {
+      alert("Please enter a custom domain (e.g., waba.clientbrand.com)");
+      return;
+    }
+
+    setSavingBranding(true);
+    try {
+      const res = await fetch("/api/admin/branding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedResellerId || undefined,
+          domain: domainInput.trim(),
+          brandName: brandNameInput.trim(),
+          logoUrl: logoUrlInput.trim() || null,
+          primaryColor: primaryColorInput,
+          supportEmail: supportEmailInput.trim() || null,
+          supportPhone: supportPhoneInput.trim() || null,
+          serverIp: serverIpInput.trim() || "171.50.181.171",
+          sslStatus: sslStatusInput,
+          isActive: isActiveBranding,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("White-Label domain & branding saved successfully!");
+        await loadResellers(selectedResellerId);
+      } else {
+        alert(data.error || "Failed to save branding");
+      }
+    } catch (err) {
+      console.error("Error saving branding:", err);
+      alert("Network error while saving branding");
+    } finally {
+      setSavingBranding(false);
+    }
+  };
+
+  const hubCards = [
+    {
+      href: "/admin/user-management",
+      icon: "👤",
+      title: "User Management",
+      desc: "Manage White-Label, Resellers, Users, rates & funds.",
+      badge: "Core",
+    },
+    {
+      href: "/admin/client-list",
+      icon: "📋",
+      title: "Client List",
+      desc: "View complete client directory, roles & account status.",
+      badge: "Directory",
+    },
+    {
+      href: "/admin/client-tree",
+      icon: "🌳",
+      title: "Client Tree View",
+      desc: "Visualize parent-reseller & child-user hierarchy.",
+      badge: "Hierarchy",
+    },
+  ];
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-2 text-xs font-sans">
+    <div className="space-y-6 max-w-7xl mx-auto text-xs font-sans">
       {/* Top Header & Breadcrumbs */}
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
+      <div className="flex flex-wrap justify-between items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
         <div>
-          <div className="text-gray-400">
+          <div className="text-[11px] font-medium text-slate-400">
             Admin Home{" "}
             {activeSection !== "hub" &&
               `› ${activeSection.replace("_", " ").toUpperCase()}`}
           </div>
-          <h1 className="text-xl font-bold text-gray-800">
+          <h1 className="text-xl font-bold text-slate-900 mt-0.5">
             {activeSection === "hub" && "Administrator Control Center"}
-            {activeSection === "site_branding" && "Site Branding & White-Label"}
+            {activeSection === "site_branding" && "Site Branding & White-Label Setup"}
             {activeSection === "system_traffic" && "System Traffic & Monitoring"}
           </h1>
         </div>
 
         {activeSection !== "hub" && (
           <button
+            type="button"
             onClick={() => setActiveSection("hub")}
-            className="border px-3.5 py-1.5 rounded-xl font-bold text-gray-600 hover:bg-gray-50 shadow-sm flex items-center space-x-1 cursor-pointer bg-white"
+            className="border border-slate-200 px-4 py-2 rounded-xl font-bold text-slate-700 hover:bg-slate-50 shadow-2xs flex items-center gap-1.5 cursor-pointer bg-white transition"
           >
             <span>⬅</span>
             <span>Back to Admin Hub</span>
@@ -67,89 +210,71 @@ export default function AdminDashboardPage() {
         )}
       </div>
 
-      {/* ADMIN HUB DASHBOARD CARDS GRID */}
+      {/* ADMIN HUB DASHBOARD */}
       {activeSection === "hub" && (
         <div className="space-y-6">
-          {/* Section 1: Administrator */}
           <div className="space-y-3">
-            <h2 className="font-bold text-gray-500 uppercase tracking-wider pl-1">
-              Administrator
-            </h2>
+            <div className="flex items-center justify-between px-1">
+              <h2 className="font-bold text-slate-500 uppercase tracking-wider text-[11px]">
+                Administrator & White-Label Controls
+              </h2>
+              <span className="text-[11px] text-slate-400">
+                3-Tier Model: White-Label · Reseller · User
+              </span>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* 1. USER MANAGEMENT CARD WITH DIRECT URL ROUTING */}
-              <Link
-                href="/admin/user-management"
-                className="bg-white p-5 rounded-2xl border shadow-sm hover:shadow-md cursor-pointer transition space-y-2 group block"
-              >
-                <div className="text-2xl group-hover:scale-110 transition">
-                  👤
-                </div>
-                <h3 className="font-bold text-gray-800">User Management</h3>
-                <p className="text-[10px] text-gray-400">
-                  Easily manage users and permissions.
-                </p>
-              </Link>
+              {hubCards.map((card) => (
+                <Link
+                  key={card.href}
+                  href={card.href}
+                  className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-emerald-300 cursor-pointer transition space-y-2.5 group block"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl group-hover:scale-110 transition">
+                      {card.icon}
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                      {card.badge}
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-sm">{card.title}</h3>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">{card.desc}</p>
+                </Link>
+              ))}
 
-              {/* 2. CLIENT LIST CARD WITH DIRECT URL ROUTING */}
-              <Link
-                href="/admin/client-list"
-                className="bg-white p-5 rounded-2xl border shadow-sm hover:shadow-md cursor-pointer transition space-y-2 group block"
-              >
-                <div className="text-2xl group-hover:scale-110 transition">
-                  📋
-                </div>
-                <h3 className="font-bold text-gray-800">Client List</h3>
-                <p className="text-[10px] text-gray-400">
-                  View your complete client list.
-                </p>
-              </Link>
-
-              {/* 3. CLIENT TREE VIEW CARD WITH DIRECT URL ROUTING */}
-              <Link
-                href="/admin/client-tree"
-                className="bg-white p-5 rounded-2xl border shadow-sm hover:shadow-md cursor-pointer transition space-y-2 group block"
-              >
-                <div className="text-2xl group-hover:scale-110 transition">
-                  🌳
-                </div>
-                <h3 className="font-bold text-gray-800">Client Tree View</h3>
-                <p className="text-[10px] text-gray-400">
-                  Visualize client hierarchy easily.
-                </p>
-              </Link>
-
-              {/* 4. SITE BRANDING CARD */}
+              {/* Site Branding Card */}
               <div
                 onClick={() => setActiveSection("site_branding")}
-                className="bg-white p-5 rounded-2xl border shadow-sm hover:shadow-md cursor-pointer transition space-y-2 group"
+                className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-emerald-300 cursor-pointer transition space-y-2.5 group"
               >
-                <div className="text-2xl group-hover:scale-110 transition">
-                  🎨
+                <div className="flex items-center justify-between">
+                  <span className="text-2xl group-hover:scale-110 transition">🎨</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    White-Label
+                  </span>
                 </div>
-                <h3 className="font-bold text-gray-800">Site Branding</h3>
-                <p className="text-[10px] text-gray-400">
-                  White-Label Solution setup.
+                <h3 className="font-bold text-slate-900 text-sm">Site Branding</h3>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Custom domain, A-record IP, SSL, logo & reseller branding.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Section 2: Reporting & Monitoring */}
-          <div className="space-y-3 pt-2">
-            <h2 className="font-bold text-gray-500 uppercase tracking-wider pl-1">
+          <div className="space-y-3 pt-1">
+            <h2 className="font-bold text-slate-500 uppercase tracking-wider text-[11px] px-1">
               Monitoring Tools
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
               <div
                 onClick={() => setActiveSection("system_traffic")}
-                className="bg-white p-5 rounded-2xl border shadow-sm hover:shadow-md cursor-pointer transition space-y-2 group"
+                className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-slate-300 cursor-pointer transition space-y-2 group"
               >
-                <div className="text-2xl group-hover:scale-110 transition">
-                  📈
-                </div>
-                <h3 className="font-bold text-gray-800">System Traffic</h3>
-                <p className="text-[10px] text-gray-400">
-                  Monitor real-time system traffic.
+                <div className="text-2xl group-hover:scale-110 transition">📈</div>
+                <h3 className="font-bold text-slate-900 text-sm">System Traffic</h3>
+                <p className="text-[11px] text-slate-500">
+                  Monitor real-time system traffic and delivery health.
                 </p>
               </div>
             </div>
@@ -157,130 +282,253 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* SITE BRANDING SECTION */}
+      {/* SITE BRANDING & WHITE-LABEL SECTION */}
       {activeSection === "site_branding" && (
-        <div className="bg-white rounded-2xl border shadow-sm p-6 space-y-6">
-          <div className="flex border-b space-x-6 text-sm font-semibold text-gray-500">
-            <button
-              onClick={() => setActiveBrandingTab("domain")}
-              className={`pb-3 border-b-2 cursor-pointer ${
-                activeBrandingTab === "domain"
-                  ? "border-emerald-600 text-emerald-700"
-                  : "border-transparent"
-              }`}
-            >
-              🌐 Domain
-            </button>
-            <button
-              onClick={() => setActiveBrandingTab("reseller")}
-              className={`pb-3 border-b-2 cursor-pointer ${
-                activeBrandingTab === "reseller"
-                  ? "border-emerald-600 text-emerald-700"
-                  : "border-transparent"
-              }`}
-            >
-              🏢 Reseller Info
-            </button>
-            <button
-              onClick={() => setActiveBrandingTab("notification")}
-              className={`pb-3 border-b-2 cursor-pointer ${
-                activeBrandingTab === "notification"
-                  ? "border-emerald-600 text-emerald-700"
-                  : "border-transparent"
-              }`}
-            >
-              🔔 Notification
-            </button>
-            <button
-              onClick={() => setActiveBrandingTab("smtp")}
-              className={`pb-3 border-b-2 cursor-pointer ${
-                activeBrandingTab === "smtp"
-                  ? "border-emerald-600 text-emerald-700"
-                  : "border-transparent"
-              }`}
-            >
-              ⚙️ SMTP
-            </button>
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 space-y-6">
+          <div className="flex flex-wrap border-b border-slate-200 gap-6 text-xs font-semibold text-slate-500">
+            {[
+              { id: "domain", label: "🌐 Domain & SSL" },
+              { id: "reseller", label: "🏢 Reseller Branding" },
+              { id: "notification", label: "🔔 Notification" },
+              { id: "smtp", label: "⚙️ SMTP" },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveBrandingTab(tab.id)}
+                className={`pb-3 border-b-2 transition cursor-pointer ${
+                  activeBrandingTab === tab.id
+                    ? "border-emerald-600 text-emerald-700 font-bold"
+                    : "border-transparent hover:text-slate-800"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          {activeBrandingTab === "domain" && (
-            <div className="space-y-4 max-w-xl">
-              <label className="block font-semibold text-gray-600">
-                Domain Name
-              </label>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  placeholder="Enter Domain"
-                  className="w-full border rounded-lg p-2.5 bg-gray-50"
-                />
-                <button
-                  onClick={() => alert("Domain saved!")}
-                  className="bg-emerald-600 text-white font-bold px-6 py-2.5 rounded-lg cursor-pointer"
-                >
-                  Save
-                </button>
+          {(activeBrandingTab === "domain" || activeBrandingTab === "reseller") && (
+            <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="font-bold text-slate-800">Select White-Label / Reseller Account</div>
+                <div className="text-[11px] text-slate-500">
+                  Point reseller&apos;s DNS A-Record to{" "}
+                  <span className="font-mono font-bold text-slate-800">{serverIpInput}</span>
+                </div>
               </div>
+              <select
+                value={selectedResellerId}
+                onChange={(e) => handleResellerChange(e.target.value)}
+                className="border border-slate-300 rounded-xl px-3.5 py-2 bg-white font-semibold text-slate-800 min-w-[240px]"
+              >
+                {resellers.length === 0 ? (
+                  <option value="">Default Admin / Partner</option>
+                ) : (
+                  resellers.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name || r.username} ({r.role})
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+          )}
+
+          {activeBrandingTab === "domain" && (
+            <div className="space-y-4 max-w-2xl">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block font-semibold text-slate-700">Custom Domain Name</label>
+                  <input
+                    type="text"
+                    value={domainInput}
+                    onChange={(e) => setDomainInput(e.target.value)}
+                    placeholder="e.g. waba.clientbrand.com"
+                    className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-semibold text-slate-700">Target Server IP (A-Record)</label>
+                  <input
+                    type="text"
+                    value={serverIpInput}
+                    onChange={(e) => setServerIpInput(e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-semibold text-slate-700">SSL Status</label>
+                  <select
+                    value={sslStatusInput}
+                    onChange={(e) => setSslStatusInput(e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:bg-white font-semibold"
+                  >
+                    <option value="PENDING">PENDING (DNS / Cert Provisioning)</option>
+                    <option value="ACTIVE">ACTIVE (SSL Enabled)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between border border-slate-200 rounded-xl p-3 bg-slate-50 mt-5 sm:mt-0">
+                  <span className="font-semibold text-slate-700">Domain Active</span>
+                  <input
+                    type="checkbox"
+                    checked={isActiveBranding}
+                    onChange={(e) => setIsActiveBranding(e.target.checked)}
+                    className="toggle toggle-success cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={savingBranding}
+                onClick={handleSaveWhiteLabelBranding}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl cursor-pointer shadow-2xs disabled:opacity-50"
+              >
+                {savingBranding ? "Saving..." : "Save Domain & SSL Config"}
+              </button>
             </div>
           )}
 
           {activeBrandingTab === "reseller" && (
             <div className="space-y-4 max-w-2xl">
-              <input
-                type="text"
-                placeholder="Company Name"
-                className="w-full border rounded-lg p-2.5 bg-gray-50"
-              />
-              <input
-                type="email"
-                placeholder="Email ID"
-                className="w-full border rounded-lg p-2.5 bg-gray-50"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block font-semibold text-slate-700">Brand / Company Name</label>
+                  <input
+                    type="text"
+                    value={brandNameInput}
+                    onChange={(e) => setBrandNameInput(e.target.value)}
+                    placeholder="Brand Name"
+                    className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:bg-white"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-semibold text-slate-700">Primary Accent Color</label>
+                  <input
+                    type="color"
+                    value={primaryColorInput}
+                    onChange={(e) => setPrimaryColorInput(e.target.value)}
+                    className="w-full h-10 border border-slate-300 rounded-xl p-1 bg-slate-50 cursor-pointer"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-semibold text-slate-700">Support Email ID</label>
+                  <input
+                    type="email"
+                    value={supportEmailInput}
+                    onChange={(e) => setSupportEmailInput(e.target.value)}
+                    placeholder="support@brand.com"
+                    className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:bg-white"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-semibold text-slate-700">Support Phone / WhatsApp</label>
+                  <input
+                    type="text"
+                    value={supportPhoneInput}
+                    onChange={(e) => setSupportPhoneInput(e.target.value)}
+                    placeholder="919876543210"
+                    className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="block font-semibold text-slate-700">Brand Logo URL</label>
+                  <input
+                    type="text"
+                    value={logoUrlInput}
+                    onChange={(e) => setLogoUrlInput(e.target.value)}
+                    placeholder="https://.../logo.png"
+                    className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:bg-white"
+                  />
+                </div>
+              </div>
+
               <button
-                onClick={() => alert("Saved!")}
-                className="bg-emerald-600 text-white font-bold px-6 py-2.5 rounded-lg cursor-pointer"
+                type="button"
+                disabled={savingBranding}
+                onClick={handleSaveWhiteLabelBranding}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl cursor-pointer shadow-2xs disabled:opacity-50"
               >
-                Save
+                {savingBranding ? "Saving..." : "Save Branding Info"}
               </button>
             </div>
           )}
 
           {activeBrandingTab === "notification" && (
-            <div className="space-y-4 max-w-2xl">
-              <div className="flex justify-between border p-3 rounded-xl bg-gray-50">
-                <span>Notify Customer via Email</span>
+            <div className="space-y-3 max-w-2xl">
+              <div className="flex justify-between items-center border border-slate-200 p-3.5 rounded-xl bg-slate-50">
+                <span className="font-semibold text-slate-700">Notify Customer via Email</span>
                 <input
                   type="checkbox"
-                  defaultChecked
-                  className="toggle toggle-success"
+                  checked={notifyEmail}
+                  onChange={(e) => setNotifyEmail(e.target.checked)}
+                  className="toggle toggle-success cursor-pointer"
+                />
+              </div>
+              <div className="flex justify-between items-center border border-slate-200 p-3.5 rounded-xl bg-slate-50">
+                <span className="font-semibold text-slate-700">Low Balance Alert Notification</span>
+                <input
+                  type="checkbox"
+                  checked={notifyLowBalance}
+                  onChange={(e) => setNotifyLowBalance(e.target.checked)}
+                  className="toggle toggle-success cursor-pointer"
                 />
               </div>
               <button
-                onClick={() => alert("Saved!")}
-                className="bg-emerald-600 text-white font-bold px-6 py-2.5 rounded-lg cursor-pointer"
+                type="button"
+                onClick={() => alert("Notification preferences saved!")}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl cursor-pointer"
               >
-                Save
+                Save Notification Settings
               </button>
             </div>
           )}
 
           {activeBrandingTab === "smtp" && (
             <div className="space-y-4 max-w-2xl">
-              <input
-                type="text"
-                placeholder="SMTP Host"
-                className="w-full border rounded-lg p-2.5 bg-gray-50"
-              />
-              <input
-                type="text"
-                placeholder="SMTP Port"
-                className="w-full border rounded-lg p-2.5 bg-gray-50"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  value={smtpHost}
+                  onChange={(e) => setSmtpHost(e.target.value)}
+                  placeholder="SMTP Host (e.g. smtp.gmail.com)"
+                  className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50"
+                />
+                <input
+                  type="text"
+                  value={smtpPort}
+                  onChange={(e) => setSmtpPort(e.target.value)}
+                  placeholder="SMTP Port (e.g. 587)"
+                  className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 font-mono"
+                />
+                <input
+                  type="text"
+                  value={smtpUser}
+                  onChange={(e) => setSmtpUser(e.target.value)}
+                  placeholder="SMTP Username"
+                  className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50"
+                />
+                <input
+                  type="password"
+                  value={smtpPass}
+                  onChange={(e) => setSmtpPass(e.target.value)}
+                  placeholder="SMTP Password / App Key"
+                  className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 font-mono"
+                />
+              </div>
               <button
-                onClick={() => alert("SMTP Saved!")}
-                className="bg-emerald-600 text-white font-bold px-6 py-2.5 rounded-lg cursor-pointer"
+                type="button"
+                onClick={() => alert("SMTP Settings Saved!")}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl cursor-pointer"
               >
-                Save
+                Save SMTP Settings
               </button>
             </div>
           )}
@@ -289,13 +537,13 @@ export default function AdminDashboardPage() {
 
       {/* SYSTEM TRAFFIC SECTION */}
       {activeSection === "system_traffic" && (
-        <div className="bg-white rounded-2xl border shadow-sm p-8 text-center space-y-3">
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-8 text-center space-y-3">
           <div className="text-3xl">📈</div>
-          <h3 className="font-bold text-sm text-gray-800">
+          <h3 className="font-bold text-sm text-slate-900">
             System Traffic & Real-time Monitoring
           </h3>
-          <p className="text-gray-500">
-            Live analytics and traffic bandwidth details loaded successfully.
+          <p className="text-slate-500 max-w-md mx-auto">
+            Live analytics, active reseller traffic, and messaging throughput details are ready for monitoring.
           </p>
         </div>
       )}

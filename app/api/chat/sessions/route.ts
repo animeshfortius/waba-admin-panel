@@ -6,8 +6,10 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId") || "admin";
 
-    // Allow admin variants (supporting both hyphen and underscore) to fetch all sessions
-    const isAdmin = userId === "admin" || userId === "emergency-admin-id" || userId === "emergency_admin_id";
+    const isAdmin =
+      userId === "admin" ||
+      userId === "emergency-admin-id" ||
+      userId === "emergency_admin_id";
 
     const sessions = await prisma.chatSession.findMany({
       where: isAdmin ? {} : { userId },

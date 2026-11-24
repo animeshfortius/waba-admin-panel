@@ -8,24 +8,28 @@ const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    const token = cookieStore.get("token")?.value || cookieStore.get("auth_token")?.value;
+    const token =
+      cookieStore.get("token")?.value || cookieStore.get("auth_token")?.value;
 
     if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const decoded: any = jwt.verify(token, JWT_SECRET);
-    
-    // Agar emergency admin ID ya SUPER_ADMIN role hai toh direct admin object return karo
-    if (decoded.userId === "emergency-admin-id" || decoded.role === "SUPER_ADMIN") {
+
+    if (decoded.userId === "emergency-admin-id") {
       return NextResponse.json({
         user: {
           id: "emergency-admin-id",
           username: "admin",
+          name: "Super Admin",
           email: "admin@admin.com",
           role: "SUPER_ADMIN",
+          isWhiteLabel: false,
           walletBalance: 1234567890,
-        }
+          actualBalance: 1234567890,
+          virtualBalance: 1234567890,
+        },
       });
     }
 
@@ -34,9 +38,18 @@ export async function GET() {
       select: {
         id: true,
         username: true,
+        name: true,
         email: true,
         role: true,
+        isWhiteLabel: true,
         walletBalance: true,
+        actualBalance: true,
+        virtualBalance: true,
+        perMsgRate: true,
+        utilityRate: true,
+        serviceRate: true,
+        authRate: true,
+        whiteLabelConfig: true,
       },
     });
 
@@ -46,6 +59,9 @@ export async function GET() {
 
     return NextResponse.json({ user });
   } catch (error) {
-    return NextResponse.json({ error: "Invalid token or session expired" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Invalid token or session expired" },
+      { status: 401 }
+    );
   }
 }

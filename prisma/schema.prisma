@@ -18,6 +18,7 @@ model User {
   expiryDate     String?
   apiKey         String? @unique
   role           Role    @default(USER)
+  isWhiteLabel   Boolean @default(false)
   walletBalance  Float   @default(0.0)
   actualBalance  Float   @default(0.0)
   virtualBalance Float   @default(0.0)
@@ -32,13 +33,32 @@ model User {
   secureReporting      Boolean @default(false)
   internationalAccount Boolean @default(false)
 
-  createdById  String?
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  createdBy    User?               @relation("UserHierarchy", fields: [createdById], references: [id], onDelete: Cascade)
-  childUsers   User[]              @relation("UserHierarchy")
-  wabaAccounts WabaAccount[]
-  transactions WalletTransaction[]
+  createdById      String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  createdBy        User?               @relation("UserHierarchy", fields: [createdById], references: [id], onDelete: Cascade)
+  childUsers       User[]              @relation("UserHierarchy")
+  wabaAccounts     WabaAccount[]
+  transactions     WalletTransaction[]
+  whiteLabelConfig WhiteLabelConfig?
+}
+
+model WhiteLabelConfig {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  domain       String   @unique
+  brandName    String
+  logoUrl      String?  @db.Text
+  faviconUrl   String?  @db.Text
+  primaryColor String   @default("#059669")
+  supportEmail String?
+  supportPhone String?
+  serverIp     String?  @default("171.50.181.171")
+  sslStatus    String   @default("PENDING")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model WalletTransaction {
@@ -47,6 +67,8 @@ model WalletTransaction {
   amount      Float
   type        String
   description String
+  balanceType String?
+  referenceId String?
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -113,6 +135,7 @@ model BlacklistNumber {
 
 enum Role {
   SUPER_ADMIN
+  WHITE_LABEL_RESELLER
   RESELLER
   USER
 }
@@ -236,12 +259,12 @@ model ChatbotConfig {
   phoneNumberId  String?
   channelNumber  String?
   name           String
-  mode           String        @default("CHAT_FLOW") // "CHAT_FLOW" | "AI_CHATBOT"
-  triggerType    String        @default("KEYWORD")   // "KEYWORD" | "ALL_MESSAGES" | "WELCOME"
+  mode           String        @default("CHAT_FLOW")
+  triggerType    String        @default("KEYWORD")
   keywords       String?
   isActive       Boolean       @default(true)
   isPublished    Boolean       @default(false)
-  aiProvider     String        @default("OPENAI")    // "OPENAI" | "GEMINI"
+  aiProvider     String        @default("OPENAI")
   aiModel        String        @default("gpt-4o-mini")
   aiApiKey       String?
   aiSystemPrompt String?       @db.Text

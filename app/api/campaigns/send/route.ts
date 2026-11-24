@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveCategoryRate } from "@/lib/billingDeduction";
 
 function parseScheduleDateIST(rawDate: string): Date {
   const trimmed = String(rawDate || "").trim();
@@ -34,14 +35,12 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Missing required campaign fields (WABA, Numbers, or Template).",
+          error: "Missing required campaign fields (WABA, Numbers, or Template).",
         },
         { status: 400 }
       );
     }
 
-    // Match WABA Account by wabaId, phoneNumberId, displayPhone, or record id
     const wabaAccount = await prisma.wabaAccount.findFirst({
       where: {
         OR: [
@@ -64,17 +63,14 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "WABA Phone Number ID or Access Token not found in database.",
+          error: "WABA Phone Number ID or Access Token not found in database.",
         },
         { status: 404 }
       );
     }
 
     const ownerUserId = userId || wabaAccount.userId || "admin";
-    const cleanPhoneId = wabaAccount.phoneNumberId
-      .replace("PHONE_", "")
-      .trim();
+    const cleanPhoneId = wabaAccount.phoneNumberId.replace("PHONE_", "").trim();
     const actualWabaId = wabaAccount.wabaId;
     const channelNumber = wabaAccount.displayPhone || actualWabaId;
 
@@ -85,8 +81,21 @@ export async function POST(req: Request) {
       },
     });
 
-    const estimatedCost =
-      dbTemplate?.category === "MARKETING" ? 0.804 : 0.155;
+    const ownerUser = await prisma.user.findUnique({
+      where: { id: ownerUserId },
+      select: {
+        perMsgRate: true,
+        utilityRate: true,
+        serviceRate: true,
+        authRate: true,
+      },
+    });
+
+    const estimatedCost = ownerUser
+      ? resolveCategoryRate(ownerUser, dbTemplate?.category)
+      : dbTemplate?.category === "MARKETING"
+      ? 0.8046
+      : 0.155;
 
     if (isScheduled && scheduleDate) {
       const scheduledAtDate = parseScheduleDateIST(scheduleDate);
@@ -115,7 +124,7 @@ export async function POST(req: Request) {
             recipient: formattedNumber,
             status: "SCHEDULED",
             messageId: null,
-            cost: estimatedCost,
+            cost: 0,
             errorDetails: `Scheduled for ${scheduledAtDate.toISOString()}`,
             sentAt: scheduledAtDate,
             deliveredAt: null,
@@ -130,7 +139,8 @@ export async function POST(req: Request) {
         scheduled: true,
         scheduledCount,
         scheduledFor: scheduledAtDate.toISOString(),
-        message: `Campaign "${campaignName}" scheduled for ${scheduledAtDate.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} (${scheduledCount} recipients).`,
+        estimatedUnitRate: estimatedCost,
+        message: `Campaign "${campaignName}" scheduled for ${scheduledAtDate.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} (${scheduledCount} recipients). Billing applies on delivery.`,
       });
     }
 
@@ -138,12 +148,9 @@ export async function POST(req: Request) {
       ? variables.filter((v) => v !== undefined && v !== null)
       : [];
 
-    const headerType =
-      (dbTemplate as any)?.headerType?.toUpperCase() || "NONE";
+    const headerType = (dbTemplate as any)?.headerType?.toUpperCase() || "NONE";
     const hasMediaHeader =
-      headerType === "IMAGE" ||
-      headerType === "VIDEO" ||
-      headerType === "DOCUMENT";
+      headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT";
 
     let mediaPayloadParam: any = null;
 
@@ -281,7 +288,7 @@ export async function POST(req: Request) {
         });
       }
 
-      // Save Log to Database
+      // Cost stays 0 until DELIVERED report arrives via webhook; FAILED has 0 cost
       try {
         const savedLog = await prisma.campaignLog.create({
           data: {
@@ -292,7 +299,7 @@ export async function POST(req: Request) {
             recipient: formattedNumber,
             status: messageStatus,
             messageId: metaMessageId,
-            cost: estimatedCost,
+            cost: 0,
             errorDetails: errorMsg,
             sentAt: now,
             deliveredAt: null,
@@ -300,7 +307,7 @@ export async function POST(req: Request) {
           },
         });
         console.log(
-          `💾 SUCCESS CREATED LOG -> ID: ${savedLog.id} | Recipient: ${formattedNumber} | Wamid: ${metaMessageId}`
+          `💾 CREATED LOG -> ID: ${savedLog.id} | Recipient: ${formattedNumber} | Status: ${messageStatus} | Wamid: ${metaMessageId}`
         );
       } catch (logErr: any) {
         console.error(
@@ -326,7 +333,7 @@ export async function POST(req: Request) {
       sentCount,
       failedCount,
       errors,
-      message: `Sent: ${sentCount} | Failed: ${failedCount}`,
+      message: `Sent: ${sentCount} | Failed: ${failedCount} (Billed on delivery)`,
     });
   } catch (error: any) {
     console.error("Campaign Send API Error:", error);

@@ -1,50 +1,119 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
+
+interface ClientRow {
+  id: string;
+  clientName: string;
+  phone: string;
+  email: string;
+  role: string;
+  createdById?: string | null;
+  isWhiteLabel?: boolean;
+  customDomain?: string | null;
+  actualBalance: number;
+  virtualBalance: number;
+  createdAt?: string | null;
+  expiryDate?: string | null;
+  status: string;
+}
+
+function formatDateDisplay(val?: string | null, fallback = "N/A"): string {
+  if (!val) return fallback;
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return String(val);
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function isResellerRole(role?: string): boolean {
+  const r = String(role || "").toUpperCase();
+  return r === "RESELLER" || r === "WHITE_LABEL_RESELLER";
+}
 
 export default function ClientListPage() {
-  const [clients, setClients] = useState([]);
+  const [clients, setClients] = useState<ClientRow[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Logged-in admin/user ki details fetch karein (Role aur ID ke liye)
-    fetch("/api/admin/me") // Agar aapki koi aur profile API ho toh uska path yahan de sakte hain
-      .then((res) => res.json())
+    const fallbackRole =
+      localStorage.getItem("userRole") || localStorage.getItem("adminRole") || "SUPER_ADMIN";
+    const fallbackId =
+      localStorage.getItem("userId") || localStorage.getItem("adminId") || "";
+
+    setCurrentUserRole(fallbackRole);
+    setCurrentUserId(fallbackId);
+
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data && data.user) {
-          setCurrentUserId(data.user.id);
-          setCurrentUserRole(data.user.role);
+        if (data?.user) {
+          if (data.user.id) setCurrentUserId(data.user.id);
+          if (data.user.role) setCurrentUserRole(String(data.user.role).toUpperCase());
         }
       })
-      .catch(() => {
-        // Fallback agar localStorage ya session se lena ho
-        const role = localStorage.getItem("userRole") || "SUPER_ADMIN"; 
-        const id = localStorage.getItem("userId") || "";
-        setCurrentUserRole(role);
-        setCurrentUserId(id);
-      });
+      .catch(() => {});
 
-    // 2. Clients / Users ki list fetch karein
     fetch("/api/admin/users")
       .then((res) => res.json())
       .then((data) => {
-        if (data.success) {
-          const formattedClients = data.users.map((u: any) => ({
+        if (data?.success && Array.isArray(data.users)) {
+          const formattedClients: ClientRow[] = data.users.map((u: any) => ({
             id: u.id,
-            clientName: u.name,
+            clientName: u.name || u.username || "User",
             phone: u.phone || "N/A",
-            email: u.email,
-            role: u.role || "USER",
+            email: u.email || "N/A",
+            role: String(u.role || "USER").toUpperCase(),
+            createdById: u.createdById || null,
+            isWhiteLabel: Boolean(u.isWhiteLabel),
+            customDomain: u.whiteLabelConfig?.domain || null,
+            actualBalance: Number(u.actualBalance ?? 0),
+            virtualBalance: Number(u.virtualBalance ?? 0),
+            createdAt: u.createdAt || null,
+            expiryDate: u.expiryDate || null,
             status: "Active",
           }));
           setClients(formattedClients);
         }
       })
-      .catch((err) => console.error("Error fetching users:", err));
+      .catch((err) => console.error("Error fetching users:", err))
+      .finally(() => setLoading(false));
   }, []);
 
-  // 3. Delete User Handler Function
+  const visibleClients = useMemo(() => {
+    const normalizedRole = String(currentUserRole || "").toUpperCase();
+    return clients.filter((c) => {
+      if (isResellerRole(normalizedRole) && currentUserId) {
+        const isOwned = c.createdById === currentUserId || c.id === currentUserId;
+        if (!isOwned) return false;
+      }
+
+      if (roleFilter !== "ALL" && c.role !== roleFilter) {
+        return false;
+      }
+
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase().trim();
+        const match =
+          c.clientName.toLowerCase().includes(q) ||
+          c.email.toLowerCase().includes(q) ||
+          c.phone.toLowerCase().includes(q) ||
+          (c.customDomain && c.customDomain.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+
+      return true;
+    });
+  }, [clients, currentUserRole, currentUserId, roleFilter, searchTerm]);
+
   const handleDeleteUser = async (userId: string) => {
     if (!confirm("Kya aap sach mein is account ko permanently delete karna chahte hain?")) return;
 
@@ -53,18 +122,17 @@ export default function ClientListPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: userId,
-          requesterId: currentUserId, // Delete karne wale ki ID verification ke liye
+          userId,
+          requesterId: currentUserId,
         }),
       });
 
       const data = await res.json();
-      if (res.ok) {
-        alert(data.message);
-        // List se turant hata dein
-        setClients(clients.filter((c: any) => c.id !== userId));
+      if (res.ok && data.success !== false) {
+        alert(data.message || "User deleted successfully.");
+        setClients((prev) => prev.filter((c) => c.id !== userId));
       } else {
-        alert(data.error || "Aapke paas delete karne ki permission nahi hai.");
+        alert(data.error || data.message || "Aapke paas delete karne ki permission nahi hai.");
       }
     } catch (err) {
       console.error("Delete request failed:", err);
@@ -72,65 +140,144 @@ export default function ClientListPage() {
     }
   };
 
+  const canDelete =
+    currentUserRole === "SUPER_ADMIN" || currentUserRole === "ADMIN";
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-4 text-xs">
-      <div className="bg-white p-4 rounded-xl border shadow-sm flex justify-between items-center">
-        <h1 className="text-xl font-bold text-gray-800">Client List Management</h1>
-        <a
+    <div className="space-y-6 max-w-7xl mx-auto p-4 text-xs font-sans">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-wrap justify-between items-center gap-3">
+        <div>
+          <div className="text-[11px] text-slate-400 font-medium">
+            Admin Home › Client List
+          </div>
+          <h1 className="text-xl font-bold text-slate-900 mt-0.5">
+            Client List Management
+          </h1>
+        </div>
+        <Link
           href="/admin"
-          className="border px-3.5 py-1.5 rounded-xl font-bold text-gray-600 hover:bg-gray-50 shadow-sm bg-white"
+          className="border border-slate-200 px-3.5 py-2 rounded-xl font-bold text-slate-700 hover:bg-slate-50 shadow-2xs bg-white transition"
         >
           ⬅ Back to Admin Hub
-        </a>
+        </Link>
       </div>
 
-      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-        <div className="p-3 bg-gray-50 border-b font-bold text-gray-600">
-          🎛️ Filter Records
-        </div>
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50 text-gray-500 uppercase border-b font-bold text-[10px]">
-              <th className="p-3.5">USER NAME</th>
-              <th className="p-3.5">MOBILE NUMBER</th>
-              <th className="p-3.5">EMAIL ID</th>
-              <th className="p-3.5">ROLE</th>
-              <th className="p-3.5">IS ACTIVE</th>
-              <th className="p-3.5">REGISTRATION DATE</th>
-              <th className="p-3.5">EXPIRY DATE</th>
-              <th className="p-3.5 text-center">ACTION</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {clients.map((c: any) => (
-              <tr key={c.id} className="hover:bg-gray-50">
-                <td className="p-3.5 font-bold">{c.clientName}</td>
-                <td className="p-3.5 font-mono">+{c.phone}</td>
-                <td className="p-3.5">{c.email}</td>
-                <td className="p-3.5 font-semibold text-blue-600">{c.role}</td>
-                <td className="p-3.5">
-                  <span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">
-                    ✔
-                  </span>
-                </td>
-                <td className="p-3.5 font-mono">10-Oct-2026</td>
-                <td className="p-3.5 font-mono">30-Oct-2026</td>
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+        <div className="p-3.5 bg-slate-50 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
+          <div className="font-bold text-slate-700 flex items-center gap-1.5">
+            <span>🎛️</span>
+            <span>Filter Records ({visibleClients.length})</span>
+          </div>
 
-                {/* 4. SIRF SUPER_ADMIN / ADMIN KE LIYE DELETE BUTTON DIKHEGA */}
-                <td className="p-3.5 text-center">
-                  {(currentUserRole === "SUPER_ADMIN" || currentUserRole === "ADMIN") && (
-                    <button
-                      onClick={() => handleDeleteUser(c.id)}
-                      className="bg-red-500 hover:bg-red-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition shadow-xs cursor-pointer"
-                    >
-                      Delete
-                    </button>
-                  )}
-                </td>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search name, email, phone, domain..."
+              className="border border-slate-300 rounded-xl px-3 py-1.5 bg-white text-xs focus:outline-none focus:border-emerald-500 min-w-[220px]"
+            />
+
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="border border-slate-300 rounded-xl px-3 py-1.5 bg-white text-xs font-semibold text-slate-700"
+            >
+              <option value="ALL">All Roles</option>
+              <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+              <option value="WHITE_LABEL_RESELLER">WHITE_LABEL_RESELLER</option>
+              <option value="RESELLER">RESELLER</option>
+              <option value="USER">USER</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 text-slate-500 uppercase border-b border-slate-200/80 font-bold text-[10px]">
+                <th className="p-3.5">USER NAME</th>
+                <th className="p-3.5">MOBILE NUMBER</th>
+                <th className="p-3.5">EMAIL ID</th>
+                <th className="p-3.5">ROLE</th>
+                <th className="p-3.5">BALANCES (ACTUAL / VIRTUAL)</th>
+                <th className="p-3.5">IS ACTIVE</th>
+                <th className="p-3.5">REGISTRATION DATE</th>
+                <th className="p-3.5">EXPIRY DATE</th>
+                <th className="p-3.5 text-center">ACTION</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={9} className="p-8 text-center text-slate-400">
+                    Loading clients...
+                  </td>
+                </tr>
+              ) : visibleClients.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="p-8 text-center text-slate-400">
+                    No matching clients found.
+                  </td>
+                </tr>
+              ) : (
+                visibleClients.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50/80 transition">
+                    <td className="p-3.5">
+                      <div className="font-bold text-slate-800">{c.clientName}</div>
+                      {c.customDomain && (
+                        <div className="text-[10px] font-mono text-indigo-600">
+                          {c.customDomain}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-3.5 font-mono text-slate-700">
+                      {c.phone !== "N/A" ? `+${c.phone.replace(/^\+/, "")}` : "N/A"}
+                    </td>
+                    <td className="p-3.5 text-slate-600">{c.email}</td>
+                    <td className="p-3.5">
+                      <span className="font-bold text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                        {c.role}
+                      </span>
+                    </td>
+                    <td className="p-3.5 font-mono text-[11px] leading-relaxed">
+                      <div className="text-emerald-700 font-semibold">
+                        A: ₹{c.actualBalance.toFixed(2)}
+                      </div>
+                      <div className="text-sky-700 font-semibold">
+                        V: ₹{c.virtualBalance.toFixed(2)}
+                      </div>
+                    </td>
+                    <td className="p-3.5">
+                      <span className="text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                        ✔
+                      </span>
+                    </td>
+                    <td className="p-3.5 font-mono text-slate-500">
+                      {formatDateDisplay(c.createdAt)}
+                    </td>
+                    <td className="p-3.5 font-mono text-slate-500">
+                      {formatDateDisplay(c.expiryDate)}
+                    </td>
+                    <td className="p-3.5 text-center">
+                      {canDelete ? (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteUser(c.id)}
+                          className="bg-rose-500 hover:bg-rose-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

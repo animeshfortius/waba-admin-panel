@@ -148,6 +148,7 @@ function CampaignsContent() {
   // Header Media State
   const [headerMediaUrl, setHeaderMediaUrl] = useState("");
   const [overrideFileName, setOverrideFileName] = useState("");
+  const [uploadingHeaderMedia, setUploadingHeaderMedia] = useState(false);
 
   // Dynamic Variable Mapping States
   const [variableMappings, setVariableMappings] = useState<{
@@ -182,9 +183,13 @@ function CampaignsContent() {
     });
   }, [allTemplates, wabaAccounts, selectedChannel, selectedCategory]);
 
+  // Default media auto-fetched whenever activeTemplate changes
   useEffect(() => {
     if (activeTemplate) {
       setHeaderMediaUrl(activeTemplate.headerMediaUrl || "");
+      setOverrideFileName("");
+    } else {
+      setHeaderMediaUrl("");
       setOverrideFileName("");
     }
   }, [activeTemplate]);
@@ -503,6 +508,42 @@ function CampaignsContent() {
 
     setPendingFileData(null);
     setShowUploadModal(false);
+  };
+
+  // Change / Override Header Media Handler (keeps default or previous media if upload fails)
+  const handleHeaderMediaChange = async (file: File) => {
+    const previousMedia = headerMediaUrl || activeTemplate?.headerMediaUrl || "";
+    const previousFileName = overrideFileName;
+
+    setUploadingHeaderMedia(true);
+    setOverrideFileName(file.name);
+
+    try {
+      const uploadData = new FormData();
+      uploadData.append("file", file);
+      uploadData.append("wabaId", selectedChannel);
+
+      const res = await fetch("/api/media/upload", {
+        method: "POST",
+        body: uploadData,
+      });
+      const data = await res.json();
+
+      if (data.success && data.mediaId) {
+        setHeaderMediaUrl(data.mediaId);
+      } else {
+        setOverrideFileName(previousFileName);
+        setHeaderMediaUrl(previousMedia);
+        alert(`Failed to upload media: ${data.error}`);
+      }
+    } catch (err) {
+      console.error("File upload error:", err);
+      setOverrideFileName(previousFileName);
+      setHeaderMediaUrl(previousMedia);
+      alert("Network error uploading media file.");
+    } finally {
+      setUploadingHeaderMedia(false);
+    }
   };
 
   // Working Remove Duplicates & Remove BlackList
@@ -902,36 +943,40 @@ function CampaignsContent() {
                   <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3">
                     <div className="flex justify-between items-center">
                       <label className="font-bold text-blue-900 text-xs">
-                        HEADER {activeTemplate.headerType} (Auto-Attached from Template)
+                        HEADER {activeTemplate.headerType} (Default Auto-Fetched & Changeable)
                       </label>
                       <span className="text-[10px] bg-blue-200 text-blue-800 px-2 py-0.5 rounded font-mono">
-                        {overrideFileName ? "File Replaced" : "Default Saved"}
+                        {uploadingHeaderMedia
+                          ? "Uploading..."
+                          : overrideFileName
+                          ? "Custom File Active"
+                          : "Default Media Active"}
                       </span>
                     </div>
 
-                    <div className="bg-white p-2.5 rounded-xl border flex items-center justify-between text-xs font-mono">
+                    <div className="bg-white p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs font-mono">
                       <span className="truncate text-gray-700">
-                        {overrideFileName ? `Replaced With: ${overrideFileName}` : headerMediaUrl || "No media attached"}
+                        {overrideFileName
+                          ? `Changed To: ${overrideFileName} (${headerMediaUrl || "Pending"})`
+                          : `Default Media: ${headerMediaUrl || activeTemplate.headerMediaUrl || "Auto-attached from Template"}`}
                       </span>
                       {overrideFileName && (
                         <button
                           type="button"
                           onClick={() => {
                             setOverrideFileName("");
-                            if (activeTemplate?.headerMediaUrl) {
-                              setHeaderMediaUrl(activeTemplate.headerMediaUrl);
-                            }
+                            setHeaderMediaUrl(activeTemplate.headerMediaUrl || "");
                           }}
-                          className="text-red-600 font-bold text-[10px] hover:underline ml-2 cursor-pointer"
+                          className="text-red-600 font-bold text-[10px] hover:underline ml-2 shrink-0 cursor-pointer"
                         >
                           Reset to Default
                         </button>
                       )}
                     </div>
 
-                    <div className="pt-1">
-                      <label className="block font-semibold text-gray-600 text-[11px] mb-1">
-                        Replace File / Choose a different {activeTemplate.headerType.toLowerCase()} for this campaign:
+                    <div className="pt-1 space-y-1.5">
+                      <label className="block font-semibold text-gray-700 text-[11px]">
+                        Change {activeTemplate.headerType.toLowerCase()} (Choose new file anytime to override default):
                       </label>
                       <input
                         type="file"
@@ -942,30 +987,10 @@ function CampaignsContent() {
                             ? "video/*"
                             : ".pdf,.doc,.docx"
                         }
-                        onChange={async (e) => {
+                        onChange={(e) => {
                           if (e.target.files && e.target.files[0]) {
-                            const file = e.target.files[0];
-                            setOverrideFileName(file.name);
-
-                            const uploadData = new FormData();
-                            uploadData.append("file", file);
-                            uploadData.append("wabaId", selectedChannel);
-
-                            try {
-                              const res = await fetch("/api/media/upload", {
-                                method: "POST",
-                                body: uploadData,
-                              });
-                              const data = await res.json();
-                              if (data.success && data.mediaId) {
-                                setHeaderMediaUrl(data.mediaId);
-                              } else {
-                                alert(`Failed to upload media: ${data.error}`);
-                              }
-                            } catch (err) {
-                              console.error("File upload error:", err);
-                              alert("Network error uploading media file.");
-                            }
+                            handleHeaderMediaChange(e.target.files[0]);
+                            e.target.value = "";
                           }
                         }}
                         className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"

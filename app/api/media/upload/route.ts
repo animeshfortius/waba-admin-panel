@@ -14,20 +14,45 @@ export async function POST(req: Request) {
       );
     }
 
-    const wabaId =
+    const channelParam =
       typeof rawWabaId === "string" && rawWabaId.trim().length > 0
         ? rawWabaId.trim()
-        : undefined;
+        : "";
+    const cleanChannel = channelParam.replace(/^PHONE_/i, "").replace(/^\+/, "").trim();
 
-    const wabaAccount = await prisma.wabaAccount.findFirst({
-      where: wabaId ? { wabaId } : {},
-    });
+    const accounts = await prisma.wabaAccount.findMany();
 
-    if (
-      !wabaAccount ||
-      !wabaAccount.accessToken ||
-      !wabaAccount.phoneNumberId
-    ) {
+    const wabaAccount =
+      accounts.find((acc: any) => {
+        const accId = String(acc.id || "").trim();
+        const accWaba = String(acc.wabaId || "").trim();
+        const accPhoneId = String(acc.phoneNumberId || "").replace(/^PHONE_/i, "").trim();
+        const accPhone = String(acc.displayPhone || "").replace(/^\+/, "").trim();
+
+        return (
+          (channelParam &&
+            (accId === channelParam ||
+              accWaba === channelParam ||
+              String(acc.phoneNumberId || "").trim() === channelParam)) ||
+          (cleanChannel &&
+            (accId === cleanChannel ||
+              accWaba === cleanChannel ||
+              accPhoneId === cleanChannel ||
+              accPhone === cleanChannel))
+        );
+      }) ||
+      accounts.find((acc: any) => acc.isDefault) ||
+      accounts[0] ||
+      null;
+
+    const cleanPhoneId = String(wabaAccount?.phoneNumberId || "")
+      .replace(/^PHONE_/i, "")
+      .trim();
+    const accessToken = String(
+      wabaAccount?.accessToken || process.env.META_ACCESS_TOKEN || ""
+    ).trim();
+
+    if (!cleanPhoneId || !accessToken) {
       return NextResponse.json(
         {
           success: false,
@@ -36,9 +61,6 @@ export async function POST(req: Request) {
         { status: 404 }
       );
     }
-
-    const cleanPhoneId = wabaAccount.phoneNumberId.replace("PHONE_", "").trim();
-    const accessToken = wabaAccount.accessToken.trim();
 
     const fileBuffer = Buffer.from(await rawFile.arrayBuffer());
     const blob = new Blob([fileBuffer], {

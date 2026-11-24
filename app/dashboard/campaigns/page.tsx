@@ -146,8 +146,9 @@ function CampaignsContent() {
     "0000000000",
   ]);
 
-  // Warning Toast State
+  // Warning Toast & Modal State
   const [warningMessage, setWarningMessage] = useState("");
+  const [showDynamicNotAllowedModal, setShowDynamicNotAllowedModal] = useState(false);
 
   // Group Contacts Modal State
   const [showGroupsModal, setShowGroupsModal] = useState(false);
@@ -159,6 +160,7 @@ function CampaignsContent() {
   // File Upload Modal State
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadType, setUploadType] = useState("Single Number Column");
+  const [uploadedUploadType, setUploadedUploadType] = useState<string>("");
   const [uploadedFileName, setUploadedFileName] = useState("");
   const [uploadedColumns, setUploadedColumns] = useState<string[]>([]);
   const [uploadedRows, setUploadedRows] = useState<Record<string, string>[]>([]);
@@ -541,6 +543,7 @@ function CampaignsContent() {
 
   const handleProceedUploadedFile = () => {
     if (!pendingFileData) return;
+    setUploadedUploadType(uploadType);
     setUploadedFileName(pendingFileData.fileName);
     setUploadedColumns(pendingFileData.columns);
     setUploadedRows(pendingFileData.rowObjects);
@@ -564,6 +567,7 @@ function CampaignsContent() {
   const handleResetAudienceInput = () => {
     setNumbersInput("");
     setFileProcessed(false);
+    setUploadedUploadType("");
     setUploadedFileName("");
     setUploadedColumns([]);
     setUploadedRows([]);
@@ -1100,22 +1104,41 @@ function CampaignsContent() {
                           </div>
                           <select
                             value={currentType}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const nextType = e.target.value;
+                              if (
+                                nextType === "Map Column Value" &&
+                                (uploadedUploadType !== "Multiple Data Columns" ||
+                                  uploadedColumns.length === 0)
+                              ) {
+                                setVariableMappings((prev) => ({
+                                  ...prev,
+                                  [variableKey]: {
+                                    type: "Assign Const Value",
+                                    value: "",
+                                  },
+                                }));
+                                setShowDynamicNotAllowedModal(true);
+                                return;
+                              }
+
                               setVariableMappings((prev) => ({
                                 ...prev,
                                 [variableKey]: {
-                                  type: e.target.value,
+                                  type: nextType,
                                   value: "",
                                 },
-                              }))
-                            }
+                              }));
+                            }}
                             className="border rounded-xl p-2 bg-white text-xs font-semibold focus:outline-none"
                           >
                             <option value="Assign Const Value">Assign Const Value</option>
                             <option value="Map Column Value">Map Column Value</option>
                           </select>
 
-                          {currentType === "Map Column Value" && uploadedColumns.length > 0 ? (
+                          {currentType === "Map Column Value" &&
+                          uploadedUploadType === "Multiple Data Columns" &&
+                          uploadedColumns.length > 0 ? (
                             <select
                               value={variableMappings[variableKey]?.value || ""}
                               onChange={(e) =>
@@ -1139,17 +1162,13 @@ function CampaignsContent() {
                           ) : (
                             <input
                               type="text"
-                              placeholder={
-                                currentType === "Assign Const Value"
-                                  ? `Enter value for ${variableKey}...`
-                                  : `Enter column name...`
-                              }
+                              placeholder={`Enter value for ${variableKey}...`}
                               value={variableMappings[variableKey]?.value || ""}
                               onChange={(e) =>
                                 setVariableMappings((prev) => ({
                                   ...prev,
                                   [variableKey]: {
-                                    type: currentType,
+                                    type: "Assign Const Value",
                                     value: e.target.value,
                                   },
                                 }))
@@ -1293,6 +1312,30 @@ function CampaignsContent() {
           </div>
         </div>
       </div>
+
+      {/* Dynamic Input Not Allowed Modal */}
+      {showDynamicNotAllowedModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white p-6 rounded-2xl shadow-2xl max-w-sm w-full text-center space-y-4">
+            <div className="w-11 h-11 rounded-full border-2 border-amber-400 text-amber-500 flex items-center justify-center mx-auto text-xl font-bold">
+              !
+            </div>
+            <h3 className="text-base font-bold text-gray-800">Dynamic input not allowed</h3>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Upload a file with valid columns and select &ldquo;Multiple Data Columns&rdquo; option.
+            </p>
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowDynamicNotAllowedModal(false)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2 rounded-lg text-xs cursor-pointer"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Group Contacts Modal */}
       {showGroupsModal && (

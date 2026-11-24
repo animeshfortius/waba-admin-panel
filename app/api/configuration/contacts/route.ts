@@ -77,6 +77,35 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { id, number, profileName, contactName, email } = body;
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: "Contact ID required" }, { status: 400 });
+    }
+
+    if (!number || !String(number).trim()) {
+      return NextResponse.json({ success: false, error: "Mobile number is required" }, { status: 400 });
+    }
+
+    const contact = await prisma.whatsAppContact.update({
+      where: { id },
+      data: {
+        number: String(number).trim(),
+        profileName: profileName ?? "",
+        contactName: contactName ?? "",
+        email: email ?? "",
+      },
+    });
+
+    return NextResponse.json({ success: true, contact });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);

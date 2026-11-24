@@ -162,6 +162,13 @@ function ConfigContent() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showUploadContactModal, setShowUploadContactModal] = useState(false);
   const [contactData, setContactData] = useState({ name: "", number: "", email: "", contactName: "", profileName: "" });
+  const [editContactObj, setEditContactObj] = useState<any>(null);
+  const [editContactForm, setEditContactForm] = useState({
+    number: "",
+    profileName: "",
+    contactName: "",
+    email: "",
+  });
 
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
@@ -343,6 +350,73 @@ function ConfigContent() {
       alert("❌ Network error while importing group members.");
     } finally {
       setIsImportingGroupFile(false);
+    }
+  };
+
+  const handleExportContacts = () => {
+    const headers = ["Mobile Number", "Profile Name", "Contact Name", "Email"];
+    const lines = [
+      headers.join(","),
+      ...contacts.map((c: any) =>
+        [
+          `"${String(c.number || "").replace(/"/g, '""')}"`,
+          `"${String(c.profileName || "").replace(/"/g, '""')}"`,
+          `"${String(c.contactName || "").replace(/"/g, '""')}"`,
+          `"${String(c.email || "").replace(/"/g, '""')}"`,
+        ].join(",")
+      ),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "whatsapp_contacts.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleOpenEditContact = (contact: any) => {
+    setEditContactObj(contact);
+    setEditContactForm({
+      number: contact.number || "",
+      profileName: contact.profileName || "",
+      contactName: contact.contactName || "",
+      email: contact.email || "",
+    });
+  };
+
+  const handleSaveEditedContact = async () => {
+    if (!editContactObj) return;
+    const normalized = normalizePhoneNumber(editContactForm.number) || editContactForm.number.trim();
+    if (!normalized) {
+      alert("Mobile number is required!");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/configuration/contacts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editContactObj.id,
+          number: normalized,
+          profileName: editContactForm.profileName.trim(),
+          contactName: editContactForm.contactName.trim(),
+          email: editContactForm.email.trim(),
+        }),
+      });
+      if (res.ok) {
+        alert("✅ Contact updated successfully!");
+        setEditContactObj(null);
+        fetchAllData();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert("❌ Failed to update contact: " + (errData.error || "Unknown error"));
+      }
+    } catch {
+      alert("❌ Network error while updating contact.");
     }
   };
 
@@ -535,46 +609,76 @@ function ConfigContent() {
   const handleFileUploadHelper = async (e: React.ChangeEvent<HTMLInputElement>, endpoint: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      const lines = text.split("\n");
-      const records = lines
-        .slice(1)
-        .map((line) => {
-          const parts = line.split(",");
-          if (parts[0] && parts[0].trim()) {
-            return endpoint === "contacts"
-              ? { number: parts[0].trim(), profileName: parts[1]?.trim() || "", email: parts[2]?.trim() || "", contactName: parts[3]?.trim() || "" }
-              : { number: parts[0].trim() };
+
+    try {
+      const lowerName = file.name.toLowerCase();
+      let rows: any[][] = [];
+
+      if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as any[][];
+      } else {
+        const text = await file.text();
+        const workbook = XLSX.read(text, { type: "string" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as any[][];
+      }
+
+      const nonEmptyRows = rows.filter(
+        (r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== "")
+      );
+      if (nonEmptyRows.length === 0) {
+        alert("No valid records found in file.");
+        return;
+      }
+
+      const firstRow = nonEmptyRows[0].map((c) => String(c ?? "").trim());
+      const hasHeader = firstRow.some((cell) =>
+        /(phone|mobile|number|contact|profile|email|name)/i.test(cell)
+      );
+      const dataRows = hasHeader ? nonEmptyRows.slice(1) : nonEmptyRows;
+
+      const records = dataRows
+        .map((parts) => {
+          const rawNum = String(parts[0] ?? "").trim();
+          const num = normalizePhoneNumber(rawNum) || rawNum;
+          if (!num) return null;
+          if (endpoint === "contacts") {
+            return {
+              number: num,
+              profileName: String(parts[1] ?? "").trim(),
+              contactName: String(parts[2] ?? "").trim(),
+              email: String(parts[3] ?? "").trim(),
+            };
           }
-          return null;
+          return { number: num };
         })
         .filter(Boolean);
 
-      if (records.length > 0) {
-        try {
-          const res = await fetch(`/api/configuration/${endpoint}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(records),
-          });
-          if (res.ok) {
-            alert(`Successfully imported ${records.length} records!`);
-            fetchAllData();
-            setShowUploadContactModal(false);
-            setShowBlacklistExcelModal(false);
-          } else {
-            alert("Import failed.");
-          }
-        } catch {
-          alert("Error sending file data.");
-        }
-      } else {
+      if (records.length === 0) {
         alert("No valid records found in file.");
+        return;
       }
-    };
-    reader.readAsText(file);
+
+      const res = await fetch(`/api/configuration/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(records),
+      });
+
+      if (res.ok) {
+        alert(`Successfully imported ${records.length} records!`);
+        fetchAllData();
+        setShowUploadContactModal(false);
+        setShowBlacklistExcelModal(false);
+      } else {
+        alert("Import failed.");
+      }
+    } catch {
+      alert("Error reading or sending file data.");
+    }
   };
 
   return (
@@ -887,14 +991,15 @@ function ConfigContent() {
       {/* WHATSAPP CONTACTS TAB */}
       {activeSection === "contacts" && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white p-5 rounded-2xl border shadow-sm">
+          <div className="flex justify-between items-center bg-white p-5 rounded-2xl border shadow-sm flex-wrap gap-3">
             <div>
               <h2 className="text-base font-bold text-gray-800">WhatsApp Contacts</h2>
-              <p className="text-[11px] text-gray-400">Manage individual contacts, add records, or bulk upload via CSV.</p>
+              <p className="text-[11px] text-gray-400">Add, import (XLS / CSV), export, edit, and delete contacts.</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button onClick={() => setShowContactModal(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl shadow cursor-pointer transition">+ Add Contact</button>
-              <button onClick={() => setShowUploadContactModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow cursor-pointer transition">📤 Upload Contacts (File)</button>
+              <button onClick={() => setShowUploadContactModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow cursor-pointer transition">📥 Import (XLS / CSV)</button>
+              <button onClick={handleExportContacts} className="bg-slate-700 hover:bg-slate-800 text-white font-bold px-4 py-2.5 rounded-xl shadow cursor-pointer transition">📤 Export</button>
             </div>
           </div>
 
@@ -911,7 +1016,7 @@ function ConfigContent() {
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs">
                 {contacts.length === 0 ? (
-                  <tr><td colSpan={5} className="p-10 text-center text-gray-400">No contacts found. Add manually or upload a CSV file.</td></tr>
+                  <tr><td colSpan={5} className="p-10 text-center text-gray-400">No contacts found. Add manually or upload an XLS / CSV file.</td></tr>
                 ) : (
                   contacts.map((c: any) => (
                     <tr key={c.id} className="hover:bg-slate-50">
@@ -919,12 +1024,25 @@ function ConfigContent() {
                       <td className="p-4">{c.profileName || "-"}</td>
                       <td className="p-4">{c.contactName || "-"}</td>
                       <td className="p-4 text-gray-500">{c.email || "-"}</td>
-                      <td className="p-4 text-right">
-                        <button onClick={async () => {
-                          if (!confirm("Delete this contact?")) return;
-                          await fetch(`/api/configuration/contacts?id=${c.id}`, { method: "DELETE" });
-                          fetchAllData();
-                        }} className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold">🗑️ Delete</button>
+                      <td className="p-4 text-right space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditContact(c)}
+                          className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg font-bold cursor-pointer"
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm("Delete this contact?")) return;
+                            await fetch(`/api/configuration/contacts?id=${c.id}`, { method: "DELETE" });
+                            fetchAllData();
+                          }}
+                          className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold cursor-pointer"
+                        >
+                          🗑️ Delete
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -1062,6 +1180,60 @@ function ConfigContent() {
 
       {/* --- ALL MODALS & POPUPS --- */}
 
+      {/* EDIT CONTACT MODAL */}
+      {editContactObj && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 font-sans text-xs">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-gray-800 text-sm">Edit WhatsApp Contact</h3>
+              <button onClick={() => setEditContactObj(null)} className="text-gray-400 font-bold cursor-pointer">✕</button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block font-bold text-gray-700 text-xs mb-1">Mobile Number *</label>
+                <input
+                  type="text"
+                  value={editContactForm.number}
+                  onChange={(e) => setEditContactForm({ ...editContactForm, number: e.target.value })}
+                  className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs font-mono font-bold"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 text-xs mb-1">Profile Name</label>
+                <input
+                  type="text"
+                  value={editContactForm.profileName}
+                  onChange={(e) => setEditContactForm({ ...editContactForm, profileName: e.target.value })}
+                  className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 text-xs mb-1">Contact Name</label>
+                <input
+                  type="text"
+                  value={editContactForm.contactName}
+                  onChange={(e) => setEditContactForm({ ...editContactForm, contactName: e.target.value })}
+                  className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 text-xs mb-1">Email Address</label>
+                <input
+                  type="email"
+                  value={editContactForm.email}
+                  onChange={(e) => setEditContactForm({ ...editContactForm, email: e.target.value })}
+                  className="w-full border rounded-xl p-2.5 bg-gray-50 text-xs"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button type="button" onClick={() => setEditContactObj(null)} className="px-4 py-2 border rounded-xl font-bold cursor-pointer">Cancel</button>
+              <button type="button" onClick={handleSaveEditedContact} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-bold cursor-pointer">Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* GROUP IMPORT MODAL (2 OPTIONS: SINGLE NUMBER COLUMN vs MULTIPLE COLUMNS NUMBER & NAME) */}
       {importGroupObj && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 font-sans text-xs">
@@ -1135,7 +1307,7 @@ function ConfigContent() {
               <div className="border-2 border-dashed border-gray-300 rounded-2xl p-5 text-center bg-gray-50 hover:bg-gray-100 transition cursor-pointer relative">
                 <input
                   type="file"
-                  accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                  accept=".csv, .xls, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
                       handleGroupImportFileSelect(e.target.files[0]);
@@ -1441,16 +1613,24 @@ function ConfigContent() {
         </div>
       )}
 
-      {/* UPLOAD CONTACTS CSV MODAL */}
+      {/* UPLOAD CONTACTS XLS / CSV MODAL */}
       {showUploadContactModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-gray-800 text-sm">Upload Contacts CSV</h3>
+              <h3 className="font-bold text-gray-800 text-sm">Upload Contacts (XLS / CSV)</h3>
               <button onClick={() => setShowUploadContactModal(false)} className="text-gray-400 font-bold cursor-pointer">✕</button>
             </div>
-            <p className="text-[11px] text-gray-500">CSV format requirement: Header row (`Mobile Number,Profile Name,Email,Contact Name`) followed by data rows.</p>
-            <input type="file" accept=".csv" onChange={(e) => handleFileUploadHelper(e, "contacts")} className="w-full text-xs text-gray-500 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white cursor-pointer" />
+            <p className="text-[11px] text-gray-500">Supported formats: <span className="font-mono font-bold">.xls</span>, <span className="font-mono font-bold">.xlsx</span>, <span className="font-mono font-bold">.csv</span>. Columns: Mobile Number, Profile Name, Contact Name, Email.</p>
+            <input
+              type="file"
+              accept=".csv, .xls, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+              onChange={(e) => {
+                handleFileUploadHelper(e, "contacts");
+                e.target.value = "";
+              }}
+              className="w-full text-xs text-gray-500 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white cursor-pointer"
+            />
             <div className="flex justify-end pt-3 border-t">
               <button onClick={() => setShowUploadContactModal(false)} className="px-4 py-2 border rounded-xl font-bold cursor-pointer">Cancel</button>
             </div>
@@ -1566,11 +1746,19 @@ function ConfigContent() {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-gray-800 text-sm">Upload Blacklist Numbers (CSV)</h3>
+              <h3 className="font-bold text-gray-800 text-sm">Upload Blacklist Numbers (XLS / CSV)</h3>
               <button onClick={() => setShowBlacklistExcelModal(false)} className="text-gray-400 font-bold cursor-pointer">✕</button>
             </div>
-            <p className="text-[11px] text-gray-500">CSV format requirement: Header row (`Mobile Number`) followed by numbers column.</p>
-            <input type="file" accept=".csv" onChange={(e) => handleFileUploadHelper(e, "blacklist")} className="w-full text-xs text-gray-500 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white cursor-pointer" />
+            <p className="text-[11px] text-gray-500">Supports .xls, .xlsx, and .csv files with mobile numbers column.</p>
+            <input
+              type="file"
+              accept=".csv, .xls, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+              onChange={(e) => {
+                handleFileUploadHelper(e, "blacklist");
+                e.target.value = "";
+              }}
+              className="w-full text-xs text-gray-500 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white cursor-pointer"
+            />
             <div className="flex justify-end pt-3 border-t">
               <button onClick={() => setShowBlacklistExcelModal(false)} className="px-4 py-2 border rounded-xl font-bold cursor-pointer">Cancel</button>
             </div>

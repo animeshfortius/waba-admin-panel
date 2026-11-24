@@ -8,7 +8,7 @@ async function generateAiReply(params: {
   systemPrompt?: string | null;
   userMessage: string;
 }) {
-  const key = params.apiKey || process.env.OPENAI_API_KEY || "";
+  const key = params.apiKey || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || "";
   if (!key) {
     return "AI Chatbot is enabled, please configure an API key in Chatbot Builder.";
   }
@@ -73,7 +73,7 @@ export async function processAutomationWebhook(params: {
 
   const cleanMsg = (params.incomingText || "").trim().toLowerCase();
 
-  let session = await prisma.chatSessionState.findUnique({
+  const session = await prisma.automationSessionState.findUnique({
     where: {
       phoneNumberId_customerPhone: {
         phoneNumberId: params.phoneNumberId,
@@ -160,9 +160,13 @@ export async function processAutomationWebhook(params: {
       type: "interactive",
       interactive: {
         type: "button",
-        ...(currentNode.headerText ? { header: { type: "text", text: currentNode.headerText } } : {}),
+        ...(currentNode.headerText
+          ? { header: { type: "text", text: currentNode.headerText } }
+          : {}),
         body: { text: currentNode.bodyText },
-        ...(currentNode.footerText ? { footer: { text: currentNode.footerText } } : {}),
+        ...(currentNode.footerText
+          ? { footer: { text: currentNode.footerText } }
+          : {}),
         action: {
           buttons: parsedOptions.slice(0, 3).map((opt: any, i: number) => ({
             type: "reply",
@@ -179,9 +183,13 @@ export async function processAutomationWebhook(params: {
       type: "interactive",
       interactive: {
         type: "list",
-        ...(currentNode.headerText ? { header: { type: "text", text: currentNode.headerText } } : {}),
+        ...(currentNode.headerText
+          ? { header: { type: "text", text: currentNode.headerText } }
+          : {}),
         body: { text: currentNode.bodyText },
-        ...(currentNode.footerText ? { footer: { text: currentNode.footerText } } : {}),
+        ...(currentNode.footerText
+          ? { footer: { text: currentNode.footerText } }
+          : {}),
         action: {
           button: "Select Option",
           sections: [
@@ -190,7 +198,9 @@ export async function processAutomationWebhook(params: {
               rows: parsedOptions.slice(0, 10).map((opt: any, i: number) => ({
                 id: opt.id || opt.key || `row_${i + 1}`,
                 title: String(opt.label || opt.title || `Option ${i + 1}`).slice(0, 24),
-                description: opt.description ? String(opt.description).slice(0, 72) : undefined,
+                description: opt.description
+                  ? String(opt.description).slice(0, 72)
+                  : undefined,
               })),
             },
           ],
@@ -202,9 +212,13 @@ export async function processAutomationWebhook(params: {
       type: "interactive",
       interactive: {
         type: "flow",
-        ...(currentNode.headerText ? { header: { type: "text", text: currentNode.headerText } } : {}),
+        ...(currentNode.headerText
+          ? { header: { type: "text", text: currentNode.headerText } }
+          : {}),
         body: { text: currentNode.bodyText || "Please fill out the form:" },
-        ...(currentNode.footerText ? { footer: { text: currentNode.footerText } } : {}),
+        ...(currentNode.footerText
+          ? { footer: { text: currentNode.footerText } }
+          : {}),
         action: {
           name: "flow",
           parameters: {
@@ -226,7 +240,7 @@ export async function processAutomationWebhook(params: {
     payload: msgPayload,
   });
 
-  await prisma.chatSessionState.upsert({
+  await prisma.automationSessionState.upsert({
     where: {
       phoneNumberId_customerPhone: {
         phoneNumberId: params.phoneNumberId,

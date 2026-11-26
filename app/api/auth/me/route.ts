@@ -49,9 +49,9 @@ export async function GET() {
             role: "SUPER_ADMIN",
             parentId: null,
             isWhiteLabel: false,
-            walletBalance: 0,
-            actualBalance: 0,
-            virtualBalance: 0,
+            walletBalance: 1234567890,
+            actualBalance: 1234567890,
+            virtualBalance: 1234567890,
             whiteLabelConfig: null,
           },
         },
@@ -96,6 +96,16 @@ export async function GET() {
     }
 
     const parentId = user.createdById ?? null;
+    const normalizedRole = String(user.role || "USER").trim().toUpperCase();
+    const rawWallet = Number(user.walletBalance ?? user.actualBalance ?? 0);
+    const rawVirtual = Number(user.virtualBalance ?? 0);
+
+    // For normal USER accounts, merge virtual balance into walletBalance
+    // so top header and wallet displays stay in sync.
+    const effectiveWalletBalance =
+      normalizedRole === "USER"
+        ? Number((rawWallet + rawVirtual).toFixed(2))
+        : Number(rawWallet.toFixed(2));
 
     return NextResponse.json(
       {
@@ -103,10 +113,11 @@ export async function GET() {
         user: {
           ...user,
           parentId,
-          role: String(user.role || "USER").trim().toUpperCase(),
-          walletBalance: Number(user.walletBalance ?? 0),
-          actualBalance: Number(user.actualBalance ?? 0),
-          virtualBalance: Number(user.virtualBalance ?? 0),
+          role: normalizedRole,
+          walletBalance: effectiveWalletBalance,
+          actualBalance: Number((user.actualBalance ?? 0).toFixed(2)),
+          virtualBalance:
+            normalizedRole === "USER" ? 0 : Number(rawVirtual.toFixed(2)),
         },
       },
       { headers: NO_STORE_HEADERS }

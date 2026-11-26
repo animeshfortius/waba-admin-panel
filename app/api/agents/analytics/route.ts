@@ -1,30 +1,57 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
 export async function GET(request: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const agentId = searchParams.get("agentId");
 
     if (!agentId) {
-      return NextResponse.json({ success: false, error: "Agent ID is required" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Agent ID is required" },
+        { status: 400 }
+      );
     }
 
-    const agent = await (prisma as any).agent.findUnique({
-      where: { id: agentId },
+    const ownerWhere = getOwnerWhere(tenant);
+
+    // Fetch agent and verify it falls within the authenticated tenant's allowed hierarchy
+    const agent = await (prisma as any).agent.findFirst({
+      where: {
+        id: agentId,
+        ...ownerWhere,
+      },
     });
 
     if (!agent) {
-      return NextResponse.json({ success: false, error: "Agent not found" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "Agent not found or access denied" },
+        { status: 404 }
+      );
     }
 
-    // Match sessions assigned to this agent's userId or name
-    const agentIdentifiers = [agent.userId, agent.name, agent.email].filter(Boolean);
+    const agentIdentifiers = [
+      agent.userId,
+      agent.name,
+      agent.email,
+    ].filter(Boolean);
+
+    const sessionOwnerFilter = agent.userId
+      ? { userId: agent.userId }
+      : ownerWhere;
 
     const sessions = await prisma.chatSession.findMany({
       where: {
+        ...sessionOwnerFilter,
         assignedTo: { in: agentIdentifiers },
       },
       include: {
@@ -38,7 +65,6 @@ export async function GET(request: Request) {
     const resolvedChats = sessions.filter((s) => s.status === "RESOLVED").length;
     const openChats = sessions.filter((s) => s.status === "OPEN").length;
 
-    // Count actual Meta WABA messages sent by this agent & their delivery/read statuses
     let totalMessagesSent = 0;
     let deliveredOrReadCount = 0;
     let totalResponseSeconds = 0;
@@ -55,9 +81,13 @@ export async function GET(request: Request) {
           if (msg.status === "DELIVERED" || msg.status === "READ") {
             deliveredOrReadCount++;
           }
-          // Calculate actual first/subsequent response time from customer message to agent reply
           if (lastCustomerMsgTime) {
-            const diffSec = Math.max(1, Math.floor((new Date(msg.createdAt).getTime() - lastCustomerMsgTime) / 1000));
+            const diffSec = Math.max(
+              1,
+              Math.floor(
+                (new Date(msg.createdAt).getTime() - lastCustomerMsgTime) / 1000
+              )
+            );
             totalResponseSeconds += diffSec;
             responseSamples++;
             lastCustomerMsgTime = null;
@@ -66,7 +96,6 @@ export async function GET(request: Request) {
       }
     }
 
-    // Format Average Response Time
     let avgResponseTime = "0s";
     if (responseSamples > 0) {
       const avgSec = Math.round(totalResponseSeconds / responseSamples);
@@ -79,7 +108,6 @@ export async function GET(request: Request) {
       }
     }
 
-    // Meta Delivery & Read Success Rate (%)
     const metaDeliveryRate =
       totalMessagesSent > 0
         ? `${Math.round((deliveredOrReadCount / totalMessagesSent) * 100)}%`
@@ -101,7 +129,10 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error("Agent analytics fetch error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch agent analytics" },
+      {
+        success: false,
+        error: error.message || "Failed to fetch agent analytics",
+      },
       { status: 500 }
     );
   }

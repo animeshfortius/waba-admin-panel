@@ -2,9 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateApiRequest } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 
+const META_GRAPH_VERSION = "v23.0";
+
 type RecordMap = Record<string, unknown>;
 
-async function collectChannelsForUser(userId: string): Promise<RecordMap[]> {
+function isSuperAdminContext(ctx: unknown): boolean {
+  const c = ctx as { isSuperAdmin?: unknown; role?: unknown } | null | undefined;
+  return Boolean(c?.isSuperAdmin) || String(c?.role || "").toUpperCase() === "SUPER_ADMIN";
+}
+
+async function collectChannelsForUser(
+  userId: string,
+  superAdmin?: boolean
+): Promise<RecordMap[]> {
   const client = prisma as unknown as Record<
     string,
     { findMany?: (args?: unknown) => Promise<RecordMap[]> } | undefined
@@ -22,13 +32,11 @@ async function collectChannelsForUser(userId: string): Promise<RecordMap[]> {
     const model = client[modelName];
     if (model?.findMany) {
       try {
-        const rows = await model.findMany({ where: { userId } });
+        const rows = superAdmin
+          ? await model.findMany()
+          : await model.findMany({ where: { userId } });
         if (Array.isArray(rows) && rows.length > 0) {
           return rows;
-        }
-        const allRows = await model.findMany();
-        if (Array.isArray(allRows) && allRows.length > 0) {
-          return allRows;
         }
       } catch {
         // try next model candidate
@@ -112,8 +120,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const requestedWabaId = (searchParams.get("wabaId") || "").trim();
+    const superAdmin = isSuperAdminContext(auth.context);
 
-    const rows = await collectChannelsForUser(auth.context.userId);
+    const rows = await collectChannelsForUser(auth.context.userId, superAdmin);
 
     const channels = rows.map((row, index) => {
       const phoneNumberId =
@@ -123,7 +132,6 @@ export async function GET(request: NextRequest) {
           "phoneId",
         ]) ||
         auth.context.phoneNumberId ||
-        process.env.META_PHONE_NUMBER_ID ||
         "";
 
       const wabaId =
@@ -134,7 +142,6 @@ export async function GET(request: NextRequest) {
           "whatsappBusinessAccountId",
         ]) ||
         auth.context.wabaId ||
-        process.env.META_WABA_ID ||
         "";
 
       const displayName = extractString(row, [
@@ -167,7 +174,6 @@ export async function GET(request: NextRequest) {
           "token",
         ]) ||
         auth.context.metaAccessToken ||
-        process.env.META_ACCESS_TOKEN ||
         "";
 
       const primaryTitle =
@@ -213,18 +219,11 @@ export async function GET(request: NextRequest) {
     }
 
     const activeWabaId =
-      requestedWabaId ||
-      channels[0]?.wabaId ||
-      auth.context.wabaId ||
-      process.env.META_WABA_ID ||
-      "";
+      requestedWabaId || channels[0]?.wabaId || auth.context.wabaId || "";
 
     const matchedChannel = channels.find((c) => c.wabaId === activeWabaId);
     const activeToken =
-      matchedChannel?.accessToken ||
-      auth.context.metaAccessToken ||
-      process.env.META_ACCESS_TOKEN ||
-      "";
+      matchedChannel?.accessToken || auth.context.metaAccessToken || "";
 
     let templates: Array<{
       id: string;
@@ -247,16 +246,17 @@ export async function GET(request: NextRequest) {
     } else if (!activeWabaId) {
       templateFetchError = "WABA ID not found for this channel/user.";
     } else {
+      const cleanWabaId = activeWabaId.replace(/^WABA_/i, "").trim();
       const metaRes = await fetch(
-        `https://graph.facebook.com/v23.0/${encodeURIComponent(
-          activeWabaId
+        `https://graph.facebook.com/${META_GRAPH_VERSION}/${encodeURIComponent(
+          cleanWabaId
         )}/message_templates?limit=100`,
         {
           method: "GET",
           headers: {
             Authorization: `Bearer ${activeToken}`,
-            "Content-Type": "application/json",
           },
+          cache: "no-store",
         }
       );
 
@@ -295,7 +295,7 @@ export async function GET(request: NextRequest) {
       success: true,
       userId: auth.context.userId,
       walletBalance: auth.context.walletBalance,
-      defaultVersion: "v23.0",
+      defaultVersion: META_GRAPH_VERSION,
       defaultPhoneNumberId:
         matchedChannel?.phoneNumberId ||
         channels[0]?.phoneNumberId ||

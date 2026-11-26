@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateApiRequest } from "@/lib/api-auth";
+import { prisma } from "@/lib/prisma";
+
+const META_GRAPH_VERSION = "v21.0";
 
 type TemplateButtonInput = {
   type?: string;
@@ -9,6 +12,80 @@ type TemplateButtonInput = {
   phone_number?: string;
   example?: string[];
 };
+
+async function resolveScopedWabaAndToken(
+  request: NextRequest,
+  authContext: any,
+  explicitWabaId?: string
+) {
+  const queryWaba =
+    new URL(request.url).searchParams.get("wabaId")?.trim() || "";
+  const rawWaba = String(
+    explicitWabaId || queryWaba || authContext?.wabaId || ""
+  ).trim();
+  const cleanRequestedWaba = rawWaba.replace(/^WABA_/i, "").trim();
+
+  let resolvedWabaId = cleanRequestedWaba;
+  let metaToken = String(authContext?.metaAccessToken || "").trim();
+
+  const whereScope: any = authContext?.isSuperAdmin
+    ? {}
+    : { userId: authContext?.userId };
+
+  const scopedAccounts = await prisma.wabaAccount.findMany({
+    where: whereScope,
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (cleanRequestedWaba) {
+    const matched = scopedAccounts.find((acc: any) => {
+      const accWaba = String(acc.wabaId || "")
+        .replace(/^WABA_/i, "")
+        .trim();
+      return acc.id === rawWaba || accWaba === cleanRequestedWaba;
+    });
+
+    if (!matched && !authContext?.isSuperAdmin) {
+      return {
+        ok: false as const,
+        status: 403,
+        error: "WABA ID does not belong to this API account",
+      };
+    }
+
+    if (matched) {
+      resolvedWabaId = String(matched.wabaId || "")
+        .replace(/^WABA_/i, "")
+        .trim();
+      metaToken = String(matched.accessToken || metaToken).trim();
+    }
+  } else if (scopedAccounts.length > 0) {
+    const defaultAcc =
+      scopedAccounts.find((acc: any) => acc.isDefault) || scopedAccounts[0];
+    resolvedWabaId = String(defaultAcc.wabaId || "")
+      .replace(/^WABA_/i, "")
+      .trim();
+    metaToken = String(defaultAcc.accessToken || metaToken).trim();
+  }
+
+  if (!metaToken) {
+    return {
+      ok: false as const,
+      status: 400,
+      error: "Meta access token not configured for this channel/user",
+    };
+  }
+
+  if (!resolvedWabaId) {
+    return {
+      ok: false as const,
+      status: 400,
+      error: "WABA ID not configured for this channel/user",
+    };
+  }
+
+  return { ok: true as const, wabaId: resolvedWabaId, metaToken };
+}
 
 function buildMetaComponentsFromBody(body: Record<string, unknown>) {
   if (Array.isArray(body.components) && body.components.length > 0) {
@@ -164,41 +241,24 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const metaToken =
-      auth.context.metaAccessToken || process.env.META_ACCESS_TOKEN;
-    const wabaId = auth.context.wabaId || process.env.META_WABA_ID;
-
-    if (!metaToken) {
+    const resolved = await resolveScopedWabaAndToken(request, auth.context);
+    if (!resolved.ok) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Meta access token not configured for this channel/user",
-        },
-        { status: 400 }
+        { success: false, error: resolved.error },
+        { status: resolved.status }
       );
     }
 
-    if (!wabaId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "WABA ID not configured for this channel/user",
-        },
-        { status: 400 }
-      );
-    }
-
-    const graphVersion = "v21.0";
     const metaResponse = await fetch(
-      `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(
-        wabaId
+      `https://graph.facebook.com/${META_GRAPH_VERSION}/${encodeURIComponent(
+        resolved.wabaId
       )}/message_templates`,
       {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${metaToken}`,
-          "Content-Type": "application/json",
+          Authorization: `Bearer ${resolved.metaToken}`,
         },
+        cache: "no-store",
       }
     );
 
@@ -268,32 +328,21 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      body = (await request.json()) as Record<string, unknown>;
+      body = (await request.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
     }
 
-    const metaToken =
-      auth.context.metaAccessToken || process.env.META_ACCESS_TOKEN;
-    const wabaId = String(
-      body?.wabaId || auth.context.wabaId || process.env.META_WABA_ID || ""
-    ).trim();
-
-    if (!metaToken) {
+    const resolved = await resolveScopedWabaAndToken(
+      request,
+      auth.context,
+      String(body?.wabaId || "").trim()
+    );
+    if (!resolved.ok) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Meta access token not configured for this channel/user",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (!wabaId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "WABA ID not configured for this channel/user",
-        },
-        { status: 400 }
+        { success: false, error: resolved.error },
+        { status: resolved.status }
       );
     }
 
@@ -337,18 +386,18 @@ export async function POST(request: NextRequest) {
       metaPayload.allow_category_change = body.allowCategoryChange;
     }
 
-    const graphVersion = "v21.0";
     const metaResponse = await fetch(
-      `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(
-        wabaId
+      `https://graph.facebook.com/${META_GRAPH_VERSION}/${encodeURIComponent(
+        resolved.wabaId
       )}/message_templates`,
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${metaToken}`,
+          Authorization: `Bearer ${resolved.metaToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(metaPayload),
+        cache: "no-store",
       }
     );
 

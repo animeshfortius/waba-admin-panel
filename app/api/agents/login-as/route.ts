@@ -1,40 +1,42 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
 export async function POST(request: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const { agentId } = await request.json();
 
-    if (!agentId) {
-      return NextResponse.json({ success: false, error: "Agent ID required" }, { status: 400 });
+    if (!agentId || typeof agentId !== "string" || !agentId.trim()) {
+      return NextResponse.json(
+        { success: false, error: "Valid Agent ID is required" },
+        { status: 400 }
+      );
     }
 
-    let agent = null;
+    const cleanAgentId = agentId.trim();
+    const ownerWhere = getOwnerWhere(tenant);
 
-    // Only query database if prisma agent model exists and agentId is a valid string/cuid (not a simple mock number like 1)
-    if ((prisma as any).agent && typeof agentId === "string" && agentId.length > 2) {
-      try {
-        agent = await (prisma as any).agent.findUnique({
-          where: { id: agentId },
-        });
-      } catch (dbErr) {
-        console.log("DB query skipped/failed, using fallback:", dbErr);
-      }
-    }
+    // Fetch agent strictly within the logged-in tenant's allowed scope
+    const agent = await (prisma as any).agent?.findFirst({
+      where: {
+        id: cleanAgentId,
+        ...ownerWhere,
+      },
+    });
 
-    // If not found in DB or if it's a test/mock ID (like number 1), provide a valid session object instantly
     if (!agent) {
-      agent = {
-        id: String(agentId),
-        name: agentId === 1 || agentId === "1" ? "agent1" : `agent_${agentId}`,
-        email: `agent${agentId}@gmail.com`,
-        phone: "+91 8888888888",
-        allChannelAccess: true,
-        sendTemplate: true,
-        sendCampaign: true,
-      };
+      return NextResponse.json(
+        { success: false, error: "Agent not found or access denied" },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({
@@ -44,6 +46,12 @@ export async function POST(request: Request) {
     });
   } catch (error: any) {
     console.error("Login as agent error:", error);
-    return NextResponse.json({ success: false, error: error.message || "Failed to login as agent" }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: error.message || "Failed to login as agent",
+      },
+      { status: 500 }
+    );
   }
 }

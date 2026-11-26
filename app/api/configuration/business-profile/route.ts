@@ -1,24 +1,39 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
-const prisma = new PrismaClient();
 const META_VERSION = "v21.0";
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-
-    if (!id) {
-      return NextResponse.json({ error: "Channel ID is required" }, { status: 400 });
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { error: "Unauthorized session" },
+        { status: 401 }
+      );
     }
 
-    const channel = await prisma.wabaAccount.findUnique({
-      where: { id },
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id")?.trim();
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Channel ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const ownerWhere = getOwnerWhere(tenant);
+    const channel = await prisma.wabaAccount.findFirst({
+      where: { id, ...ownerWhere },
     });
 
     if (!channel) {
-      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Channel not found or access denied" },
+        { status: 404 }
+      );
     }
 
     let metaProfile = {
@@ -31,27 +46,37 @@ export async function GET(request: Request) {
       profilePicture: channel.profilePicture || "",
     };
 
-    if (channel.accessToken && !channel.accessToken.startsWith("mock_token") && channel.phoneNumberId) {
+    if (
+      channel.accessToken &&
+      !channel.accessToken.startsWith("mock_token") &&
+      channel.phoneNumberId
+    ) {
       try {
         const cleanPhoneId = channel.phoneNumberId.replace("PHONE_", "").trim();
         const metaRes = await fetch(
           `https://graph.facebook.com/${META_VERSION}/${cleanPhoneId}/whatsapp_business_profile?fields=about,address,description,email,websites,vertical,profile_picture_url`,
           {
             headers: { Authorization: `Bearer ${channel.accessToken.trim()}` },
+            cache: "no-store",
           }
         );
         const metaData = await metaRes.json();
-        
+
         const p = metaData?.data?.[0] || metaData;
         if (p && !p.error) {
           metaProfile = {
             displayName: channel.displayName || "",
-            description: p.about || p.description || channel.description || "",
+            description:
+              p.about || p.description || channel.description || "",
             email: p.email || channel.email || "",
             address: p.address || channel.address || "",
-            website: (Array.isArray(p.websites) ? p.websites[0] : p.websites) || channel.website || "",
+            website:
+              (Array.isArray(p.websites) ? p.websites[0] : p.websites) ||
+              channel.website ||
+              "",
             category: p.vertical || channel.category || "OTHER",
-            profilePicture: p.profile_picture_url || channel.profilePicture || "",
+            profilePicture:
+              p.profile_picture_url || channel.profilePicture || "",
           };
         }
       } catch (err) {
@@ -67,50 +92,96 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { id, displayName, description, email, address, website, category, profilePicture } = body;
-
-    if (!id) {
-      return NextResponse.json({ error: "Channel ID is required" }, { status: 400 });
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { error: "Unauthorized session" },
+        { status: 401 }
+      );
     }
 
-    const channel = await prisma.wabaAccount.findUnique({
-      where: { id },
+    const body = await request.json();
+    const id = String(body?.id || "").trim();
+    const {
+      displayName,
+      description,
+      email,
+      address,
+      website,
+      category,
+      profilePicture,
+    } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Channel ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const ownerWhere = getOwnerWhere(tenant);
+    const channel = await prisma.wabaAccount.findFirst({
+      where: { id, ...ownerWhere },
     });
 
     if (!channel) {
-      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Channel not found or access denied" },
+        { status: 404 }
+      );
     }
+
+    const nextDescription =
+      description !== undefined ? description : channel.description || "";
+    const nextEmail = email !== undefined ? email : channel.email || "";
+    const nextAddress = address !== undefined ? address : channel.address || "";
+    const nextWebsite = website !== undefined ? website : channel.website || "";
+    const nextCategory = category || channel.category || "OTHER";
+    const nextProfilePicture =
+      profilePicture !== undefined
+        ? profilePicture
+        : channel.profilePicture || "";
 
     let metaSyncSuccess = false;
     let metaErrorResponse = null;
 
-    if (channel.accessToken && !channel.accessToken.startsWith("mock_token") && channel.phoneNumberId) {
+    if (
+      channel.accessToken &&
+      !channel.accessToken.startsWith("mock_token") &&
+      channel.phoneNumberId
+    ) {
       try {
         const cleanPhoneId = channel.phoneNumberId.replace("PHONE_", "").trim();
-        
-        // Clean and format vertical category for Meta API
-        let formattedVertical = String(category || "OTHER").trim().toUpperCase();
-        if (formattedVertical.includes("HOTEL") || formattedVertical.includes("LODGING")) {
+
+        let formattedVertical = String(nextCategory)
+          .trim()
+          .toUpperCase();
+        if (
+          formattedVertical.includes("HOTEL") ||
+          formattedVertical.includes("LODGING")
+        ) {
           formattedVertical = "HOTEL";
-        } else if (formattedVertical.includes("PROFESSIONAL") || formattedVertical.includes("SERVICE")) {
+        } else if (
+          formattedVertical.includes("PROFESSIONAL") ||
+          formattedVertical.includes("SERVICE")
+        ) {
           formattedVertical = "PROF_SERVICES";
-        } else if (!formattedVertical || formattedVertical === "") {
+        } else if (!formattedVertical) {
           formattedVertical = "OTHER";
         }
 
         const payload: any = {
           messaging_product: "whatsapp",
-          about: description || "Professional Business Communication",
-          address: address || "",
-          description: description || "",
-          email: email || "",
-          websites: website ? [website] : [],
+          about: nextDescription || "Professional Business Communication",
+          address: nextAddress || "",
+          description: nextDescription || "",
+          email: nextEmail || "",
+          websites: nextWebsite ? [nextWebsite] : [],
           vertical: formattedVertical,
         };
 
-        if (profilePicture) {
-          payload.profile_picture_url = profilePicture;
+        if (nextProfilePicture) {
+          payload.profile_picture_url = nextProfilePicture;
         }
 
         const metaRes = await fetch(
@@ -118,7 +189,7 @@ export async function POST(request: Request) {
           {
             method: "POST",
             headers: {
-              "Authorization": `Bearer ${channel.accessToken.trim()}`,
+              Authorization: `Bearer ${channel.accessToken.trim()}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify(payload),
@@ -137,25 +208,24 @@ export async function POST(request: Request) {
       }
     }
 
-    // Update in database including category & profile picture
     const updatedChannel = await prisma.wabaAccount.update({
-      where: { id },
-      data: { 
-        displayName: displayName || channel.displayName, 
-        description, 
-        email, 
-        address, 
-        website, 
-        category: category || channel.category,
-        profilePicture: profilePicture || channel.profilePicture 
+      where: { id: channel.id },
+      data: {
+        displayName: displayName || channel.displayName,
+        description: nextDescription,
+        email: nextEmail,
+        address: nextAddress,
+        website: nextWebsite,
+        category: nextCategory,
+        profilePicture: nextProfilePicture,
       },
     });
 
-    return NextResponse.json({ 
-      success: true, 
-      metaSynced: metaSyncSuccess, 
+    return NextResponse.json({
+      success: true,
+      metaSynced: metaSyncSuccess,
       metaError: metaErrorResponse,
-      data: updatedChannel 
+      data: updatedChannel,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

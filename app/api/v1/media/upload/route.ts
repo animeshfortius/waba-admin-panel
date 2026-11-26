@@ -10,7 +10,10 @@ const MIME_TO_EXT: Record<string, string> = {
   "application/pdf": "pdf",
 };
 
-function resolveMetaUploadType(mediaTypeInput: string, detectedMime: string): string {
+function resolveMetaUploadType(
+  mediaTypeInput: string,
+  detectedMime: string
+): string {
   const cleanInput = (mediaTypeInput || "").trim().toLowerCase();
   if (cleanInput.includes("/")) {
     return cleanInput;
@@ -38,7 +41,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const mediaUrl = String(body?.mediaUrl || "").trim();
     const mediaType = String(body?.mediaType || "image").trim();
     const targetPhoneId = String(
@@ -48,8 +51,9 @@ export async function POST(request: NextRequest) {
         ""
     ).trim();
 
-    const metaToken =
-      auth.context.metaAccessToken || process.env.META_ACCESS_TOKEN;
+    const metaToken = String(
+      auth.context.metaAccessToken || process.env.META_ACCESS_TOKEN || ""
+    ).trim();
 
     if (!metaToken) {
       return NextResponse.json(
@@ -81,12 +85,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Agar relative URL (/api/uploads/...) diya ho toh origin ke saath resolve karo
-    const resolvedUrl = mediaUrl.startsWith("/")
+    const isRelative = mediaUrl.startsWith("/");
+    const resolvedUrl = isRelative
       ? `${request.nextUrl.origin}${mediaUrl}`
       : mediaUrl;
 
-    const fileRes = await fetch(resolvedUrl);
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(resolvedUrl);
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid mediaUrl format",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Only HTTP/HTTPS mediaUrl is supported",
+        },
+        { status: 400 }
+      );
+    }
+
+    const forwardHeaders: Record<string, string> = {};
+    if (isRelative) {
+      const cookieHeader = request.headers.get("cookie");
+      const authHeader = request.headers.get("authorization");
+      if (cookieHeader) forwardHeaders.cookie = cookieHeader;
+      if (authHeader) forwardHeaders.authorization = authHeader;
+    }
+
+    const fileRes = await fetch(parsedUrl.toString(), {
+      headers: forwardHeaders,
+      cache: "no-store",
+    });
+
     if (!fileRes.ok) {
       return NextResponse.json(
         {
@@ -98,10 +137,20 @@ export async function POST(request: NextRequest) {
     }
 
     const arrayBuffer = await fileRes.arrayBuffer();
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Fetched media file is empty",
+        },
+        { status: 400 }
+      );
+    }
+
     const contentType =
       fileRes.headers.get("content-type") || "application/octet-stream";
 
-    const urlPathname = new URL(resolvedUrl).pathname;
+    const urlPathname = parsedUrl.pathname;
     const rawName = path.basename(urlPathname) || "upload";
     const extFromMime = MIME_TO_EXT[contentType.split(";")[0].toLowerCase()];
     const fileName = path.extname(rawName)
@@ -130,6 +179,7 @@ export async function POST(request: NextRequest) {
           Authorization: `Bearer ${metaToken}`,
         },
         body: formData,
+        cache: "no-store",
       }
     );
 

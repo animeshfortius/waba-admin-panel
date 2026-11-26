@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
 function formatIST(dateInput: Date | string | null) {
   if (!dateInput) return "N/A";
@@ -47,10 +48,7 @@ function parseMetaError(rawError: unknown, status?: string | null) {
 
   const metaErr = parsedObj?.error || parsedObj || null;
   let code =
-    metaErr?.code ||
-    metaErr?.error_code ||
-    parsedObj?.errorCode ||
-    "";
+    metaErr?.code || metaErr?.error_code || parsedObj?.errorCode || "";
 
   let reason =
     metaErr?.message ||
@@ -69,7 +67,8 @@ function parseMetaError(rawError: unknown, status?: string | null) {
 
   const cleanCode = String(code || "").trim();
   const cleanReason =
-    String(reason || "").trim() || (isFailed ? "Meta delivery failed" : "N/A");
+    String(reason || "").trim() ||
+    (isFailed ? "Meta delivery failed" : "N/A");
 
   const errorDisplay =
     cleanCode && !cleanReason.includes(cleanCode)
@@ -98,20 +97,26 @@ function classifyLog(log: any) {
   const isScheduled =
     Boolean(rawObj.isScheduled) ||
     Boolean(rawObj.scheduledAt) ||
-    String(rawObj.deliveryType || rawObj.mode || "").toUpperCase() === "SCHEDULED" ||
+    String(rawObj.deliveryType || rawObj.mode || "").toUpperCase() ===
+      "SCHEDULED" ||
     statusUpper === "SCHEDULED" ||
     campaignName.toUpperCase().startsWith("SCHED_");
 
   const isFallback =
     Boolean(rawObj.isFallback) ||
-    String(rawObj.category || rawObj.messageType || rawObj.type || "").toUpperCase() === "FALLBACK" ||
+    String(
+      rawObj.category || rawObj.messageType || rawObj.type || ""
+    ).toUpperCase() === "FALLBACK" ||
     campaignName.toUpperCase().includes("FALLBACK") ||
     errStr.includes("FALLBACK");
 
   const isService =
     !isFallback &&
-    (String(rawObj.category || rawObj.messageType || rawObj.type || "").toUpperCase() === "SERVICE" ||
-      String(rawObj.messageType || rawObj.type || "").toUpperCase() === "INBOUND" ||
+    (String(
+      rawObj.category || rawObj.messageType || rawObj.type || ""
+    ).toUpperCase() === "SERVICE" ||
+      String(rawObj.messageType || rawObj.type || "").toUpperCase() ===
+        "INBOUND" ||
       campaignName.toUpperCase().includes("SERVICE") ||
       templateUpper.includes("SERVICE"));
 
@@ -120,25 +125,68 @@ function classifyLog(log: any) {
 
 export async function GET(req: Request) {
   try {
-    headers();
+    await headers();
+
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId") || "admin";
-    const statusFilter = searchParams.get("status");
+    const requestedUserId = searchParams.get("userId")?.trim() || "";
+    const statusFilter = searchParams.get("status")?.trim() || "";
     const dateRange = searchParams.get("dateRange") || "All";
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
 
+    const ownerWhere = getOwnerWhere(tenant);
+    const scopedWhere: any = { ...ownerWhere };
+
+    if (
+      requestedUserId &&
+      requestedUserId !== "ALL" &&
+      requestedUserId !== "undefined" &&
+      requestedUserId !== "null"
+    ) {
+      if (
+        !tenant.isSuperAdmin &&
+        !tenant.allowedUserIds?.includes(requestedUserId)
+      ) {
+        return NextResponse.json(
+          { success: false, error: "Access denied for requested user" },
+          { status: 403 }
+        );
+      }
+      scopedWhere.userId = requestedUserId;
+    }
+
     const wabaAccounts = await prisma.wabaAccount.findMany({
-      select: { wabaId: true, displayPhone: true, displayName: true, userId: true },
+      where: scopedWhere,
+      select: {
+        id: true,
+        wabaId: true,
+        phoneNumberId: true,
+        displayPhone: true,
+        displayName: true,
+        userId: true,
+      },
     });
 
     const whereClause: any = {
+      ...scopedWhere,
       campaignName: {
         not: "Direct_Chat_Campaign",
       },
     };
 
-    if (statusFilter && statusFilter !== "All" && statusFilter !== "All Status") {
+    if (
+      statusFilter &&
+      statusFilter !== "All" &&
+      statusFilter !== "All Status"
+    ) {
       whereClause.status = statusFilter;
     }
 
@@ -180,7 +228,9 @@ export async function GET(req: Request) {
       templateType = "Utility"
     ) => {
       const sentStr = formatIST(log.sentAt || log.createdAt);
-      const deliveredStr = log.deliveredAt ? formatIST(log.deliveredAt) : "Pending";
+      const deliveredStr = log.deliveredAt
+        ? formatIST(log.deliveredAt)
+        : "Pending";
       const readStr = log.readAt ? formatIST(log.readAt) : "N/A";
       const errInfo = parseMetaError(log.errorDetails, log.status);
       const isFailed = String(log.status || "").toUpperCase() === "FAILED";
@@ -239,7 +289,12 @@ export async function GET(req: Request) {
         scheduledRaw.push(log);
       }
 
-      if (!cls.isScheduled && !cls.isApi && !cls.isService && !cls.isFallback) {
+      if (
+        !cls.isScheduled &&
+        !cls.isApi &&
+        !cls.isService &&
+        !cls.isFallback
+      ) {
         normalDeliveryRaw.push(log);
       }
 
@@ -264,7 +319,7 @@ export async function GET(req: Request) {
 
     const scheduleMap: Record<string, any> = {};
     scheduledRaw.forEach((log) => {
-      const key = `${log.campaignName}__${log.channel}`;
+      const key = `${log.userId || ""}__${log.campaignName}__${log.channel}`;
       const errInfo = parseMetaError(log.errorDetails, log.status);
       if (!scheduleMap[key]) {
         const scheduleTimeStr = log.sentAt
@@ -297,9 +352,10 @@ export async function GET(req: Request) {
 
     const campaignMap: Record<string, any> = {};
     campaignRaw.forEach((log) => {
+      const key = `${log.userId || ""}__${log.campaignName}`;
       const errInfo = parseMetaError(log.errorDetails, log.status);
-      if (!campaignMap[log.campaignName]) {
-        campaignMap[log.campaignName] = {
+      if (!campaignMap[key]) {
+        campaignMap[key] = {
           id: log.id,
           date: formatIST(log.createdAt),
           campaignInfo: log.campaignName,
@@ -317,8 +373,8 @@ export async function GET(req: Request) {
           createdAt: log.createdAt,
         };
       }
-      campaignMap[log.campaignName].totalCount += 1;
-      campaignMap[log.campaignName].cost += Number(log.cost || 0);
+      campaignMap[key].totalCount += 1;
+      campaignMap[key].cost += Number(log.cost || 0);
     });
 
     const campaignReports = Object.values(campaignMap).map((c) => ({
@@ -349,7 +405,7 @@ export async function GET(req: Request) {
     return NextResponse.json(
       {
         success: true,
-        userId,
+        userId: requestedUserId || tenant.userId,
         campaigns: campaignReports,
         deliveries: deliveryLogs,
         schedules: scheduleReports,

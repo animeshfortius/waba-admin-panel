@@ -1,25 +1,57 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
 const META_GRAPH_VERSION = "v21.0";
 
 export async function GET(req: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const filter = searchParams.get("filter") || "7DAYS";
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
-    const channelId = searchParams.get("channelId");
+    const channelId = searchParams.get("channelId")?.trim() || "";
+    const requestedUserId = searchParams.get("userId")?.trim() || "";
 
-    // 1. Fetch all WABA accounts from database
+    const ownerWhere = getOwnerWhere(tenant);
+    const scopedWhere: any = { ...ownerWhere };
+
+    if (
+      requestedUserId &&
+      requestedUserId !== "ALL" &&
+      requestedUserId !== "undefined" &&
+      requestedUserId !== "null"
+    ) {
+      if (
+        !tenant.isSuperAdmin &&
+        !tenant.allowedUserIds?.includes(requestedUserId)
+      ) {
+        return NextResponse.json(
+          { success: false, error: "Access denied for requested user" },
+          { status: 403 }
+        );
+      }
+      scopedWhere.userId = requestedUserId;
+    }
+
+    // 1. Fetch ONLY scoped WABA accounts for this user/reseller hierarchy
     const allAccounts = await prisma.wabaAccount.findMany({
+      where: scopedWhere,
       orderBy: { createdAt: "asc" },
     });
 
     const isAllChannels = channelId === "ALL";
     let targetAccount: any = null;
 
-    if (!isAllChannels) {
+    if (!isAllChannels && allAccounts.length > 0) {
       if (channelId) {
         targetAccount = allAccounts.find(
           (acc: any) =>
@@ -30,33 +62,57 @@ export async function GET(req: Request) {
         );
       }
 
-      if (!targetAccount && allAccounts.length > 0) {
-        targetAccount = allAccounts.find((acc: any) => acc.isDefault) || allAccounts[0];
+      if (!targetAccount) {
+        targetAccount =
+          allAccounts.find((acc: any) => acc.isDefault) || allAccounts[0];
       }
     }
 
-    const activeChannelId = isAllChannels
-      ? "ALL"
-      : targetAccount?.phoneNumberId || targetAccount?.id;
+    const activeChannelId =
+      allAccounts.length === 0
+        ? ""
+        : isAllChannels
+        ? "ALL"
+        : targetAccount?.phoneNumberId || targetAccount?.id || "";
     const activeDisplayPhone = targetAccount?.displayPhone || "";
     const activeWabaId = targetAccount?.wabaId || "";
 
     // 2. Live Meta Graph API v21.0 Account Health & Quality Sync
-    let liveQuality = isAllChannels ? "GREEN" : targetAccount?.qualityRating || "GREEN";
-    let liveLimit = isAllChannels
-      ? `All ${allAccounts.length} WABA Channels`
-      : targetAccount?.messagingLimit || "100,000 / 24 hrs";
-    let liveVerifiedName = isAllChannels
-      ? "All Onboarded WABA Accounts"
-      : targetAccount?.displayName ||
-        targetAccount?.displayPhone ||
-        "WhatsApp Business";
+    let liveQuality =
+      allAccounts.length === 0
+        ? "N/A"
+        : isAllChannels
+        ? "GREEN"
+        : targetAccount?.qualityRating || "N/A";
+    let liveLimit =
+      allAccounts.length === 0
+        ? "No WABA Connected"
+        : isAllChannels
+        ? `All ${allAccounts.length} WABA Channels`
+        : targetAccount?.messagingLimit || "1,000 / 24 hrs";
+    let liveVerifiedName =
+      allAccounts.length === 0
+        ? "No WABA Onboarded Yet"
+        : isAllChannels
+        ? "All Onboarded WABA Accounts"
+        : targetAccount?.displayName ||
+          targetAccount?.displayPhone ||
+          "WhatsApp Business";
 
-    if (!isAllChannels && targetAccount?.phoneNumberId && targetAccount?.accessToken) {
-      const cleanPhoneId = targetAccount.phoneNumberId.replace("PHONE_", "").trim();
+    if (
+      !isAllChannels &&
+      targetAccount?.phoneNumberId &&
+      targetAccount?.accessToken &&
+      !String(targetAccount.accessToken).startsWith("mock_token")
+    ) {
+      const cleanPhoneId = String(targetAccount.phoneNumberId)
+        .replace("PHONE_", "")
+        .trim();
       try {
         const phoneRes = await fetch(
-          `https://graph.facebook.com/${META_GRAPH_VERSION}/${cleanPhoneId}?fields=quality_rating,verified_name,messaging_limit_tier&access_token=${targetAccount.accessToken.trim()}`,
+          `https://graph.facebook.com/${META_GRAPH_VERSION}/${cleanPhoneId}?fields=quality_rating,verified_name,messaging_limit_tier&access_token=${encodeURIComponent(
+            String(targetAccount.accessToken).trim()
+          )}`,
           { cache: "no-store" }
         );
         const phoneJson = await phoneRes.json();
@@ -70,7 +126,9 @@ export async function GET(req: Request) {
               TIER_100K: "100,000 / 24 hrs",
               TIER_UNLIMITED: "Unlimited / 24 hrs",
             };
-            liveLimit = tierMap[phoneJson.messaging_limit_tier] || phoneJson.messaging_limit_tier;
+            liveLimit =
+              tierMap[phoneJson.messaging_limit_tier] ||
+              phoneJson.messaging_limit_tier;
           }
         }
       } catch (metaErr) {
@@ -78,14 +136,23 @@ export async function GET(req: Request) {
       }
     }
 
-    let qualityRating = "GREEN";
+    let qualityRating = "N/A";
     if (!liveQuality || liveQuality === "N/A" || liveQuality === "UNKNOWN") {
       qualityRating = "N/A";
-    } else if (liveQuality.toUpperCase().includes("HIGH") || liveQuality.toUpperCase().includes("GREEN")) {
+    } else if (
+      liveQuality.toUpperCase().includes("HIGH") ||
+      liveQuality.toUpperCase().includes("GREEN")
+    ) {
       qualityRating = "GREEN";
-    } else if (liveQuality.toUpperCase().includes("MED") || liveQuality.toUpperCase().includes("YELLOW")) {
+    } else if (
+      liveQuality.toUpperCase().includes("MED") ||
+      liveQuality.toUpperCase().includes("YELLOW")
+    ) {
       qualityRating = "YELLOW";
-    } else if (liveQuality.toUpperCase().includes("LOW") || liveQuality.toUpperCase().includes("RED")) {
+    } else if (
+      liveQuality.toUpperCase().includes("LOW") ||
+      liveQuality.toUpperCase().includes("RED")
+    ) {
       qualityRating = "RED";
     } else {
       qualityRating = liveQuality;
@@ -93,13 +160,18 @@ export async function GET(req: Request) {
 
     // 3. Date Range Calculation
     const now = new Date();
-    let startDate = new Date();
+    let startDate = new Date(now);
     let endDate = new Date(now);
 
     if (startDateParam && endDateParam) {
-      startDate = new Date(startDateParam);
-      endDate = new Date(endDateParam);
-      endDate.setHours(23, 59, 59, 999);
+      const parsedStart = new Date(startDateParam);
+      const parsedEnd = new Date(endDateParam);
+      if (!Number.isNaN(parsedStart.getTime()) && !Number.isNaN(parsedEnd.getTime())) {
+        startDate = parsedStart;
+        startDate.setHours(0, 0, 0, 0);
+        endDate = parsedEnd;
+        endDate.setHours(23, 59, 59, 999);
+      }
     } else if (filter === "TODAY") {
       startDate.setHours(0, 0, 0, 0);
     } else if (filter === "7DAYS") {
@@ -115,8 +187,9 @@ export async function GET(req: Request) {
         ? {}
         : { createdAt: { gte: startDate, lte: endDate } };
 
-    // 4. Fetch Campaign Logs + Template Categories for accurate live stats
+    // 4. Scoped Templates & Campaign Logs
     const allTemplates = await prisma.whatsAppTemplate.findMany({
+      where: scopedWhere,
       select: { name: true, category: true },
     });
     const templateCategoryMap: Record<string, string> = {};
@@ -124,44 +197,60 @@ export async function GET(req: Request) {
       templateCategoryMap[t.name] = (t.category || "UTILITY").toUpperCase();
     });
 
-    const campaignChannelIdentifiers = [
-      activeDisplayPhone,
-      activeWabaId,
-      activeChannelId,
-    ].filter(Boolean);
+    const campaignChannelIdentifiers = Array.from(
+      new Set(
+        [
+          activeDisplayPhone,
+          activeWabaId,
+          activeChannelId,
+          targetAccount?.id,
+        ].filter(Boolean)
+      )
+    );
 
     const campaignWhere: any = {
+      ...scopedWhere,
       ...dateQuery,
       ...(!isAllChannels && campaignChannelIdentifiers.length > 0
         ? { channel: { in: campaignChannelIdentifiers } }
         : {}),
     };
 
-    const campaignLogs = await prisma.campaignLog.findMany({
-      where: campaignWhere,
-      orderBy: { createdAt: "desc" },
-    });
+    const campaignLogs =
+      allAccounts.length === 0 && !tenant.isSuperAdmin
+        ? []
+        : await prisma.campaignLog.findMany({
+            where: campaignWhere,
+            orderBy: { createdAt: "desc" },
+          });
 
-    // Also include Live Chat Agent messages if any
-    const chatChannelQuery =
-      !isAllChannels && activeChannelId
-        ? { chatSession: { channel: activeChannelId } }
-        : {};
+    const chatSessionFilter: any = {
+      ...scopedWhere,
+      ...(!isAllChannels && campaignChannelIdentifiers.length > 0
+        ? { channel: { in: campaignChannelIdentifiers } }
+        : {}),
+    };
 
-    const chatMessages = await prisma.chatMessage.findMany({
-      where: { senderType: "AGENT", ...dateQuery, ...chatChannelQuery },
-      include: { chatSession: true },
-      orderBy: { createdAt: "desc" },
-      take: 250,
-    });
+    const chatMessages =
+      allAccounts.length === 0 && !tenant.isSuperAdmin
+        ? []
+        : await prisma.chatMessage.findMany({
+            where: {
+              senderType: "AGENT",
+              ...dateQuery,
+              chatSession: chatSessionFilter,
+            },
+            include: { chatSession: true },
+            orderBy: { createdAt: "desc" },
+            take: 250,
+          });
 
-    // 5. Aggregate Combined Live Metrics (Campaign Broadcasts + Live Chat)
+    // 5. Aggregate Metrics
     let totalSent = 0;
     let totalDelivered = 0;
     let totalRead = 0;
     let totalUnread = 0;
     let totalFailed = 0;
-
     let marketingTotal = 0;
     let marketingDelivered = 0;
     let utilityTotal = 0;
@@ -221,48 +310,122 @@ export async function GET(req: Request) {
       }
     });
 
-    // 6. Generate Date-wise Graph Trends (Campaigns + Chat)
-    const daysCount = filter === "TODAY" ? 1 : filter === "30DAYS" ? 30 : 7;
+    // 6. Date-wise Graph Trends
     const trendData = [];
+    if (startDateParam && endDateParam && startDate.getTime() > 0) {
+      const cursor = new Date(startDate);
+      cursor.setHours(0, 0, 0, 0);
+      const lastDay = new Date(endDate);
+      lastDay.setHours(0, 0, 0, 0);
 
-    for (let i = daysCount - 1; i >= 0; i--) {
-      const dStart = new Date();
-      dStart.setDate(now.getDate() - i);
-      dStart.setHours(0, 0, 0, 0);
+      let safetyCounter = 0;
+      while (cursor.getTime() <= lastDay.getTime() && safetyCounter < 90) {
+        const dStart = new Date(cursor);
+        dStart.setHours(0, 0, 0, 0);
+        const dEnd = new Date(cursor);
+        dEnd.setHours(23, 59, 59, 999);
 
-      const dEnd = new Date(dStart);
-      dEnd.setHours(23, 59, 59, 999);
+        const dayLabel = dStart.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
 
-      const dayLabel = dStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        const dayCampLogs = campaignLogs.filter((l) => {
+          const t = new Date(l.createdAt).getTime();
+          return t >= dStart.getTime() && t <= dEnd.getTime();
+        });
 
-      const dayCampLogs = campaignLogs.filter((l) => {
-        const t = new Date(l.createdAt).getTime();
-        return t >= dStart.getTime() && t <= dEnd.getTime();
-      });
+        const dayChatMsgs = chatMessages.filter((m: any) => {
+          const t = new Date(m.createdAt).getTime();
+          return t >= dStart.getTime() && t <= dEnd.getTime();
+        });
 
-      const dayChatMsgs = chatMessages.filter((m: any) => {
-        const t = new Date(m.createdAt).getTime();
-        return t >= dStart.getTime() && t <= dEnd.getTime();
-      });
+        trendData.push({
+          day: dayLabel,
+          sent:
+            dayCampLogs.filter((l) => l.status?.toUpperCase() !== "FAILED")
+              .length +
+            dayChatMsgs.filter((m: any) => m.status?.toUpperCase() !== "FAILED")
+              .length,
+          del:
+            dayCampLogs.filter((l) =>
+              ["DELIVERED", "READ"].includes(l.status?.toUpperCase())
+            ).length +
+            dayChatMsgs.filter((m: any) =>
+              ["DELIVERED", "READ"].includes(m.status?.toUpperCase())
+            ).length,
+          read:
+            dayCampLogs.filter((l) => l.status?.toUpperCase() === "READ")
+              .length +
+            dayChatMsgs.filter((m: any) => m.status?.toUpperCase() === "READ")
+              .length,
+        });
 
-      const daySent =
-        dayCampLogs.filter((l) => l.status?.toUpperCase() !== "FAILED").length +
-        dayChatMsgs.filter((m: any) => m.status?.toUpperCase() !== "FAILED").length;
+        cursor.setDate(cursor.getDate() + 1);
+        safetyCounter++;
+      }
+    } else {
+      const daysCount = filter === "TODAY" ? 1 : filter === "30DAYS" ? 30 : 7;
+      for (let i = daysCount - 1; i >= 0; i--) {
+        const dStart = new Date();
+        dStart.setDate(now.getDate() - i);
+        dStart.setHours(0, 0, 0, 0);
 
-      const dayDelivered =
-        dayCampLogs.filter((l) => ["DELIVERED", "READ"].includes(l.status?.toUpperCase())).length +
-        dayChatMsgs.filter((m: any) => ["DELIVERED", "READ"].includes(m.status?.toUpperCase())).length;
+        const dEnd = new Date(dStart);
+        dEnd.setHours(23, 59, 59, 999);
 
-      const dayRead =
-        dayCampLogs.filter((l) => l.status?.toUpperCase() === "READ").length +
-        dayChatMsgs.filter((m: any) => m.status?.toUpperCase() === "READ").length;
+        const dayLabel = dStart.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
 
-      trendData.push({ day: dayLabel, sent: daySent, del: dayDelivered, read: dayRead });
+        const dayCampLogs = campaignLogs.filter((l) => {
+          const t = new Date(l.createdAt).getTime();
+          return t >= dStart.getTime() && t <= dEnd.getTime();
+        });
+
+        const dayChatMsgs = chatMessages.filter((m: any) => {
+          const t = new Date(m.createdAt).getTime();
+          return t >= dStart.getTime() && t <= dEnd.getTime();
+        });
+
+        const daySent =
+          dayCampLogs.filter((l) => l.status?.toUpperCase() !== "FAILED")
+            .length +
+          dayChatMsgs.filter((m: any) => m.status?.toUpperCase() !== "FAILED")
+            .length;
+
+        const dayDelivered =
+          dayCampLogs.filter((l) =>
+            ["DELIVERED", "READ"].includes(l.status?.toUpperCase())
+          ).length +
+          dayChatMsgs.filter((m: any) =>
+            ["DELIVERED", "READ"].includes(m.status?.toUpperCase())
+          ).length;
+
+        const dayRead =
+          dayCampLogs.filter((l) => l.status?.toUpperCase() === "READ").length +
+          dayChatMsgs.filter((m: any) => m.status?.toUpperCase() === "READ")
+            .length;
+
+        trendData.push({
+          day: dayLabel,
+          sent: daySent,
+          del: dayDelivered,
+          read: dayRead,
+        });
+      }
     }
 
     // 7. Hourly Peak Activity & Top Templates
     const hoursMap: Record<string, number> = {
-      "09 AM": 0, "11 AM": 0, "01 PM": 0, "03 PM": 0, "05 PM": 0, "07 PM": 0, "09 PM": 0,
+      "09 AM": 0,
+      "11 AM": 0,
+      "01 PM": 0,
+      "03 PM": 0,
+      "05 PM": 0,
+      "07 PM": 0,
+      "09 PM": 0,
     };
     const templateCounts: Record<string, { sent: number; read: number }> = {};
 
@@ -282,7 +445,10 @@ export async function GET(req: Request) {
       if (l.status?.toUpperCase() === "READ") templateCounts[tName].read++;
     });
 
-    const hourlyActivity = Object.entries(hoursMap).map(([hour, count]) => ({ hour, count }));
+    const hourlyActivity = Object.entries(hoursMap).map(([hour, count]) => ({
+      hour,
+      count,
+    }));
 
     const topTemplates = Object.entries(templateCounts)
       .map(([name, val]) => ({
@@ -293,7 +459,7 @@ export async function GET(req: Request) {
       .sort((a, b) => b.sent - a.sent)
       .slice(0, 3);
 
-    // 8. Live Webhook Audit Logs (Latest 6 Campaign/Chat events)
+    // 8. Live Webhook Audit Logs
     const recentWebhooks = campaignLogs.slice(0, 6).map((l) => ({
       id: l.id,
       phone: l.recipient || "Customer",
@@ -305,32 +471,39 @@ export async function GET(req: Request) {
       }),
     }));
 
-    // Include "All WABA Accounts" option at the top of accounts list
-    const formattedAccounts = [
-      {
-        id: "ALL",
-        phoneNumberId: "ALL",
-        displayPhone: "All Accounts",
-        displayName: `Combined (${allAccounts.length} WABAs)`,
-        qualityRating: "GREEN",
-        messagingLimit: "All Channels",
-        isDefault: false,
-      },
-      ...allAccounts.map((acc: any) => ({
-        id: acc.id,
-        phoneNumberId: acc.phoneNumberId,
-        displayPhone: acc.displayPhone,
-        displayName: acc.displayName,
-        qualityRating: acc.qualityRating,
-        messagingLimit: acc.messagingLimit,
-        isDefault: acc.isDefault || false,
-      })),
-    ];
+    // Format ONLY scoped accounts (add "ALL" only if > 1 WABA)
+    const formattedAccounts =
+      allAccounts.length === 0
+        ? []
+        : [
+            ...(allAccounts.length > 1
+              ? [
+                  {
+                    id: "ALL",
+                    phoneNumberId: "ALL",
+                    displayPhone: "All Accounts",
+                    displayName: `Combined (${allAccounts.length} WABAs)`,
+                    qualityRating: "GREEN",
+                    messagingLimit: "All Channels",
+                    isDefault: false,
+                  },
+                ]
+              : []),
+            ...allAccounts.map((acc: any) => ({
+              id: acc.id,
+              phoneNumberId: acc.phoneNumberId,
+              displayPhone: acc.displayPhone,
+              displayName: acc.displayName,
+              qualityRating: acc.qualityRating,
+              messagingLimit: acc.messagingLimit,
+              isDefault: acc.isDefault || false,
+            })),
+          ];
 
     return NextResponse.json(
       {
         success: true,
-        selectedChannelId: activeChannelId || "",
+        selectedChannelId: activeChannelId,
         accounts: formattedAccounts,
         stats: {
           totalSent,
@@ -358,6 +531,9 @@ export async function GET(req: Request) {
       }
     );
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }

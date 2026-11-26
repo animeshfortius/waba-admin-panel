@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 interface SidebarBranding {
-  brandName?: string;
+  brandName: string;
   logoUrl?: string | null;
   primaryColor?: string;
 }
@@ -13,6 +13,8 @@ interface SidebarBranding {
 interface WhiteLabelConfigInfo {
   isActive?: boolean;
   brandName?: string | null;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
   domain?: string | null;
   customDomain?: string | null;
 }
@@ -25,7 +27,7 @@ export default function Sidebar() {
   const [whiteLabelConfig, setWhiteLabelConfig] =
     useState<WhiteLabelConfigInfo | null>(null);
   const [branding, setBranding] = useState<SidebarBranding>({
-    brandName: "Fortius Infocom",
+    brandName: "WABA Cloud",
     logoUrl: null,
     primaryColor: "#059669",
   });
@@ -47,34 +49,104 @@ export default function Sidebar() {
   }, [pathname]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const host = window.location.hostname;
-    if (!host || host === "localhost" || host === "127.0.0.1") return;
+    let cancelled = false;
 
-    fetch(`/api/admin/branding?domain=${encodeURIComponent(host)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.success && data?.config?.isActive) {
-          setBranding({
-            brandName: data.config.brandName || "Partner Portal",
-            logoUrl: data.config.logoUrl || null,
-            primaryColor: data.config.primaryColor || "#059669",
-          });
-        }
-      })
-      .catch(() => {});
-  }, []);
+    async function loadRoleAndBranding() {
+      let role = "";
+      let ownWL: WhiteLabelConfigInfo | null = null;
+      let parentWL: WhiteLabelConfigInfo | null = null;
+      let userFallbackName = "WABA Cloud";
 
-  useEffect(() => {
-    fetch("/api/auth/me")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.user) {
-          setUserRole(String(data.user.role || "USER").toUpperCase());
-          setWhiteLabelConfig(data.user.whiteLabelConfig || null);
+      try {
+        const meRes = await fetch("/api/auth/me", {
+          cache: "no-store",
+          credentials: "include",
+        });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData?.user) {
+            role = String(meData.user.role || "USER").trim().toUpperCase();
+            ownWL = meData.user.whiteLabelConfig || null;
+            parentWL =
+              meData.user.createdBy?.whiteLabelConfig ||
+              meData.user.parentWhiteLabelConfig ||
+              null;
+            userFallbackName =
+              meData.user.name || meData.user.username || "WABA Cloud";
+          }
         }
-      })
-      .catch(() => {});
+      } catch {
+        // ignore
+      }
+
+      // Check domain-specific branding if on custom domain
+      let domainWL: WhiteLabelConfigInfo | null = null;
+      if (typeof window !== "undefined") {
+        const host = window.location.hostname;
+        const isPlatformHost =
+          !host ||
+          host === "localhost" ||
+          host === "127.0.0.1" ||
+          host.endsWith(".onrender.com") ||
+          host.endsWith(".vercel.app");
+
+        if (!isPlatformHost) {
+          try {
+            const domRes = await fetch(
+              `/api/admin/branding?domain=${encodeURIComponent(host)}`,
+              { cache: "no-store" }
+            );
+            const domData = await domRes.json();
+            if (domData?.success && domData?.config?.isActive) {
+              domainWL = domData.config;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      if (cancelled) return;
+
+      setUserRole(role);
+      setWhiteLabelConfig(ownWL);
+
+      const activeWL =
+        (ownWL?.isActive ? ownWL : null) ||
+        (parentWL?.isActive ? parentWL : null) ||
+        (domainWL?.isActive ? domainWL : null);
+
+      if (activeWL?.brandName) {
+        setBranding({
+          brandName: activeWL.brandName,
+          logoUrl: activeWL.logoUrl || null,
+          primaryColor: activeWL.primaryColor || "#059669",
+        });
+      } else if (role === "SUPER_ADMIN") {
+        setBranding({
+          brandName: "Fortius Infocom",
+          logoUrl: null,
+          primaryColor: "#059669",
+        });
+      } else if (role === "WHITE_LABEL_RESELLER" || role === "RESELLER") {
+        setBranding({
+          brandName: userFallbackName,
+          logoUrl: null,
+          primaryColor: "#059669",
+        });
+      } else {
+        setBranding({
+          brandName: "WABA Cloud",
+          logoUrl: null,
+          primaryColor: "#059669",
+        });
+      }
+    }
+
+    loadRoleAndBranding();
+    return () => {
+      cancelled = true;
+    };
   }, [pathname]);
 
   const isSuperAdmin = userRole === "SUPER_ADMIN";
@@ -91,7 +163,7 @@ export default function Sidebar() {
 
   const headerTitle = isAgentMode
     ? "Agent Portal"
-    : branding.brandName || "WABA Panel";
+    : branding.brandName || "WABA Cloud";
 
   return (
     <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between border-r border-slate-800 font-sans min-h-screen">

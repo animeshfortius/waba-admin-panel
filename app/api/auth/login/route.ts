@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { Role } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { resolveTenantBranding } from "@/lib/tenantBranding";
@@ -10,8 +11,8 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const username = body.username?.trim();
-    const password = body.password?.trim();
+    const username = String(body?.username || "").trim();
+    const password = String(body?.password || "").trim();
 
     if (!username || !password) {
       return NextResponse.json(
@@ -23,20 +24,36 @@ export async function POST(req: Request) {
     let authUser: any = null;
     let assignedRole = "USER";
 
-    // Emergency Super Admin login ONLY for exact admin + Admin@123
+    // Emergency Super Admin check: prefer real DB SUPER_ADMIN if present, else fallback
     if (username.toLowerCase() === "admin" && password === "Admin@123") {
-      assignedRole = "SUPER_ADMIN";
-      authUser = {
-        id: "emergency-admin-id",
-        username: "admin",
-        name: "Super Admin",
-        email: "admin@admin.com",
-        role: "SUPER_ADMIN",
-        isWhiteLabel: false,
-        actualBalance: 0,
-        virtualBalance: 0,
-        walletBalance: 0,
-      };
+      const dbSuperAdmin = await prisma.user.findFirst({
+        where: {
+          role: { in: [Role.SUPER_ADMIN] },
+        },
+        include: {
+          whiteLabelConfig: true,
+        },
+      });
+
+      if (dbSuperAdmin) {
+        authUser = dbSuperAdmin;
+        assignedRole = "SUPER_ADMIN";
+      } else {
+        assignedRole = "SUPER_ADMIN";
+        authUser = {
+          id: "emergency-admin-id",
+          username: "admin",
+          name: "Super Admin",
+          email: "admin@admin.com",
+          role: "SUPER_ADMIN",
+          parentId: null,
+          isWhiteLabel: false,
+          whiteLabelConfig: null,
+          actualBalance: 0,
+          virtualBalance: 0,
+          walletBalance: 0,
+        };
+      }
     } else {
       const user = await prisma.user.findFirst({
         where: {
@@ -54,6 +71,28 @@ export async function POST(req: Request) {
         return NextResponse.json(
           { success: false, message: "Invalid username or password" },
           { status: 401 }
+        );
+      }
+
+      if (
+        (user as any).status &&
+        ["SUSPENDED", "INACTIVE", "BLOCKED"].includes(
+          String((user as any).status).toUpperCase()
+        )
+      ) {
+        return NextResponse.json(
+          { success: false, message: "Account is inactive or suspended" },
+          { status: 403 }
+        );
+      }
+
+      if (
+        (user as any).expiryDate &&
+        new Date((user as any).expiryDate).getTime() < Date.now()
+      ) {
+        return NextResponse.json(
+          { success: false, message: "Account validity has expired" },
+          { status: 403 }
         );
       }
 
@@ -82,10 +121,14 @@ export async function POST(req: Request) {
     const isWhiteLabel =
       assignedRole === "WHITE_LABEL_RESELLER" || Boolean(authUser.isWhiteLabel);
 
+    const parentId =
+      authUser.parentId ?? authUser.resellerId ?? authUser.createdById ?? null;
+
     const token = jwt.sign(
       {
         userId: authUser.id,
         role: assignedRole,
+        parentId,
         isWhiteLabel,
       },
       JWT_SECRET,
@@ -103,6 +146,7 @@ export async function POST(req: Request) {
         name: authUser.name || authUser.username,
         email: authUser.email,
         role: assignedRole,
+        parentId,
         isWhiteLabel,
         whiteLabelConfig: authUser.whiteLabelConfig || null,
         actualBalance: Number(authUser.actualBalance ?? 0),

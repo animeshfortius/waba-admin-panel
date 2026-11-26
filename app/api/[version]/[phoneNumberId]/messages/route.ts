@@ -34,16 +34,61 @@ export async function POST(
 
   try {
     const body = await request.json();
+    const actorUserId = auth.context.userId;
 
-    const metaToken =
-      auth.context.metaAccessToken || process.env.META_ACCESS_TOKEN;
+    const cleanRequestedPhoneId = String(phoneNumberId || "")
+      .replace("PHONE_", "")
+      .trim();
+    const cleanContextPhoneId = String(auth.context.phoneNumberId || "")
+      .replace("PHONE_", "")
+      .trim();
+
+    // Verify requested phoneNumberId belongs to the authenticated user's WABA account
+    let scopedWaba = null;
+    if (cleanRequestedPhoneId) {
+      scopedWaba = await prisma.wabaAccount.findFirst({
+        where: {
+          userId: actorUserId,
+          OR: [
+            { phoneNumberId: cleanRequestedPhoneId },
+            { phoneNumberId: `PHONE_${cleanRequestedPhoneId}` },
+          ],
+        },
+      });
+
+      if (!scopedWaba) {
+        const errorMsg =
+          "Requested phoneNumberId does not belong to your account";
+        logApiActivity({
+          endpoint: endpointPath,
+          method: "POST",
+          userId: actorUserId,
+          statusCode: 403,
+          success: false,
+          durationMs: Date.now() - startTime,
+          errorMessage: errorMsg,
+        });
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: errorMsg,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    const metaToken = String(
+      scopedWaba?.accessToken || auth.context.metaAccessToken || ""
+    ).trim();
 
     if (!metaToken) {
       const errorMsg = "Meta access token not configured for this channel/user";
       logApiActivity({
         endpoint: endpointPath,
         method: "POST",
-        userId: auth.context.userId,
+        userId: actorUserId,
         statusCode: 400,
         success: false,
         durationMs: Date.now() - startTime,
@@ -60,17 +105,21 @@ export async function POST(
     }
 
     const graphVersion = version.startsWith("v") ? version : "v21.0";
-    const targetPhoneId =
-      phoneNumberId ||
-      auth.context.phoneNumberId ||
-      process.env.META_PHONE_NUMBER_ID;
+    const targetPhoneId = String(
+      scopedWaba?.phoneNumberId ||
+        cleanRequestedPhoneId ||
+        cleanContextPhoneId ||
+        ""
+    )
+      .replace("PHONE_", "")
+      .trim();
 
     if (!targetPhoneId) {
       const errorMsg = "phoneNumberId is required";
       logApiActivity({
         endpoint: endpointPath,
         method: "POST",
-        userId: auth.context.userId,
+        userId: actorUserId,
         statusCode: 400,
         success: false,
         durationMs: Date.now() - startTime,
@@ -110,16 +159,17 @@ export async function POST(
       ? "N/A"
       : metaData?.error?.message || "Meta Graph API error";
 
-    // Save API message entry to CampaignLog for reporting
+    // Save API message entry to CampaignLog bound to authenticated userId
     try {
-      const recipientNumber = String(body?.to || "").replace(/\D/g, "") || "N/A";
+      const recipientNumber =
+        String(body?.to || "").replace(/\D/g, "") || "N/A";
       const templateName =
         body?.template?.name || body?.type || "API_Message";
       const now = new Date();
 
       await prisma.campaignLog.create({
         data: {
-          userId: auth.context.userId || "admin",
+          userId: actorUserId,
           campaignName: "API_Console",
           templateName,
           channel: String(targetPhoneId),
@@ -140,7 +190,7 @@ export async function POST(
     logApiActivity({
       endpoint: endpointPath,
       method: "POST",
-      userId: auth.context.userId,
+      userId: actorUserId,
       statusCode: metaResponse.status,
       success: metaResponse.ok,
       durationMs: Date.now() - startTime,

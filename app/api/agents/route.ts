@@ -1,19 +1,49 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
-const prisma = new PrismaClient();
+function normalizeAgentId(rawId: string | number) {
+  const str = String(rawId).trim();
+  return isNaN(Number(str)) ? str : Number(str);
+}
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
 
     if (!(prisma as any).agent) {
       return NextResponse.json({ success: true, agents: [] });
     }
 
+    const { searchParams } = new URL(request.url);
+    const requestedUserId = searchParams.get("userId");
+
+    const ownerWhere = getOwnerWhere(tenant);
+    const whereClause: any = { ...ownerWhere };
+
+    if (
+      requestedUserId &&
+      requestedUserId !== "ALL" &&
+      requestedUserId !== "undefined" &&
+      requestedUserId !== "null"
+    ) {
+      if (
+        !tenant.isSuperAdmin &&
+        !tenant.allowedUserIds?.includes(requestedUserId)
+      ) {
+        return NextResponse.json({ success: true, agents: [] });
+      }
+      whereClause.userId = requestedUserId;
+    }
+
     const agents = await (prisma as any).agent.findMany({
-      where: userId ? { userId } : undefined,
+      where: whereClause,
       orderBy: { createdAt: "desc" },
     });
 
@@ -23,7 +53,9 @@ export async function GET(request: Request) {
         try {
           parsedChannels = JSON.parse(ag.assignedChannels);
         } catch {
-          parsedChannels = ag.assignedChannels.split(",").filter(Boolean);
+          parsedChannels = String(ag.assignedChannels)
+            .split(",")
+            .filter(Boolean);
         }
       }
 
@@ -31,14 +63,18 @@ export async function GET(request: Request) {
       if (ag.chatConfig) {
         try {
           parsedChatConfig =
-            typeof ag.chatConfig === "string" ? JSON.parse(ag.chatConfig) : ag.chatConfig;
+            typeof ag.chatConfig === "string"
+              ? JSON.parse(ag.chatConfig)
+              : ag.chatConfig;
         } catch {
           parsedChatConfig = {};
         }
       }
 
+      const { password: _hiddenPassword, ...safeAgent } = ag;
+
       return {
-        ...ag,
+        ...safeAgent,
         assignedChannelsList: parsedChannels,
         parsedChatConfig,
       };
@@ -46,21 +82,44 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, agents: formattedAgents });
   } catch (error: any) {
-    if (error?.digest === "DYNAMIC_SERVER_USAGE" || error?.message?.includes("bail out of prerendering")) {
+    if (
+      error?.digest === "DYNAMIC_SERVER_USAGE" ||
+      error?.message?.includes("bail out of prerendering")
+    ) {
       throw error;
     }
     console.error("Fetch agents error:", error);
-    return NextResponse.json({ success: true, agents: [] });
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to fetch agents" },
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(request: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
 
-    if (!body.name || !body.userId) {
-      return NextResponse.json({ success: false, error: "Agent Name and User ID are required" }, { status: 400 });
+    if (!body?.name) {
+      return NextResponse.json(
+        { success: false, error: "Agent Name is required" },
+        { status: 400 }
+      );
     }
+
+    const targetUserId =
+      body.userId &&
+      (tenant.isSuperAdmin || tenant.allowedUserIds?.includes(body.userId))
+        ? body.userId
+        : tenant.userId;
 
     const channelsJson = Array.isArray(body.assignedChannels)
       ? JSON.stringify(body.assignedChannels)
@@ -79,9 +138,9 @@ export async function POST(request: Request) {
     try {
       newAgent = await (prisma as any).agent.create({
         data: {
-          userId: body.userId,
-          name: body.name,
-          email: body.email || `${body.userId}@fortius.in`,
+          userId: targetUserId,
+          name: String(body.name).trim(),
+          email: body.email || `${targetUserId}@fortius.in`,
           phone: body.phone || "",
           password: body.password || "agent123",
           expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
@@ -96,13 +155,15 @@ export async function POST(request: Request) {
         },
       });
     } catch (prismaErr: any) {
-      // Fallback if assignedChannels or chatConfig columns are not yet pushed in live DB
-      if (prismaErr.message?.includes("assignedChannels") || prismaErr.message?.includes("chatConfig")) {
+      if (
+        prismaErr.message?.includes("assignedChannels") ||
+        prismaErr.message?.includes("chatConfig")
+      ) {
         newAgent = await (prisma as any).agent.create({
           data: {
-            userId: body.userId,
-            name: body.name,
-            email: body.email || `${body.userId}@fortius.in`,
+            userId: targetUserId,
+            name: String(body.name).trim(),
+            email: body.email || `${targetUserId}@fortius.in`,
             phone: body.phone || "",
             password: body.password || "agent123",
             expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
@@ -119,21 +180,54 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, agent: newAgent });
+    const { password: _hiddenPassword, ...safeNewAgent } = newAgent;
+
+    return NextResponse.json({ success: true, agent: safeNewAgent });
   } catch (error: any) {
     console.error("Create agent error:", error);
-    return NextResponse.json({ success: false, error: error.message || "Failed to create agent" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to create agent" },
+      { status: 500 }
+    );
   }
 }
 
 export async function PATCH(request: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
-    const { agentId, id, ...updates } = body;
+    const { agentId, id, userId: _ignoredUserId, ...updates } = body;
     const targetId = agentId || id;
 
     if (!targetId) {
-      return NextResponse.json({ success: false, error: "Agent ID is required" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Agent ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const ownerWhere = getOwnerWhere(tenant);
+    const normalizedId = normalizeAgentId(targetId);
+
+    const existing = await (prisma as any).agent.findFirst({
+      where: {
+        id: normalizedId,
+        ...ownerWhere,
+      },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Agent not found or access denied" },
+        { status: 404 }
+      );
     }
 
     if (updates.expiryDate) {
@@ -151,20 +245,20 @@ export async function PATCH(request: Request) {
     delete updates.assignedChannelsList;
     delete updates.parsedChatConfig;
 
-    const whereClause = { id: isNaN(Number(targetId)) ? targetId : Number(targetId) };
-
     let updatedAgent;
     try {
       updatedAgent = await (prisma as any).agent.update({
-        where: whereClause,
+        where: { id: existing.id },
         data: updates,
       });
     } catch (prismaErr: any) {
-      // Fallback if assignedChannels or chatConfig columns don't exist in compiled Prisma client yet
-      if (prismaErr.message?.includes("assignedChannels") || prismaErr.message?.includes("chatConfig")) {
+      if (
+        prismaErr.message?.includes("assignedChannels") ||
+        prismaErr.message?.includes("chatConfig")
+      ) {
         const { assignedChannels, chatConfig, ...safeUpdates } = updates;
         updatedAgent = await (prisma as any).agent.update({
-          where: whereClause,
+          where: { id: existing.id },
           data: safeUpdates,
         });
       } else {
@@ -172,29 +266,65 @@ export async function PATCH(request: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, agent: updatedAgent });
+    const { password: _hiddenPassword, ...safeUpdatedAgent } = updatedAgent;
+
+    return NextResponse.json({ success: true, agent: safeUpdatedAgent });
   } catch (error: any) {
     console.error("Update agent error:", error);
-    return NextResponse.json({ success: false, error: error.message || "Failed to update agent" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to update agent" },
+      { status: 500 }
+    );
   }
 }
 
 export async function DELETE(request: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
     if (!id) {
-      return NextResponse.json({ success: false, error: "Agent ID required" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Agent ID required" },
+        { status: 400 }
+      );
+    }
+
+    const ownerWhere = getOwnerWhere(tenant);
+    const normalizedId = normalizeAgentId(id);
+
+    const existing = await (prisma as any).agent.findFirst({
+      where: {
+        id: normalizedId,
+        ...ownerWhere,
+      },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Agent not found or access denied" },
+        { status: 404 }
+      );
     }
 
     await (prisma as any).agent.delete({
-      where: { id: isNaN(Number(id)) ? id : Number(id) },
+      where: { id: existing.id },
     });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Delete agent error:", error);
-    return NextResponse.json({ success: false, error: error.message || "Failed to delete agent" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to delete agent" },
+      { status: 500 }
+    );
   }
 }

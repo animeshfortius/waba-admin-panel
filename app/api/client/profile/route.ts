@@ -1,36 +1,67 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { getTenantContext } from "@/lib/tenant-auth";
 import crypto from "crypto";
 
-const prisma = new PrismaClient();
+function sanitizeUser(user: any) {
+  if (!user) return null;
+  const { password: _hiddenPassword, ...safeUser } = user;
+  return safeUser;
+}
+
+function canAccessUser(tenant: any, targetUserId: string) {
+  if (!targetUserId) return false;
+  return (
+    targetUserId === tenant.userId ||
+    Boolean(tenant.isSuperAdmin) ||
+    Boolean(tenant.allowedUserIds?.includes(targetUserId))
+  );
+}
 
 // GET: Profile fetch karne aur apiKey auto-generate karne ke liye
 export async function GET(request: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
+    const requestedUserId = searchParams.get("userId")?.trim();
+    const targetUserId = requestedUserId || tenant.userId;
 
-    let user = null;
-    if (userId) {
-      user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!canAccessUser(tenant, targetUserId)) {
+      return NextResponse.json(
+        { success: false, error: "Access denied for this user profile" },
+        { status: 403 }
+      );
     }
 
-    // Agar ID se user na mile, toh database ka pehla user utha lo
-    if (!user) {
-      user = await prisma.user.findFirst();
-    }
+    let user = await prisma.user.findUnique({ where: { id: targetUserId } });
 
-    // Agar database bilkul khali ho, toh default admin user bana do
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          name: "Admin",
-          email: "info@fortiusinfocom.com",
-          password: "default_password",
-          phone: "8052058888",
+    if (!user && targetUserId === "emergency-admin-id") {
+      return NextResponse.json({
+        success: true,
+        user: {
+          id: "emergency-admin-id",
+          username: "admin",
+          name: "Super Admin",
+          email: "admin@admin.com",
+          phone: "",
           role: "SUPER_ADMIN",
+          apiKey: null,
         },
       });
+    }
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "User not found" },
+        { status: 404 }
+      );
     }
 
     // Agar apiKey na ho toh generate karke save kar do
@@ -42,13 +73,16 @@ export async function GET(request: Request) {
       });
     }
 
-    return NextResponse.json({ success: true, user });
+    return NextResponse.json({ success: true, user: sanitizeUser(user) });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "Failed to fetch profile" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to fetch profile" },
+      { status: 500 }
+    );
   }
 }
 
-// POST & PUT: Profile update karne ke liye (Fail-safe logic)
+// POST & PUT: Profile update karne ke liye
 export async function POST(request: Request) {
   return handleProfileUpdate(request);
 }
@@ -59,46 +93,57 @@ export async function PUT(request: Request) {
 
 async function handleProfileUpdate(request: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
-    const { userId, name, phone, image } = body;
+    const requestedUserId = body?.userId ? String(body.userId).trim() : "";
+    const targetUserId = requestedUserId || tenant.userId;
 
-    let user = null;
-    if (userId) {
-      user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!canAccessUser(tenant, targetUserId)) {
+      return NextResponse.json(
+        { success: false, error: "Access denied for this user profile" },
+        { status: 403 }
+      );
     }
 
-    // Agar ID na mile toh database ka pehla user target karo
-    if (!user) {
-      user = await prisma.user.findFirst();
+    const existingUser = await prisma.user.findUnique({
+      where: { id: targetUserId },
+    });
+
+    if (!existingUser) {
+      return NextResponse.json(
+        { success: false, error: "User not found" },
+        { status: 404 }
+      );
     }
 
-    let updatedUser;
-    if (user) {
-      // User mil gaya toh update kar do
-      updatedUser = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          ...(name && { name }),
-          ...(phone && { phone }),
-          ...(image !== undefined && { image }), // 👈 Yahan image safely save ho jayegi
-        },
-      });
-    } else {
-      // Agar ek bhi user na ho toh naya create kar do
-      updatedUser = await prisma.user.create({
-        data: {
-          name: name || "Admin",
-          email: "info@fortiusinfocom.com",
-          password: "default_password",
-          phone: phone || "8052058888",
-          image: image || "",
-          role: "SUPER_ADMIN",
-        },
-      });
-    }
+    const { name, phone, image } = body;
 
-    return NextResponse.json({ success: true, user: updatedUser });
+    const updatedUser = await prisma.user.update({
+      where: { id: existingUser.id },
+      data: {
+        ...(name !== undefined && String(name).trim()
+          ? { name: String(name).trim() }
+          : {}),
+        ...(phone !== undefined ? { phone: String(phone).trim() } : {}),
+        ...(image !== undefined ? { image } : {}),
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      user: sanitizeUser(updatedUser),
+    });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "Failed to update profile" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to update profile" },
+      { status: 500 }
+    );
   }
 }

@@ -1,19 +1,40 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveCategoryRate } from "@/lib/billingDeduction";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
 function parseScheduleDateIST(rawDate: string): Date {
   const trimmed = String(rawDate || "").trim();
   const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
-  if (!hasTimezone && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(trimmed)) {
+  if (
+    !hasTimezone &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(trimmed)
+  ) {
     const withSeconds = trimmed.length === 16 ? `${trimmed}:00` : trimmed;
     return new Date(`${withSeconds}+05:30`);
   }
   return new Date(trimmed);
 }
 
+function normalizeRecipientNumber(rawNumber: unknown): string {
+  let formattedNumber = String(rawNumber ?? "").replace(/\D/g, "");
+  if (formattedNumber.length === 10) {
+    formattedNumber = `91${formattedNumber}`;
+  }
+  return formattedNumber;
+}
+
 export async function POST(req: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
+    const ownerWhere = getOwnerWhere(tenant);
     const body = await req.json();
     const {
       campaignName,
@@ -30,12 +51,18 @@ export async function POST(req: Request) {
     } = body;
 
     const identifier = String(phoneNumberId || wabaId || "").trim();
+    const normalizedNumbers = Array.isArray(numbers)
+      ? Array.from(
+          new Set(numbers.map(normalizeRecipientNumber).filter(Boolean))
+        )
+      : [];
 
-    if (!identifier || !numbers || numbers.length === 0 || !templateName) {
+    if (!identifier || normalizedNumbers.length === 0 || !templateName) {
       return NextResponse.json(
         {
           success: false,
-          error: "Missing required campaign fields (WABA, Numbers, or Template).",
+          error:
+            "Missing required campaign fields (WABA, valid Numbers, or Template).",
         },
         { status: 400 }
       );
@@ -43,6 +70,7 @@ export async function POST(req: Request) {
 
     const wabaAccount = await prisma.wabaAccount.findFirst({
       where: {
+        ...ownerWhere,
         OR: [
           { wabaId: identifier },
           { phoneNumberId: identifier },
@@ -53,23 +81,25 @@ export async function POST(req: Request) {
       },
     });
 
-    const resolvedToken = (
-      wabaAccount?.accessToken ||
-      process.env.META_ACCESS_TOKEN ||
-      ""
-    ).trim();
+    const resolvedToken = String(wabaAccount?.accessToken || "").trim();
 
     if (!wabaAccount || !resolvedToken || !wabaAccount.phoneNumberId) {
       return NextResponse.json(
         {
           success: false,
-          error: "WABA Phone Number ID or Access Token not found in database.",
+          error:
+            "WABA Phone Number ID or Access Token not found in your account scope.",
         },
         { status: 404 }
       );
     }
 
-    const ownerUserId = userId || wabaAccount.userId || "admin";
+    const ownerUserId =
+      userId &&
+      (tenant.isSuperAdmin || tenant.allowedUserIds?.includes(userId))
+        ? userId
+        : wabaAccount.userId || tenant.userId;
+
     const cleanPhoneId = wabaAccount.phoneNumberId.replace("PHONE_", "").trim();
     const actualWabaId = wabaAccount.wabaId;
     const channelNumber = wabaAccount.displayPhone || actualWabaId;
@@ -77,6 +107,7 @@ export async function POST(req: Request) {
     const dbTemplate = await prisma.whatsAppTemplate.findFirst({
       where: {
         name: templateName,
+        ...ownerWhere,
         OR: [{ wabaId: actualWabaId }, { wabaId: identifier }],
       },
     });
@@ -108,13 +139,7 @@ export async function POST(req: Request) {
 
       let scheduledCount = 0;
 
-      for (const rawNumber of numbers) {
-        let formattedNumber = String(rawNumber).replace(/\D/g, "");
-        if (formattedNumber.length === 10) {
-          formattedNumber = `91${formattedNumber}`;
-        }
-        if (!formattedNumber) continue;
-
+      for (const formattedNumber of normalizedNumbers) {
         await prisma.campaignLog.create({
           data: {
             userId: ownerUserId,
@@ -140,7 +165,10 @@ export async function POST(req: Request) {
         scheduledCount,
         scheduledFor: scheduledAtDate.toISOString(),
         estimatedUnitRate: estimatedCost,
-        message: `Campaign "${campaignName}" scheduled for ${scheduledAtDate.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} (${scheduledCount} recipients). Billing applies on delivery.`,
+        message: `Campaign "${campaignName}" scheduled for ${scheduledAtDate.toLocaleString(
+          "en-IN",
+          { timeZone: "Asia/Kolkata" }
+        )} (${scheduledCount} recipients). Billing applies on delivery.`,
       });
     }
 
@@ -150,7 +178,9 @@ export async function POST(req: Request) {
 
     const headerType = (dbTemplate as any)?.headerType?.toUpperCase() || "NONE";
     const hasMediaHeader =
-      headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT";
+      headerType === "IMAGE" ||
+      headerType === "VIDEO" ||
+      headerType === "DOCUMENT";
 
     let mediaPayloadParam: any = null;
 
@@ -204,12 +234,7 @@ export async function POST(req: Request) {
     let failedCount = 0;
     const errors: any[] = [];
 
-    for (const rawNumber of numbers) {
-      let formattedNumber = String(rawNumber).replace(/\D/g, "");
-      if (formattedNumber.length === 10) {
-        formattedNumber = `91${formattedNumber}`;
-      }
-
+    for (const formattedNumber of normalizedNumbers) {
       const templateComponents: any[] = [];
 
       if (hasMediaHeader && mediaPayloadParam) {
@@ -288,9 +313,8 @@ export async function POST(req: Request) {
         });
       }
 
-      // Cost stays 0 until DELIVERED report arrives via webhook; FAILED has 0 cost
       try {
-        const savedLog = await prisma.campaignLog.create({
+        await prisma.campaignLog.create({
           data: {
             userId: ownerUserId,
             campaignName: campaignName || `Campaign_${templateName}`,
@@ -306,12 +330,9 @@ export async function POST(req: Request) {
             readAt: null,
           },
         });
-        console.log(
-          `💾 CREATED LOG -> ID: ${savedLog.id} | Recipient: ${formattedNumber} | Status: ${messageStatus} | Wamid: ${metaMessageId}`
-        );
       } catch (logErr: any) {
         console.error(
-          `❌ DB SAVE FAILED for ${formattedNumber}:`,
+          `DB log save failed for ${formattedNumber}:`,
           logErr.message
         );
       }

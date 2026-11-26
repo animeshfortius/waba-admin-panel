@@ -1,17 +1,25 @@
 import { NextResponse } from "next/server";
 
 export function GET(request: Request) {
-  const loginUrl = "https://waba-admin-panel.onrender.com/login";
-  
-  // Create redirect response with absolute URL string
+  const loginUrl = new URL("/login", request.url);
   const response = NextResponse.redirect(loginUrl);
-  
-  // Clear the userId cookie completely
-  response.cookies.set("userId", "", {
-    httpOnly: true,
-    path: "/",
-    expires: new Date(0),
-  });
+
+  const isHttps =
+    loginUrl.protocol === "https:" ||
+    request.headers.get("x-forwarded-proto") === "https";
+
+  const cookieNames = ["userId", "token", "auth_token"];
+
+  for (const name of cookieNames) {
+    response.cookies.set(name, "", {
+      httpOnly: true,
+      path: "/",
+      sameSite: "lax",
+      secure: isHttps,
+      maxAge: 0,
+      expires: new Date(0),
+    });
+  }
 
   return response;
 }

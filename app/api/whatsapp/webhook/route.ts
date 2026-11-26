@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { processAutomationWebhook } from "@/lib/automationEngine";
-import { deductMessageBalance, refundMessageBalance } from "@/lib/billingDeduction";
+import {
+  deductMessageBalance,
+  refundMessageBalance,
+} from "@/lib/billingDeduction";
 
 function serializeMetaError(firstErr: any) {
   if (!firstErr) return "Message delivery failed by Meta";
@@ -44,9 +47,10 @@ export async function POST(req: Request) {
             const value = change.value;
             const metadata = value.metadata;
             const phoneNumberId = metadata?.phone_number_id || "";
-            const channelNumber = metadata?.display_phone_number || phoneNumberId || "Unknown";
+            const channelNumber =
+              metadata?.display_phone_number || phoneNumberId || "Unknown";
 
-            // 1️⃣ HANDLE INCOMING MESSAGES FOR LIVE AGENT CHAT MODULE + AUTOMATION ENGINE
+            // 1. HANDLE INCOMING MESSAGES FOR LIVE AGENT CHAT + AUTOMATION ENGINE
             if (value.messages) {
               for (const msgObj of value.messages) {
                 const customerPhone = msgObj.from?.trim();
@@ -66,7 +70,28 @@ export async function POST(req: Request) {
 
                 if (customerPhone) {
                   try {
-                    const cleanChannelDigits = channelNumber.replace(/\D/g, "").slice(-10);
+                    const cleanChannelDigits = channelNumber
+                      .replace(/\D/g, "")
+                      .slice(-10);
+
+                    const wabaAccount = await prisma.wabaAccount.findFirst({
+                      where: {
+                        OR: [
+                          ...(phoneNumberId ? [{ phoneNumberId }] : []),
+                          ...(cleanChannelDigits
+                            ? [
+                                {
+                                  displayPhone: {
+                                    contains: cleanChannelDigits,
+                                  },
+                                },
+                              ]
+                            : []),
+                        ],
+                      },
+                    });
+
+                    const resolvedOwnerId = wabaAccount?.userId || "admin";
 
                     let session = await prisma.chatSession.findFirst({
                       where: {
@@ -78,9 +103,10 @@ export async function POST(req: Request) {
                     if (!session) {
                       session = await prisma.chatSession.create({
                         data: {
-                          userId: "admin",
+                          userId: resolvedOwnerId,
                           customerPhone,
-                          customerName: value.contacts?.[0]?.profile?.name || null,
+                          customerName:
+                            value.contacts?.[0]?.profile?.name || null,
                           channel: channelNumber,
                           status: "OPEN",
                           isBotActive: true,
@@ -92,8 +118,10 @@ export async function POST(req: Request) {
                       session = await prisma.chatSession.update({
                         where: { id: session.id },
                         data: {
+                          userId: session.userId || resolvedOwnerId,
                           customerName:
-                            value.contacts?.[0]?.profile?.name || session.customerName,
+                            value.contacts?.[0]?.profile?.name ||
+                            session.customerName,
                           lastMessage: messageText,
                           lastMessageAt: timestamp,
                           status: "OPEN",
@@ -114,7 +142,7 @@ export async function POST(req: Request) {
                     });
 
                     console.log(
-                      `💬 LIVE CHAT INBOUND -> From: ${customerPhone} | Msg: ${messageText}`
+                      `LIVE CHAT INBOUND -> From: ${customerPhone} | Msg: ${messageText}`
                     );
 
                     if (
@@ -122,17 +150,6 @@ export async function POST(req: Request) {
                       messageText &&
                       messageText !== "[Media / Interactive Message]"
                     ) {
-                      const wabaAccount = await prisma.wabaAccount.findFirst({
-                        where: {
-                          OR: [
-                            ...(phoneNumberId ? [{ phoneNumberId }] : []),
-                            ...(cleanChannelDigits
-                              ? [{ displayPhone: { contains: cleanChannelDigits } }]
-                              : []),
-                          ],
-                        },
-                      });
-
                       const accessToken =
                         wabaAccount?.accessToken ||
                         process.env.WHATSAPP_ACCESS_TOKEN ||
@@ -141,7 +158,8 @@ export async function POST(req: Request) {
 
                       if (accessToken) {
                         await processAutomationWebhook({
-                          phoneNumberId: wabaAccount?.phoneNumberId || phoneNumberId,
+                          phoneNumberId:
+                            wabaAccount?.phoneNumberId || phoneNumberId,
                           customerPhone,
                           incomingText: messageText,
                           accessToken,
@@ -149,13 +167,16 @@ export async function POST(req: Request) {
                       }
                     }
                   } catch (chatErr: any) {
-                    console.error(`❌ Live Chat / Automation Webhook Error:`, chatErr.message);
+                    console.error(
+                      `Live Chat / Automation Webhook Error:`,
+                      chatErr.message
+                    );
                   }
                 }
               }
             }
 
-            // 2️⃣ HANDLE MESSAGE STATUS UPDATES (SENT, DELIVERED, READ, FAILED) + REPORT BILLING/REFUND
+            // 2. HANDLE MESSAGE STATUS UPDATES + BILLING / REFUND
             if (value.statuses) {
               for (const statusObj of value.statuses) {
                 const messageId = statusObj.id?.trim();
@@ -173,7 +194,9 @@ export async function POST(req: Request) {
                 if (rawStatus === "FAILED") status = "FAILED";
 
                 const serializedErr =
-                  status === "FAILED" ? serializeMetaError(statusObj.errors?.[0]) : "N/A";
+                  status === "FAILED"
+                    ? serializeMetaError(statusObj.errors?.[0])
+                    : "N/A";
 
                 try {
                   const cleanWebhook = recipientId
@@ -184,6 +207,7 @@ export async function POST(req: Request) {
                   if (messageId) {
                     const byWamid = await prisma.campaignLog.findMany({
                       where: { messageId: messageId },
+                      orderBy: { createdAt: "desc" },
                     });
                     if (byWamid.length > 0) {
                       matchedLogs = byWamid;
@@ -197,12 +221,16 @@ export async function POST(req: Request) {
                       take: 300,
                     });
 
-                    matchedLogs = recentLogs.filter((log) => {
+                    const latestPhoneMatch = recentLogs.find((log) => {
                       const cleanDb = log.recipient
                         ? log.recipient.replace(/\D/g, "").slice(-10)
                         : "";
                       return cleanDb === cleanWebhook;
                     });
+
+                    if (latestPhoneMatch) {
+                      matchedLogs = [latestPhoneMatch];
+                    }
                   }
 
                   if (matchedLogs.length > 0) {
@@ -211,7 +239,6 @@ export async function POST(req: Request) {
                       const wasDeliveredBefore = Boolean(log.deliveredAt);
                       let nextCost = prevCost;
 
-                      // Deduct only when DELIVERED (or READ before DELIVERED) and not yet billed
                       if (
                         (status === "DELIVERED" || status === "READ") &&
                         !wasDeliveredBefore &&
@@ -237,13 +264,12 @@ export async function POST(req: Request) {
                           nextCost = ded.cost;
                         } catch (billErr: any) {
                           console.error(
-                            `❌ Billing Deduction Error for log ${log.id}:`,
+                            `Billing Deduction Error for log ${log.id}:`,
                             billErr.message
                           );
                         }
                       }
 
-                      // Refund exact amount if status becomes FAILED after prior deduction
                       if (
                         status === "FAILED" &&
                         prevCost > 0 &&
@@ -260,7 +286,7 @@ export async function POST(req: Request) {
                           nextCost = 0;
                         } catch (refErr: any) {
                           console.error(
-                            `❌ Billing Refund Error for log ${log.id}:`,
+                            `Billing Refund Error for log ${log.id}:`,
                             refErr.message
                           );
                         }
@@ -271,7 +297,8 @@ export async function POST(req: Request) {
                         cost: nextCost,
                       };
                       if (messageId) updateData.messageId = messageId;
-                      if (status === "DELIVERED") updateData.deliveredAt = timestamp;
+                      if (status === "DELIVERED")
+                        updateData.deliveredAt = timestamp;
                       if (status === "READ") {
                         updateData.deliveredAt = log.deliveredAt || timestamp;
                         updateData.readAt = timestamp;
@@ -288,7 +315,7 @@ export async function POST(req: Request) {
                     }
 
                     console.log(
-                      `🔥 STATUS UPDATE -> Phone: ${cleanWebhook} | Updated ${matchedLogs.length} rows to ${status}`
+                      `STATUS UPDATE -> Phone: ${cleanWebhook} | Updated ${matchedLogs.length} rows to ${status}`
                     );
                   } else {
                     await prisma.campaignLog.create({
@@ -303,17 +330,22 @@ export async function POST(req: Request) {
                         cost: 0,
                         sentAt: timestamp,
                         deliveredAt:
-                          status === "DELIVERED" || status === "READ" ? timestamp : null,
+                          status === "DELIVERED" || status === "READ"
+                            ? timestamp
+                            : null,
                         readAt: status === "READ" ? timestamp : null,
                         errorDetails: serializedErr,
                       },
                     });
                     console.log(
-                      `🚀 FALLBACK CREATED -> Recipient: ${recipientId} | Status: ${status}`
+                      `FALLBACK CREATED -> Recipient: ${recipientId} | Status: ${status}`
                     );
                   }
                 } catch (dbErr: any) {
-                  console.error(`❌ Webhook Status DB Error:`, dbErr.message);
+                  console.error(
+                    `Webhook Status DB Error:`,
+                    dbErr.message
+                  );
                 }
               }
             }
@@ -324,7 +356,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: any) {
-    console.error("❌ Webhook Fatal Error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error("Webhook Fatal Error:", error);
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }

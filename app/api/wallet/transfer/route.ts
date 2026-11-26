@@ -40,10 +40,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { targetUserId, amount, confirmPassword, type, balanceType } = body;
 
-    const transferAmount = parseFloat(amount);
+    const transferAmount = Number(amount);
     const actionType: "CREDIT" | "DEBIT" =
       type === "DEBIT" || transferAmount < 0 ? "DEBIT" : "CREDIT";
     const absoluteAmount = Math.abs(transferAmount);
@@ -52,7 +52,8 @@ export async function POST(req: Request) {
 
     if (
       !targetUserId ||
-      Number.isNaN(absoluteAmount) ||
+      !Number.isFinite(transferAmount) ||
+      !Number.isFinite(absoluteAmount) ||
       absoluteAmount <= 0 ||
       !confirmPassword
     ) {
@@ -128,7 +129,7 @@ export async function POST(req: Request) {
 
     // 3. Fetch Target User
     const targetUser = await prisma.user.findUnique({
-      where: { id: targetUserId },
+      where: { id: String(targetUserId).trim() },
     });
     if (!targetUser) {
       return NextResponse.json(
@@ -147,7 +148,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Actual balance can only be assigned to Reseller or White-Label Reseller accounts
     if (selectedBalanceType === "ACTUAL" && !isResellerRole(targetUser.role)) {
       return NextResponse.json(
         {
@@ -232,8 +232,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5. Execute Atomic Transaction
+    // 5. Execute Atomic Transaction + Ledger Entry
     const updatedTargetUser = await prisma.$transaction(async (tx) => {
+      let updatedUser;
+
       if (actionType === "CREDIT") {
         if (selectedBalanceType === "ACTUAL") {
           if (senderIsReseller && !isEmergencyAdmin) {
@@ -242,8 +244,8 @@ export async function POST(req: Request) {
               data: { actualBalance: { decrement: absoluteAmount } },
             });
           }
-          return tx.user.update({
-            where: { id: targetUserId },
+          updatedUser = await tx.user.update({
+            where: { id: targetUser.id },
             data: {
               actualBalance: { increment: absoluteAmount },
               walletBalance: { increment: absoluteAmount },
@@ -262,8 +264,8 @@ export async function POST(req: Request) {
               data: { virtualBalance: { decrement: absoluteAmount } },
             });
           }
-          return tx.user.update({
-            where: { id: targetUserId },
+          updatedUser = await tx.user.update({
+            where: { id: targetUser.id },
             data: { virtualBalance: { increment: absoluteAmount } },
             select: {
               id: true,
@@ -285,8 +287,8 @@ export async function POST(req: Request) {
               data: { actualBalance: { increment: absoluteAmount } },
             });
           }
-          return tx.user.update({
-            where: { id: targetUserId },
+          updatedUser = await tx.user.update({
+            where: { id: targetUser.id },
             data: {
               actualBalance: { decrement: absoluteAmount },
               walletBalance: nextWallet,
@@ -305,8 +307,8 @@ export async function POST(req: Request) {
               data: { virtualBalance: { increment: absoluteAmount } },
             });
           }
-          return tx.user.update({
-            where: { id: targetUserId },
+          updatedUser = await tx.user.update({
+            where: { id: targetUser.id },
             data: { virtualBalance: { decrement: absoluteAmount } },
             select: {
               id: true,
@@ -317,18 +319,20 @@ export async function POST(req: Request) {
           });
         }
       }
-    });
 
-    await prisma.walletTransaction.create({
-      data: {
-        userId: targetUserId,
-        amount: actionType === "CREDIT" ? absoluteAmount : -absoluteAmount,
-        type: `${selectedBalanceType}_${actionType}`,
-        balanceType: selectedBalanceType,
-        description: `${selectedBalanceType} balance ${
-          actionType === "CREDIT" ? "added" : "deducted"
-        } by ${sender.role === "SUPER_ADMIN" ? "Admin" : "Reseller"}`,
-      },
+      await tx.walletTransaction.create({
+        data: {
+          userId: targetUser.id,
+          amount: actionType === "CREDIT" ? absoluteAmount : -absoluteAmount,
+          type: `${selectedBalanceType}_${actionType}`,
+          balanceType: selectedBalanceType,
+          description: `${selectedBalanceType} balance ${
+            actionType === "CREDIT" ? "added" : "deducted"
+          } by ${sender.role === "SUPER_ADMIN" ? "Admin" : "Reseller"}`,
+        },
+      });
+
+      return updatedUser;
     });
 
     return NextResponse.json({
@@ -341,7 +345,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Transfer API Error:", error);
     return NextResponse.json(
-      { success: false, message: error.message || "Internal Server Error" },
+      { success: false, message: error?.message || "Internal Server Error" },
       { status: 500 }
     );
   }

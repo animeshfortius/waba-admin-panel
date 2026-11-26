@@ -1,25 +1,64 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
 export async function POST(request: Request) {
   try {
-    const { id } = await request.json();
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
 
-    // 1. Sabhi channels ka isDefault false kar do
-    await prisma.wabaAccount.updateMany({
-      data: { isDefault: false },
+    const body = await request.json();
+    const channelId = String(body?.id || "").trim();
+
+    if (!channelId) {
+      return NextResponse.json(
+        { success: false, error: "Channel ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const ownerWhere = getOwnerWhere(tenant);
+
+    // Verify target channel belongs to the logged-in user's allowed scope
+    const targetChannel = await prisma.wabaAccount.findFirst({
+      where: {
+        id: channelId,
+        ...ownerWhere,
+      },
     });
 
-    // 2. Selected channel ko true kar do
-    const updatedChannel = await prisma.wabaAccount.update({
-      where: { id },
-      data: { isDefault: true },
+    if (!targetChannel) {
+      return NextResponse.json(
+        { success: false, error: "Channel not found or access denied" },
+        { status: 404 }
+      );
+    }
+
+    const updatedChannel = await prisma.$transaction(async (tx) => {
+      await tx.wabaAccount.updateMany({
+        where: ownerWhere,
+        data: { isDefault: false },
+      });
+
+      return tx.wabaAccount.update({
+        where: { id: targetChannel.id },
+        data: { isDefault: true },
+      });
     });
 
     return NextResponse.json({ success: true, data: updatedChannel });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: error.message || "Failed to update default channel",
+      },
+      { status: 500 }
+    );
   }
 }

@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateApiRequest } from "@/lib/api-auth";
+import { prisma } from "@/lib/prisma";
+
+const META_GRAPH_VERSION = "v21.0";
+
+function isSuperAdminContext(ctx: unknown): boolean {
+  const c = ctx as { isSuperAdmin?: unknown; role?: unknown } | null | undefined;
+  return Boolean(c?.isSuperAdmin) || String(c?.role || "").toUpperCase() === "SUPER_ADMIN";
+}
 
 export async function GET(
   request: NextRequest,
@@ -19,7 +27,7 @@ export async function GET(
 
   try {
     const { id } = await context.params;
-    const templateId = decodeURIComponent(id || "").trim();
+    const templateId = decodeURIComponent(String(id || "")).trim();
 
     if (!templateId) {
       return NextResponse.json(
@@ -31,8 +39,7 @@ export async function GET(
       );
     }
 
-    const metaToken =
-      auth.context.metaAccessToken || process.env.META_ACCESS_TOKEN;
+    const metaToken = String(auth.context.metaAccessToken || "").trim();
 
     if (!metaToken) {
       return NextResponse.json(
@@ -44,17 +51,42 @@ export async function GET(
       );
     }
 
-    const graphVersion = "v21.0";
+    const localTemplate = await prisma.whatsAppTemplate.findFirst({
+      where: {
+        OR: [{ metaTemplateId: templateId }, { id: templateId }],
+      },
+      select: { id: true, userId: true, metaTemplateId: true },
+    });
+
+    if (
+      localTemplate &&
+      !isSuperAdminContext(auth.context) &&
+      localTemplate.userId &&
+      localTemplate.userId !== auth.context.userId
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Template does not belong to this API account",
+        },
+        { status: 403 }
+      );
+    }
+
+    const graphTargetId = String(
+      localTemplate?.metaTemplateId || templateId
+    ).trim();
+
     const metaResponse = await fetch(
-      `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(
-        templateId
+      `https://graph.facebook.com/${META_GRAPH_VERSION}/${encodeURIComponent(
+        graphTargetId
       )}`,
       {
         method: "GET",
         headers: {
           Authorization: `Bearer ${metaToken}`,
-          "Content-Type": "application/json",
         },
+        cache: "no-store",
       }
     );
 

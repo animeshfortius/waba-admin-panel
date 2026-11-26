@@ -1,36 +1,74 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
 export async function GET(req: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
-    const sessionId = searchParams.get("sessionId");
+    const sessionId = searchParams.get("sessionId")?.trim();
 
     if (!sessionId) {
-      return NextResponse.json({ success: false, error: "Session ID required" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Session ID required" },
+        { status: 400 }
+      );
+    }
+
+    const ownerWhere = getOwnerWhere(tenant);
+    const session = await prisma.chatSession.findFirst({
+      where: {
+        id: sessionId,
+        ...ownerWhere,
+      },
+    });
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "Session not found or access denied" },
+        { status: 404 }
+      );
     }
 
     const messages = await prisma.chatMessage.findMany({
-      where: { chatSessionId: sessionId },
+      where: { chatSessionId: session.id },
       orderBy: { createdAt: "asc" },
     });
 
     const notes = await prisma.chatNote.findMany({
-      where: { chatSessionId: sessionId },
+      where: { chatSessionId: session.id },
       orderBy: { createdAt: "desc" },
     });
 
     return NextResponse.json({ success: true, messages, notes });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(req: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const formData = await req.formData();
     const action = (formData.get("action") as string) || "SEND";
-    const sessionId = formData.get("sessionId") as string;
+    const sessionId = String(formData.get("sessionId") || "").trim();
     const messageBody = (formData.get("messageBody") as string) || "";
     const agentName = (formData.get("agentName") as string) || "Admin Agent";
     const messageType = (formData.get("messageType") as string) || "text";
@@ -38,33 +76,61 @@ export async function POST(req: Request) {
     const mediaFile = formData.get("mediaFile") as File | null;
 
     if (!sessionId) {
-      return NextResponse.json({ success: false, error: "Session ID required" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Session ID required" },
+        { status: 400 }
+      );
     }
 
-    const session = await prisma.chatSession.findUnique({
-      where: { id: sessionId },
+    const ownerWhere = getOwnerWhere(tenant);
+
+    const session = await prisma.chatSession.findFirst({
+      where: {
+        id: sessionId,
+        ...ownerWhere,
+      },
     });
 
     if (!session) {
-      return NextResponse.json({ success: false, error: "Session not found" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "Session not found or access denied" },
+        { status: 404 }
+      );
     }
 
     if (action === "NOTE") {
+      if (!messageBody.trim()) {
+        return NextResponse.json(
+          { success: false, error: "Note body is required" },
+          { status: 400 }
+        );
+      }
+
       const note = await prisma.chatNote.create({
-        data: { chatSessionId: sessionId, agentName, noteBody: messageBody },
+        data: {
+          chatSessionId: session.id,
+          agentName,
+          noteBody: messageBody.trim(),
+        },
       });
       return NextResponse.json({ success: true, note });
     }
 
-    // Resolve matching WABA Account accurately
+    // Resolve matching WABA Account strictly within tenant scope
+    const sessionOwnerWhere = session.userId
+      ? { userId: session.userId }
+      : ownerWhere;
+
     let wabaAccount = null;
     if (session.channel) {
       const rawChannel = String(session.channel).trim();
       const cleanChannel = rawChannel.replace(/\D/g, "");
       wabaAccount = await prisma.wabaAccount.findFirst({
         where: {
+          ...sessionOwnerWhere,
           OR: [
             { phoneNumberId: rawChannel },
+            { phoneNumberId: `PHONE_${rawChannel}` },
             { wabaId: rawChannel },
             { displayPhone: rawChannel },
             ...(cleanChannel.length >= 10
@@ -74,32 +140,42 @@ export async function POST(req: Request) {
         },
       });
     }
+
     if (!wabaAccount) {
       wabaAccount =
-        (await prisma.wabaAccount.findFirst({ where: { isDefault: true } })) ||
-        (await prisma.wabaAccount.findFirst());
+        (await prisma.wabaAccount.findFirst({
+          where: { ...sessionOwnerWhere, isDefault: true },
+        })) ||
+        (await prisma.wabaAccount.findFirst({
+          where: sessionOwnerWhere,
+        }));
     }
 
-    const resolvedToken = (
-      wabaAccount?.accessToken ||
-      process.env.META_ACCESS_TOKEN ||
-      ""
-    ).trim();
+    const resolvedToken = String(wabaAccount?.accessToken || "").trim();
 
     if (!wabaAccount || !resolvedToken || !wabaAccount.phoneNumberId) {
       return NextResponse.json(
-        { success: false, error: "WABA Phone Number ID or Access Token not found." },
+        {
+          success: false,
+          error:
+            "WABA Phone Number ID or Access Token not found in your account scope.",
+        },
         { status: 404 }
       );
     }
 
-    const ownerUserId =
-      session.userId && session.userId !== "admin"
-        ? session.userId
-        : wabaAccount.userId || "admin";
+    const ownerUserId = session.userId || wabaAccount.userId || tenant.userId;
     const cleanPhoneId = wabaAccount.phoneNumberId.replace("PHONE_", "").trim();
-    const channelNumber = wabaAccount.displayPhone || session.channel || wabaAccount.wabaId;
-    const recipientPhone = session.customerPhone.replace(/\D/g, "");
+    const channelNumber =
+      wabaAccount.displayPhone || session.channel || wabaAccount.wabaId;
+    const recipientPhone = String(session.customerPhone || "").replace(/\D/g, "");
+
+    if (!recipientPhone) {
+      return NextResponse.json(
+        { success: false, error: "Recipient phone number missing on session" },
+        { status: 400 }
+      );
+    }
 
     let wabaMessageId: string | null = null;
     let displayBody = messageBody;
@@ -170,20 +246,34 @@ export async function POST(req: Request) {
           (await prisma.whatsAppTemplate.findFirst({
             where: {
               name: resolvedTemplateName,
+              ...sessionOwnerWhere,
               OR: [{ wabaId: wabaAccount.wabaId }, { wabaId: cleanPhoneId }],
             },
           })) ||
           (await prisma.whatsAppTemplate.findFirst({
-            where: { name: resolvedTemplateName },
+            where: {
+              name: resolvedTemplateName,
+              ...sessionOwnerWhere,
+            },
           }));
 
-        const resolvedLang = templateLanguage || dbTemplate?.language || "en_US";
+        const resolvedLang =
+          templateLanguage || dbTemplate?.language || "en_US";
         const components: any[] = [];
 
-        const headerType = (dbTemplate as any)?.headerType?.toUpperCase() || "NONE";
-        if (headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT") {
+        const headerType =
+          (dbTemplate as any)?.headerType?.toUpperCase() || "NONE";
+        if (
+          headerType === "IMAGE" ||
+          headerType === "VIDEO" ||
+          headerType === "DOCUMENT"
+        ) {
           const mediaKey =
-            headerType === "VIDEO" ? "video" : headerType === "DOCUMENT" ? "document" : "image";
+            headerType === "VIDEO"
+              ? "video"
+              : headerType === "DOCUMENT"
+              ? "document"
+              : "image";
           let mediaLink = (dbTemplate as any)?.headerMediaUrl;
           if (!mediaLink || !mediaLink.startsWith("http")) {
             mediaLink =
@@ -226,6 +316,13 @@ export async function POST(req: Request) {
         };
         displayBody = `[Template Sent]: ${resolvedTemplateName}`;
       } else {
+        if (!messageBody.trim()) {
+          return NextResponse.json(
+            { success: false, error: "Message body is required" },
+            { status: 400 }
+          );
+        }
+
         metaPayload = {
           messaging_product: "whatsapp",
           to: recipientPhone,
@@ -257,11 +354,13 @@ export async function POST(req: Request) {
         wabaMessageId = metaData.messages[0].id;
       } else {
         metaErrorMessage =
-          metaData.error?.message || "Meta rejected the message (check 24h window or template).";
+          metaData.error?.message ||
+          "Meta rejected the message (check 24h window or template).";
       }
     } catch (metaErr: any) {
       console.error("Meta API Error:", metaErr);
-      metaErrorMessage = metaErr.message || "Network timeout while contacting Meta API.";
+      metaErrorMessage =
+        metaErr.message || "Network timeout while contacting Meta API.";
     }
 
     const sentAt = new Date();
@@ -269,7 +368,7 @@ export async function POST(req: Request) {
 
     const newMessage = await prisma.chatMessage.create({
       data: {
-        chatSessionId: sessionId,
+        chatSessionId: session.id,
         senderType: "AGENT",
         senderName: agentName,
         messageBody: displayBody,
@@ -280,14 +379,16 @@ export async function POST(req: Request) {
       },
     });
 
-    // Track message in CampaignLog with cost = 0 so webhook bills on DELIVERED and refunds on FAILED
     if (wabaMessageId) {
       try {
         await prisma.campaignLog.create({
           data: {
             userId: ownerUserId,
             campaignName: "Live_Agent_Chat",
-            templateName: messageType === "template" ? resolvedTemplateName : "Chat_Message",
+            templateName:
+              messageType === "template"
+                ? resolvedTemplateName
+                : "Chat_Message",
             channel: channelNumber,
             recipient: recipientPhone,
             status: "SENT",
@@ -305,7 +406,7 @@ export async function POST(req: Request) {
     }
 
     await prisma.chatSession.update({
-      where: { id: sessionId },
+      where: { id: session.id },
       data: {
         lastMessage: displayBody,
         lastMessageAt: sentAt,
@@ -327,6 +428,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, message: newMessage });
   } catch (error: any) {
     console.log("Messages API Error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }

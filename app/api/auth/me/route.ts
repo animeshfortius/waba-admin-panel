@@ -44,6 +44,7 @@ export async function GET() {
             name: "Super Admin",
             email: "admin@admin.com",
             role: "SUPER_ADMIN",
+            parentId: null,
             isWhiteLabel: false,
             walletBalance: 0,
             actualBalance: 0,
@@ -63,6 +64,8 @@ export async function GET() {
         name: true,
         email: true,
         role: true,
+        expiryDate: true,
+        createdById: true,
         isWhiteLabel: true,
         walletBalance: true,
         actualBalance: true,
@@ -82,11 +85,21 @@ export async function GET() {
       );
     }
 
+    if (user.expiryDate && new Date(user.expiryDate).getTime() < Date.now()) {
+      return NextResponse.json(
+        { success: false, user: null, error: "Account validity has expired" },
+        { status: 403, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    const parentId = user.createdById ?? null;
+
     return NextResponse.json(
       {
         success: true,
         user: {
           ...user,
+          parentId,
           role: String(user.role || "USER").trim().toUpperCase(),
           walletBalance: Number(user.walletBalance ?? 0),
           actualBalance: Number(user.actualBalance ?? 0),

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
-function formatLimitClean(tier: string | undefined | null, wabaId?: string): string {
-  // Specific WABA IDs jahan Meta API TIER_NOT_FOUND bhejta hai
+function formatLimitClean(
+  tier: string | undefined | null,
+  wabaId?: string
+): string {
   if (!tier || tier === "TIER_NOT_FOUND" || tier === "UNASSIGNED") {
     if (wabaId === "4197516850547460") return "2,000 / 24 hrs";
     if (wabaId === "2299884247476467") return "10,000 / 24 hrs";
@@ -12,28 +15,32 @@ function formatLimitClean(tier: string | undefined | null, wabaId?: string): str
   const cleanTier = String(tier).toUpperCase().trim();
 
   const tierMap: Record<string, string> = {
-    "TIER_250": "250 / 24 hrs",
+    TIER_250: "250 / 24 hrs",
     "250": "250 / 24 hrs",
-    "TIER_1K": "1,000 / 24 hrs",
+    TIER_1K: "1,000 / 24 hrs",
     "1000": "1,000 / 24 hrs",
-    "TIER_2K": "2,000 / 24 hrs",
-    "TIER_2000": "2,000 / 24 hrs",
+    TIER_2K: "2,000 / 24 hrs",
+    TIER_2000: "2,000 / 24 hrs",
     "2000": "2,000 / 24 hrs",
-    "TIER_10K": "10,000 / 24 hrs",
+    TIER_10K: "10,000 / 24 hrs",
     "10000": "10,000 / 24 hrs",
-    "TIER_100K": "100,000 / 24 hrs",
+    TIER_100K: "100,000 / 24 hrs",
     "100000": "100,000 / 24 hrs",
-    "UNLIMITED": "Unlimited / 24 hrs"
+    UNLIMITED: "Unlimited / 24 hrs",
   };
 
   if (tierMap[cleanTier]) {
     return tierMap[cleanTier];
   }
 
-  if (cleanTier.includes("2K") || cleanTier.includes("2000")) return "2,000 / 24 hrs";
-  if (cleanTier.includes("10K") || cleanTier.includes("10000")) return "10,000 / 24 hrs";
-  if (cleanTier.includes("100K") || cleanTier.includes("100000")) return "100,000 / 24 hrs";
-  if (cleanTier.includes("1K") || cleanTier.includes("1000")) return "1,000 / 24 hrs";
+  if (cleanTier.includes("2K") || cleanTier.includes("2000"))
+    return "2,000 / 24 hrs";
+  if (cleanTier.includes("10K") || cleanTier.includes("10000"))
+    return "10,000 / 24 hrs";
+  if (cleanTier.includes("100K") || cleanTier.includes("100000"))
+    return "100,000 / 24 hrs";
+  if (cleanTier.includes("1K") || cleanTier.includes("1000"))
+    return "1,000 / 24 hrs";
   if (cleanTier.includes("250")) return "250 / 24 hrs";
 
   return cleanTier + " / 24 hrs";
@@ -44,9 +51,9 @@ function formatQualityClean(rating: string | undefined | null): string {
   const cleanRating = String(rating).toUpperCase().trim();
 
   const ratingMap: Record<string, string> = {
-    "GREEN": "High",
-    "YELLOW": "Medium",
-    "RED": "Low"
+    GREEN: "High",
+    YELLOW: "Medium",
+    RED: "Low",
   };
 
   return ratingMap[cleanRating] || "N/A";
@@ -54,12 +61,38 @@ function formatQualityClean(rating: string | undefined | null): string {
 
 export async function GET(request: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
+    const requestedUserId = searchParams.get("userId")?.trim();
+
+    const ownerWhere = getOwnerWhere(tenant);
+    const whereClause: any = { ...ownerWhere };
+
+    if (
+      requestedUserId &&
+      requestedUserId !== "ALL" &&
+      requestedUserId !== "undefined" &&
+      requestedUserId !== "null"
+    ) {
+      if (
+        !tenant.isSuperAdmin &&
+        !tenant.allowedUserIds?.includes(requestedUserId)
+      ) {
+        return NextResponse.json([]);
+      }
+      whereClause.userId = requestedUserId;
+    }
 
     const accounts = await prisma.wabaAccount.findMany({
-      where: userId ? { userId } : {},
-      orderBy: { id: "desc" }
+      where: whereClause,
+      orderBy: { id: "desc" },
     });
 
     const updatedAccounts = [];
@@ -68,20 +101,29 @@ export async function GET(request: Request) {
       let currentLimit = acc.messagingLimit;
       let currentRating = acc.qualityRating;
 
-      const cleanWabaId = acc.wabaId ? acc.wabaId.replace("WABA_", "").trim() : "";
-      const cleanPhoneId = acc.phoneNumberId ? acc.phoneNumberId.replace("PHONE_", "").trim() : "";
+      const cleanWabaId = acc.wabaId
+        ? acc.wabaId.replace("WABA_", "").trim()
+        : "";
+      const cleanPhoneId = acc.phoneNumberId
+        ? acc.phoneNumberId.replace("PHONE_", "").trim()
+        : "";
 
       if (acc.accessToken) {
         try {
           if (cleanPhoneId) {
             const phoneRes = await fetch(
               `https://graph.facebook.com/v26.0/${cleanPhoneId}?fields=messaging_limit_tier,quality_rating,whatsapp_business_manager_messaging_limit`,
-              { headers: { Authorization: `Bearer ${acc.accessToken}` } }
+              {
+                headers: { Authorization: `Bearer ${acc.accessToken}` },
+                cache: "no-store",
+              }
             );
             const phoneData = await phoneRes.json();
-            
+
             if (phoneData) {
-              const fetchedTier = phoneData.messaging_limit_tier || phoneData.whatsapp_business_manager_messaging_limit;
+              const fetchedTier =
+                phoneData.messaging_limit_tier ||
+                phoneData.whatsapp_business_manager_messaging_limit;
               if (fetchedTier && fetchedTier !== "TIER_NOT_FOUND") {
                 currentLimit = fetchedTier;
               }
@@ -91,14 +133,24 @@ export async function GET(request: Request) {
             }
           }
 
-          if ((!currentLimit || currentLimit === "TIER_NOT_FOUND" || currentLimit === "UNASSIGNED") && cleanWabaId) {
+          if (
+            (!currentLimit ||
+              currentLimit === "TIER_NOT_FOUND" ||
+              currentLimit === "UNASSIGNED") &&
+            cleanWabaId
+          ) {
             const wabaRes = await fetch(
               `https://graph.facebook.com/v26.0/${cleanWabaId}?fields=messaging_limit_tier,whatsapp_business_manager_messaging_limit`,
-              { headers: { Authorization: `Bearer ${acc.accessToken}` } }
+              {
+                headers: { Authorization: `Bearer ${acc.accessToken}` },
+                cache: "no-store",
+              }
             );
             const wabaData = await wabaRes.json();
-            
-            const fetchedWabaTier = wabaData?.messaging_limit_tier || wabaData?.whatsapp_business_manager_messaging_limit;
+
+            const fetchedWabaTier =
+              wabaData?.messaging_limit_tier ||
+              wabaData?.whatsapp_business_manager_messaging_limit;
             if (fetchedWabaTier && fetchedWabaTier !== "TIER_NOT_FOUND") {
               currentLimit = fetchedWabaTier;
             }
@@ -112,23 +164,35 @@ export async function GET(request: Request) {
       const formattedRating = formatQualityClean(currentRating);
 
       let dbSaveLimit = currentLimit;
-      if (!currentLimit || currentLimit === "TIER_NOT_FOUND" || currentLimit === "UNASSIGNED") {
+      if (
+        !currentLimit ||
+        currentLimit === "TIER_NOT_FOUND" ||
+        currentLimit === "UNASSIGNED"
+      ) {
         if (cleanWabaId === "4197516850547460") dbSaveLimit = "2000";
         if (cleanWabaId === "2299884247476467") dbSaveLimit = "10000";
       }
 
-      if (dbSaveLimit !== acc.messagingLimit || currentRating !== acc.qualityRating) {
-        await prisma.wabaAccount.update({
-          where: { id: acc.id },
-          data: {
-            messagingLimit: dbSaveLimit || "UNASSIGNED",
-            qualityRating: currentRating || "UNKNOWN",
-          },
-        }).catch(() => {});
+      if (
+        dbSaveLimit !== acc.messagingLimit ||
+        currentRating !== acc.qualityRating
+      ) {
+        await prisma.wabaAccount
+          .update({
+            where: { id: acc.id },
+            data: {
+              messagingLimit: dbSaveLimit || "UNASSIGNED",
+              qualityRating: currentRating || "UNKNOWN",
+            },
+          })
+          .catch(() => {});
       }
 
+      const { accessToken: _hiddenToken, ...safeAccount } = acc as any;
+
       updatedAccounts.push({
-        ...acc,
+        ...safeAccount,
+        hasAccessToken: Boolean(acc.accessToken),
         messagingLimit: formattedLimit,
         qualityRating: formattedRating,
         wabaId: cleanWabaId,
@@ -139,43 +203,93 @@ export async function GET(request: Request) {
     return NextResponse.json(updatedAccounts);
   } catch (error) {
     console.error("API Route Error:", error);
-    return NextResponse.json({ error: "Failed to fetch channels" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch channels" },
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    
-    if (!body.wabaId || !body.phoneNumberId || !body.accessToken) {
-      return NextResponse.json({ error: "Missing required Meta credentials" }, { status: 400 });
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { error: "Unauthorized session" },
+        { status: 401 }
+      );
     }
 
-    const cleanWabaId = body.wabaId.replace("WABA_", "").trim();
-    const cleanPhoneId = body.phoneNumberId.replace("PHONE_", "").trim();
+    const body = await request.json();
+
+    if (!body.wabaId || !body.phoneNumberId || !body.accessToken) {
+      return NextResponse.json(
+        { error: "Missing required Meta credentials" },
+        { status: 400 }
+      );
+    }
+
+    const cleanWabaId = String(body.wabaId).replace("WABA_", "").trim();
+    const cleanPhoneId = String(body.phoneNumberId)
+      .replace("PHONE_", "")
+      .trim();
+
+    const existingWaba = await prisma.wabaAccount.findUnique({
+      where: { wabaId: cleanWabaId },
+    });
+
+    if (
+      existingWaba &&
+      !tenant.isSuperAdmin &&
+      !tenant.allowedUserIds?.includes(existingWaba.userId)
+    ) {
+      return NextResponse.json(
+        { error: "This WABA ID is already registered under another account" },
+        { status: 403 }
+      );
+    }
+
+    const targetOwnerId =
+      body.userId &&
+      (tenant.isSuperAdmin || tenant.allowedUserIds?.includes(body.userId))
+        ? body.userId
+        : existingWaba?.userId || tenant.userId;
 
     const newChannel = await prisma.wabaAccount.upsert({
       where: { wabaId: cleanWabaId },
       update: {
+        userId: targetOwnerId,
         phoneNumberId: cleanPhoneId,
         displayPhone: body.displayPhone || "",
-        accessToken: body.accessToken,
+        displayName:
+          body.displayName || existingWaba?.displayName || "WhatsApp Business",
+        accessToken: String(body.accessToken).trim(),
         status: body.status || "ACTIVE",
       },
       create: {
-        userId: body.userId || "default_user",
+        userId: targetOwnerId,
         wabaId: cleanWabaId,
         phoneNumberId: cleanPhoneId,
         displayPhone: body.displayPhone || "",
-        accessToken: body.accessToken,
+        displayName: body.displayName || "WhatsApp Business",
+        accessToken: String(body.accessToken).trim(),
         status: body.status || "ACTIVE",
         messagingLimit: "UNASSIGNED",
-        qualityRating: "UNKNOWN"
+        qualityRating: "UNKNOWN",
       },
     });
-    return NextResponse.json(newChannel);
+
+    const { accessToken: _createdToken, ...safeNewChannel } = newChannel as any;
+
+    return NextResponse.json({
+      ...safeNewChannel,
+      hasAccessToken: Boolean(newChannel.accessToken),
+    });
   } catch (error) {
     console.error("Create Channel Error:", error);
-    return NextResponse.json({ error: "Failed to create channel" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create channel" },
+      { status: 500 }
+    );
   }
 }

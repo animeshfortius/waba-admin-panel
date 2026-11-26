@@ -1,45 +1,91 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { getTenantContext } from "@/lib/tenant-auth";
 
-const prisma = new PrismaClient();
+const META_GRAPH_VERSION = "v26.0";
 
 export async function POST(request: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
-    let { code, wabaId, phoneNumberId, displayPhone, name, website, accessToken } = body;
+    let {
+      code,
+      wabaId,
+      phoneNumberId,
+      displayPhone,
+      name,
+      website,
+      accessToken,
+      userId,
+    } = body;
 
-    const appId = process.env.NEXT_PUBLIC_META_APP_ID || "1405995811146008";
-    const appSecret = process.env.META_APP_SECRET || "";
-    const authKey = "aEBsEkOowJHzSfcDzAibzrFidlvLZwkePITKmRahDXdEkHhSWRLTCVQsqElOWWLU";
+    const requestedOwnerId = userId ? String(userId).trim() : "";
+    const targetOwnerId =
+      requestedOwnerId &&
+      (tenant.isSuperAdmin || tenant.allowedUserIds?.includes(requestedOwnerId))
+        ? requestedOwnerId
+        : tenant.userId;
 
-    // 1. Token Exchange & Auto Fetch IDs (Updated to v26.0)
-    if (code) {
+    const appId = String(
+      process.env.NEXT_PUBLIC_META_APP_ID || "1405995811146008"
+    ).trim();
+    const appSecret = String(process.env.META_APP_SECRET || "").trim();
+    const smartpingAuthKey = String(
+      process.env.SMARTPING_AUTH_KEY || ""
+    ).trim();
+
+    // 1. Token Exchange & Auto Fetch IDs
+    if (code && appId && appSecret) {
       try {
-        const tokenUrl = `https://graph.facebook.com/v26.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${code}&redirect_uri=`;
-        const tokenRes = await fetch(tokenUrl);
+        const tokenParams = new URLSearchParams({
+          client_id: appId,
+          client_secret: appSecret,
+          code: String(code).trim(),
+          redirect_uri: "",
+        });
+        const tokenUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/oauth/access_token?${tokenParams.toString()}`;
+        const tokenRes = await fetch(tokenUrl, { cache: "no-store" });
         const tokenData = await tokenRes.json();
 
         if (tokenData.access_token) {
-          accessToken = tokenData.access_token;
+          accessToken = String(tokenData.access_token).trim();
 
           if (!wabaId) {
-            const debugUrl = `https://graph.facebook.com/v26.0/debug_token?input_token=${accessToken}&access_token=${appId}|${appSecret}`;
-            const debugRes = await fetch(debugUrl);
+            const debugParams = new URLSearchParams({
+              input_token: accessToken,
+              access_token: `${appId}|${appSecret}`,
+            });
+            const debugUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/debug_token?${debugParams.toString()}`;
+            const debugRes = await fetch(debugUrl, { cache: "no-store" });
             const debugData = await debugRes.json();
 
             if (debugData.data && debugData.data.granular_scopes) {
               const wabaScope = debugData.data.granular_scopes.find(
                 (s: any) => s.scope === "whatsapp_business_management"
               );
-              if (wabaScope && wabaScope.target_ids && wabaScope.target_ids.length > 0) {
+              if (
+                wabaScope &&
+                wabaScope.target_ids &&
+                wabaScope.target_ids.length > 0
+              ) {
                 wabaId = wabaScope.target_ids[0];
               }
             }
           }
 
           if (!wabaId) {
-            const meUrl = `https://graph.facebook.com/v26.0/me/whatsapp_business_accounts?access_token=${accessToken}`;
-            const meRes = await fetch(meUrl);
+            const meParams = new URLSearchParams({
+              access_token: accessToken,
+            });
+            const meUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/me/whatsapp_business_accounts?${meParams.toString()}`;
+            const meRes = await fetch(meUrl, { cache: "no-store" });
             const meData = await meRes.json();
             if (meData.data && meData.data.length > 0) {
               wabaId = meData.data[0].id;
@@ -48,12 +94,16 @@ export async function POST(request: Request) {
           }
 
           if (wabaId && !phoneNumberId) {
-            const phoneUrl = `https://graph.facebook.com/v26.0/${wabaId}/phone_numbers?access_token=${accessToken}`;
-            const phoneRes = await fetch(phoneUrl);
+            const phoneParams = new URLSearchParams({
+              access_token: accessToken,
+            });
+            const phoneUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/${wabaId}/phone_numbers?${phoneParams.toString()}`;
+            const phoneRes = await fetch(phoneUrl, { cache: "no-store" });
             const phoneData = await phoneRes.json();
             if (phoneData.data && phoneData.data.length > 0) {
               phoneNumberId = phoneData.data[0].id;
-              displayPhone = phoneData.data[0].display_phone_number || displayPhone;
+              displayPhone =
+                phoneData.data[0].display_phone_number || displayPhone;
               name = phoneData.data[0].verified_name || name;
             }
           }
@@ -63,70 +113,98 @@ export async function POST(request: Request) {
       }
     }
 
-    // Clean any prefix strings if present
-    const cleanWabaId = wabaId ? wabaId.replace("WABA_", "").trim() : "";
-    const cleanPhoneId = phoneNumberId ? phoneNumberId.replace("PHONE_", "").trim() : "";
+    const cleanWabaId = wabaId ? String(wabaId).replace("WABA_", "").trim() : "";
+    const cleanPhoneId = phoneNumberId
+      ? String(phoneNumberId).replace("PHONE_", "").trim()
+      : "";
 
     if (!cleanWabaId || !cleanPhoneId) {
       return NextResponse.json(
-        { error: "Meta se real WABA ID / Phone ID automatic fetch nahi ho payi. Please try again." },
+        {
+          error:
+            "Meta se real WABA ID / Phone ID automatic fetch nahi ho payi. Please try again.",
+        },
         { status: 400 }
+      );
+    }
+
+    // Prevent non-admin from claiming/overwriting a WABA owned by another tenant
+    const existingWaba = await prisma.wabaAccount.findUnique({
+      where: { wabaId: cleanWabaId },
+    });
+
+    if (
+      existingWaba &&
+      !tenant.isSuperAdmin &&
+      !tenant.allowedUserIds?.includes(existingWaba.userId)
+    ) {
+      return NextResponse.json(
+        { error: "This WABA ID is already bound to another account" },
+        { status: 403 }
       );
     }
 
     // 2. AUTOMATED APIS: Phone Registration, Webhook Auto-Subscribe & Smartping Credit Line Attach
     if (cleanPhoneId && accessToken) {
       try {
-        // A. Phone Register API
-        const registerUrl = `https://graph.facebook.com/v26.0/${cleanPhoneId}/register`;
+        const registerUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/${cleanPhoneId}/register`;
         await fetch(registerUrl, {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
             messaging_product: "whatsapp",
-            pin: "123456"
-          })
+            pin: "123456",
+          }),
         });
 
-        // B. AUTO-SUBSCRIBE WABA FOR WEBHOOKS (Yeh naya add karna hai!)
-        const subscribeUrl = `https://graph.facebook.com/v26.0/${cleanWabaId}/subscribed_apps`;
+        const subscribeUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/${cleanWabaId}/subscribed_apps`;
         const subRes = await fetch(subscribeUrl, {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          }
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
         });
         const subData = await subRes.json();
         console.log("Auto-Subscribe Webhook Response:", subData);
 
-        // C. Smartping Attach API
-        const cleanPhone = displayPhone ? displayPhone.replace(/[^0-9]/g, "") : cleanPhoneId;
-        const smartpingUrl = `https://wabalens.smartping.io/MetaAPI/metapp/api/v1/wabas/attach?wabaId=${cleanWabaId}&wabaNumber=${cleanPhone}`;
-        
-        await fetch(smartpingUrl, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${authKey}`,
-            "Content-Type": "application/json"
-          }
-        });
+        if (smartpingAuthKey) {
+          const cleanPhone = displayPhone
+            ? String(displayPhone).replace(/[^0-9]/g, "")
+            : cleanPhoneId;
+          const smartpingParams = new URLSearchParams({
+            wabaId: cleanWabaId,
+            wabaNumber: cleanPhone,
+          });
+          const smartpingUrl = `https://wabalens.smartping.io/MetaAPI/metapp/api/v1/wabas/attach?${smartpingParams.toString()}`;
+
+          await fetch(smartpingUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${smartpingAuthKey}`,
+              "Content-Type": "application/json",
+            },
+          });
+        }
       } catch (apiErr) {
         console.error("Automated API execution error:", apiErr);
       }
     }
 
-    // 2.1 Fetch Live Messaging Limit & Quality Rating from Meta (v26.0)
+    // 2.1 Fetch Live Messaging Limit & Quality Rating from Meta
     let liveMessagingLimit = "TIER_NOT_FOUND";
     let liveQualityRating = "UNKNOWN";
     try {
       if (accessToken && cleanWabaId) {
         const limitRes = await fetch(
-          `https://graph.facebook.com/v26.0/${cleanWabaId}?fields=messaging_limit_tier`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
+          `https://graph.facebook.com/${META_GRAPH_VERSION}/${cleanWabaId}?fields=messaging_limit_tier`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            cache: "no-store",
+          }
         );
         const limitData = await limitRes.json();
         if (limitData.messaging_limit_tier) {
@@ -135,8 +213,11 @@ export async function POST(request: Request) {
       }
       if (accessToken && cleanPhoneId) {
         const ratingRes = await fetch(
-          `https://graph.facebook.com/v26.0/${cleanPhoneId}?fields=quality_rating`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
+          `https://graph.facebook.com/${META_GRAPH_VERSION}/${cleanPhoneId}?fields=quality_rating`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            cache: "no-store",
+          }
         );
         const ratingData = await ratingRes.json();
         if (ratingData.quality_rating) {
@@ -147,47 +228,51 @@ export async function POST(request: Request) {
       console.error("Error fetching live tier/rating on register:", fetchErr);
     }
 
-    // 3. Save to Database via Upsert
-    let defaultUser = await prisma.user.findFirst();
-    if (!defaultUser) {
-      defaultUser = await prisma.user.create({
-        data: {
-          name: name || "Admin User",
-          email: "admin@fortius.in",
-          password: "password123",
-        },
-      });
-    }
+    const finalOwnerId = existingWaba?.userId || targetOwnerId;
+    const tokenToStore = String(accessToken || code || "").trim();
 
+    // 3. Save to Database via Upsert bound strictly to scoped owner
     const newAccount = await prisma.wabaAccount.upsert({
       where: { wabaId: cleanWabaId },
       update: {
+        userId: finalOwnerId,
         phoneNumberId: cleanPhoneId,
-        displayPhone: displayPhone || "",
-        accessToken: accessToken || code || "",
-        displayName: name || "FORTIUS TELECOM",
-        website: website || "",
+        displayPhone: displayPhone ? String(displayPhone).trim() : "",
+        accessToken: tokenToStore,
+        displayName: name ? String(name).trim() : "FORTIUS TELECOM",
+        website: website ? String(website).trim() : "",
         status: "ACTIVE",
         messagingLimit: liveMessagingLimit,
         qualityRating: liveQualityRating,
       },
       create: {
-        userId: defaultUser.id,
+        userId: finalOwnerId,
         wabaId: cleanWabaId,
         phoneNumberId: cleanPhoneId,
-        displayPhone: displayPhone || "",
-        accessToken: accessToken || code || "",
-        displayName: name || "FORTIUS TELECOM",
-        website: website || "",
+        displayPhone: displayPhone ? String(displayPhone).trim() : "",
+        accessToken: tokenToStore,
+        displayName: name ? String(name).trim() : "FORTIUS TELECOM",
+        website: website ? String(website).trim() : "",
         status: "ACTIVE",
         messagingLimit: liveMessagingLimit,
         qualityRating: liveQualityRating,
       },
     });
 
-    return NextResponse.json({ success: true, data: newAccount });
+    const { accessToken: _hiddenToken, ...safeAccount } = newAccount as any;
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...safeAccount,
+        hasAccessToken: Boolean(newAccount.accessToken),
+      },
+    });
   } catch (error: any) {
     console.error("Registration error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }

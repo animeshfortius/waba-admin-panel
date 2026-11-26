@@ -1,33 +1,76 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
+
+const META_GRAPH_VERSION = "v23.0";
 
 export async function POST(req: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const formData = await req.formData();
     const rawFile = formData.get("file");
     const rawWabaId = formData.get("wabaId");
+    const requestedUserId = String(formData.get("userId") || "").trim();
 
-    if (!rawFile || !(rawFile instanceof File)) {
+    if (!rawFile || !(rawFile instanceof File) || rawFile.size === 0) {
       return NextResponse.json(
         { success: false, error: "No valid file provided" },
         { status: 400 }
       );
     }
 
+    const ownerWhere = getOwnerWhere(tenant);
+    const scopedWhere: any = { ...ownerWhere };
+
+    if (
+      requestedUserId &&
+      requestedUserId !== "ALL" &&
+      requestedUserId !== "undefined" &&
+      requestedUserId !== "null"
+    ) {
+      if (
+        !tenant.isSuperAdmin &&
+        !tenant.allowedUserIds?.includes(requestedUserId)
+      ) {
+        return NextResponse.json(
+          { success: false, error: "Access denied for requested user" },
+          { status: 403 }
+        );
+      }
+      scopedWhere.userId = requestedUserId;
+    }
+
     const channelParam =
       typeof rawWabaId === "string" && rawWabaId.trim().length > 0
         ? rawWabaId.trim()
         : "";
-    const cleanChannel = channelParam.replace(/^PHONE_/i, "").replace(/^\+/, "").trim();
+    const cleanChannel = channelParam
+      .replace(/^PHONE_/i, "")
+      .replace(/^\+/, "")
+      .trim();
 
-    const accounts = await prisma.wabaAccount.findMany();
+    const accounts = await prisma.wabaAccount.findMany({
+      where: scopedWhere,
+      orderBy: { createdAt: "desc" },
+    });
 
     const wabaAccount =
       accounts.find((acc: any) => {
         const accId = String(acc.id || "").trim();
         const accWaba = String(acc.wabaId || "").trim();
-        const accPhoneId = String(acc.phoneNumberId || "").replace(/^PHONE_/i, "").trim();
-        const accPhone = String(acc.displayPhone || "").replace(/^\+/, "").trim();
+        const accPhoneId = String(acc.phoneNumberId || "")
+          .replace(/^PHONE_/i, "")
+          .trim();
+        const accPhone = String(acc.displayPhone || "")
+          .replace(/^\+/, "")
+          .trim();
 
         return (
           (channelParam &&
@@ -48,38 +91,38 @@ export async function POST(req: Request) {
     const cleanPhoneId = String(wabaAccount?.phoneNumberId || "")
       .replace(/^PHONE_/i, "")
       .trim();
-    const accessToken = String(
-      wabaAccount?.accessToken || process.env.META_ACCESS_TOKEN || ""
-    ).trim();
+    const accessToken = String(wabaAccount?.accessToken || "").trim();
 
-    if (!cleanPhoneId || !accessToken) {
+    if (!wabaAccount || !cleanPhoneId || !accessToken) {
       return NextResponse.json(
         {
           success: false,
-          error: "WABA credentials not found in database.",
+          error: "Scoped WABA credentials not found.",
         },
         { status: 404 }
       );
     }
 
     const fileBuffer = Buffer.from(await rawFile.arrayBuffer());
-    const blob = new Blob([fileBuffer], {
-      type: rawFile.type || "application/octet-stream",
-    });
+    const mimeType = rawFile.type || "application/octet-stream";
+    const blob = new Blob([fileBuffer], { type: mimeType });
 
     const metaFormData = new FormData();
     metaFormData.append("messaging_product", "whatsapp");
-    metaFormData.append("type", rawFile.type || "application/octet-stream");
+    metaFormData.append("type", mimeType);
     metaFormData.append("file", blob, rawFile.name || "upload");
 
     const uploadRes = await fetch(
-      `https://graph.facebook.com/v23.0/${encodeURIComponent(cleanPhoneId)}/media`,
+      `https://graph.facebook.com/${META_GRAPH_VERSION}/${encodeURIComponent(
+        cleanPhoneId
+      )}/media`,
       {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
         body: metaFormData,
+        cache: "no-store",
       }
     );
 
@@ -90,7 +133,7 @@ export async function POST(req: Request) {
         success: true,
         mediaId: uploadData.id,
         fileName: rawFile.name,
-        mimeType: rawFile.type || "application/octet-stream",
+        mimeType,
       });
     }
 

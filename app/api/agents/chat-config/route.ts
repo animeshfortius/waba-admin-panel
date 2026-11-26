@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
 const META_GRAPH_VERSION = "v21.0";
 
@@ -22,16 +23,29 @@ function formatIST(dateInput: Date | string | null) {
 export async function GET(req: Request) {
   try {
     await headers();
+
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session", campaigns: [] },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
     const agentFilter = searchParams.get("agentId") || "ALL";
     const syncMeta = searchParams.get("syncMeta") === "true";
 
-    // 1. Fetch all WABA Accounts (with Display Name & Display Phone)
-    const wabaAccounts = await prisma.wabaAccount.findMany();
+    const ownerWhere = getOwnerWhere(tenant);
 
-    // 2. Fetch Live Meta Analytics & Sync Templates (Graph API v21.0)
+    // 1. Fetch WABA Accounts strictly within authenticated tenant scope
+    const wabaAccounts = await prisma.wabaAccount.findMany({
+      where: ownerWhere,
+    });
+
+    // 2. Fetch Live Meta Analytics & Sync Templates (Graph API v21.0) for scoped WABAs only
     let metaAnalyticsSummary = {
       totalSent: 0,
       totalDelivered: 0,
@@ -50,7 +64,6 @@ export async function GET(req: Request) {
         if (!acc.wabaId || !acc.accessToken) continue;
 
         try {
-          // Live Meta Graph API v21.0 Analytics
           const metaUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/${acc.wabaId}?fields=analytics.start(${startUnix}).end(${endUnix}).granularity(DAILY)&access_token=${acc.accessToken}`;
           const metaRes = await fetch(metaUrl, { cache: "no-store" });
           const metaJson = await metaRes.json();
@@ -63,8 +76,7 @@ export async function GET(req: Request) {
             }
           }
 
-          // Sync latest template statuses from Meta when Sync button clicked
-          if (syncMeta) {
+          if (syncMeta && acc.userId) {
             const tplUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/${acc.wabaId}/message_templates?limit=100&access_token=${acc.accessToken}`;
             const tplRes = await fetch(tplUrl, { cache: "no-store" });
             const tplData = await tplRes.json();
@@ -72,21 +84,28 @@ export async function GET(req: Request) {
               for (const metaTpl of tplData.data) {
                 await (prisma as any).template
                   ?.updateMany({
-                    where: { name: metaTpl.name },
-                    data: { status: metaTpl.status, category: metaTpl.category },
+                    where: { name: metaTpl.name, userId: acc.userId },
+                    data: {
+                      status: metaTpl.status,
+                      category: metaTpl.category,
+                    },
                   })
                   .catch(() => null);
               }
             }
           }
         } catch (metaErr) {
-          console.error(`Meta Graph API fetch error for WABA ${acc.wabaId}:`, metaErr);
+          console.error(
+            `Meta Graph API fetch error for WABA ${acc.wabaId}:`,
+            metaErr
+          );
         }
       }
     }
 
-    // 3. Build Prisma Where Clause on campaignLog (matching working reports logic)
+    // 3. Build Tenant + Date Where Clause on campaignLog
     const whereClause: any = {
+      ...ownerWhere,
       campaignName: {
         not: "Direct_Chat_Campaign",
       },
@@ -98,6 +117,36 @@ export async function GET(req: Request) {
       const end = new Date(endDateParam);
       end.setHours(23, 59, 59, 999);
       whereClause.createdAt = { gte: start, lte: end };
+    }
+
+    if (agentFilter && agentFilter !== "ALL") {
+      if (
+        !tenant.isSuperAdmin &&
+        !tenant.allowedUserIds?.includes(agentFilter)
+      ) {
+        return NextResponse.json(
+          {
+            success: true,
+            metaAnalytics: metaAnalyticsSummary,
+            campaigns: [],
+            wabaAccounts: wabaAccounts.map((w) => ({
+              id: w.id,
+              wabaId: w.wabaId,
+              phoneNumberId: w.phoneNumberId,
+              displayPhone: w.displayPhone,
+              displayName: w.displayName,
+              userId: w.userId,
+            })),
+          },
+          {
+            headers: {
+              "Cache-Control":
+                "no-store, no-cache, must-revalidate, proxy-revalidate",
+            },
+          }
+        );
+      }
+      whereClause.userId = agentFilter;
     }
 
     const messageLogs = await prisma.campaignLog.findMany({
@@ -125,7 +174,7 @@ export async function GET(req: Request) {
           (w) =>
             w.displayPhone === log.channel ||
             w.wabaId === log.channel ||
-            log.channel?.includes(w.displayPhone)
+            (w.displayPhone ? log.channel?.includes(w.displayPhone) : false)
         );
 
         const channelDisplay = matchedWaba
@@ -136,7 +185,8 @@ export async function GET(req: Request) {
           id: log.id,
           date: formatIST(log.createdAt),
           createdAt: log.createdAt,
-          userName: log.userName || log.createdBy || log.agentId || log.userId || "admin",
+          userName:
+            log.userName || log.createdBy || log.agentId || log.userId || "agent",
           campaignName: log.campaignName,
           templateName: log.templateName || "N/A",
           wabaNumber: channelDisplay,
@@ -145,7 +195,10 @@ export async function GET(req: Request) {
           totalCount: 0,
           deliveredCount: 0,
           failedCount: 0,
-          error: log.errorDetails && log.errorDetails !== "N/A" ? log.errorDetails : "None",
+          error:
+            log.errorDetails && log.errorDetails !== "N/A"
+              ? log.errorDetails
+              : "None",
           status: "COMPLETED",
         };
       }
@@ -175,15 +228,27 @@ export async function GET(req: Request) {
           : "COMPLETED",
     }));
 
+    const safeWabaAccounts = wabaAccounts.map((w) => ({
+      id: w.id,
+      wabaId: w.wabaId,
+      phoneNumberId: w.phoneNumberId,
+      displayPhone: w.displayPhone,
+      displayName: w.displayName,
+      userId: w.userId,
+    }));
+
     return NextResponse.json(
       {
         success: true,
         metaAnalytics: metaAnalyticsSummary,
         campaigns: formattedCampaigns,
-        wabaAccounts,
+        wabaAccounts: safeWabaAccounts,
       },
       {
-        headers: { "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate" },
+        headers: {
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate, proxy-revalidate",
+        },
       }
     );
   } catch (error: any) {

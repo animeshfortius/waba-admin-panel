@@ -1,18 +1,40 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId") || "admin";
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
 
-    const isAdmin =
-      userId === "admin" ||
-      userId === "emergency-admin-id" ||
-      userId === "emergency_admin_id";
+    const { searchParams } = new URL(req.url);
+    const requestedUserId = searchParams.get("userId");
+
+    const ownerWhere = getOwnerWhere(tenant);
+    const whereClause: any = { ...ownerWhere };
+
+    if (
+      requestedUserId &&
+      requestedUserId !== "ALL" &&
+      requestedUserId !== "undefined" &&
+      requestedUserId !== "null"
+    ) {
+      if (
+        !tenant.isSuperAdmin &&
+        !tenant.allowedUserIds?.includes(requestedUserId)
+      ) {
+        return NextResponse.json({ success: true, sessions: [] });
+      }
+      whereClause.userId = requestedUserId;
+    }
 
     const sessions = await prisma.chatSession.findMany({
-      where: isAdmin ? {} : { userId },
+      where: whereClause,
       orderBy: { lastMessageAt: "desc" },
       include: {
         messages: {
@@ -27,21 +49,51 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ success: true, sessions });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }
 
 export async function PATCH(req: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
-    const { sessionId, isBotActive, status, assignedTo } = body;
+    const sessionId = String(body?.sessionId || "").trim();
+    const { isBotActive, status, assignedTo } = body;
 
     if (!sessionId) {
-      return NextResponse.json({ success: false, error: "Session ID required" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Session ID required" },
+        { status: 400 }
+      );
+    }
+
+    const ownerWhere = getOwnerWhere(tenant);
+    const existing = await prisma.chatSession.findFirst({
+      where: {
+        id: sessionId,
+        ...ownerWhere,
+      },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Session not found or access denied" },
+        { status: 404 }
+      );
     }
 
     const updated = await prisma.chatSession.update({
-      where: { id: sessionId },
+      where: { id: existing.id },
       data: {
         ...(typeof isBotActive === "boolean" && { isBotActive }),
         ...(status && { status }),
@@ -51,6 +103,9 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({ success: true, session: updated });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }

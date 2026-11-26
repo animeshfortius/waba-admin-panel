@@ -1,54 +1,105 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { getTenantContext } from "@/lib/tenant-auth";
 import crypto from "crypto";
 
-const prisma = new PrismaClient();
+const SAFE_USER_SELECT = {
+  id: true,
+  name: true,
+  username: true,
+  email: true,
+  phone: true,
+  image: true,
+  role: true,
+  apiKey: true,
+  walletBalance: true,
+  createdAt: true,
+};
 
-// GET: Profile fetch karne aur apiKey auto-generate karne ke liye
+function resolveScopedUserId(tenant: any, requestedUserId?: string): string {
+  const cleanRequested = String(requestedUserId || "").trim();
+  if (
+    cleanRequested &&
+    cleanRequested !== "undefined" &&
+    cleanRequested !== "null" &&
+    (tenant.isSuperAdmin || tenant.allowedUserIds?.includes(cleanRequested))
+  ) {
+    return cleanRequested;
+  }
+  return String(tenant.userId || "").trim();
+}
+
+// GET: Fetch scoped user profile and ensure apiKey exists
 export async function GET(request: Request) {
   try {
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
+    const requestedUserId = searchParams.get("userId") || "";
+    const targetUserId = resolveScopedUserId(tenant, requestedUserId);
 
-    let user = null;
-    if (userId) {
-      user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!targetUserId) {
+      return NextResponse.json(
+        { success: false, error: "Scoped user context missing" },
+        { status: 400 }
+      );
     }
 
-    // Agar ID se user na mile, toh database ka pehla user utha lo
-    if (!user) {
-      user = await prisma.user.findFirst();
-    }
+    let user = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: SAFE_USER_SELECT,
+    });
 
-    // Agar database bilkul khali ho, toh default admin user bana do
-    if (!user) {
+    if (!user && tenant.isSuperAdmin) {
       user = await prisma.user.create({
         data: {
           name: "Admin",
           email: "info@fortiusinfocom.com",
-          password: "default_password",
+          password: crypto.randomBytes(16).toString("hex"),
           phone: "8052058888",
           role: "SUPER_ADMIN",
+          apiKey: "ft_live_" + crypto.randomBytes(24).toString("hex"),
         },
+        select: SAFE_USER_SELECT,
       });
     }
 
-    // Agar apiKey na ho toh generate karke save kar do
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "User not found" },
+        { status: 404 }
+      );
+    }
+
     if (!user.apiKey) {
       const generatedKey = "ft_live_" + crypto.randomBytes(24).toString("hex");
       user = await prisma.user.update({
         where: { id: user.id },
         data: { apiKey: generatedKey },
+        select: SAFE_USER_SELECT,
       });
     }
 
     return NextResponse.json({ success: true, user });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "Failed to fetch profile" }, { status: 500 });
+    console.error("GET Profile Error:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error?.message || "Failed to fetch profile",
+      },
+      { status: 500 }
+    );
   }
 }
 
-// POST & PUT: Profile update karne ke liye (Fail-safe logic)
+// POST & PUT: Update scoped user profile
 export async function POST(request: Request) {
   return handleProfileUpdate(request);
 }
@@ -59,46 +110,63 @@ export async function PUT(request: Request) {
 
 async function handleProfileUpdate(request: Request) {
   try {
-    const body = await request.json();
-    const { userId, name, phone, image } = body;
-
-    let user = null;
-    if (userId) {
-      user = await prisma.user.findUnique({ where: { id: userId } });
+    const tenant = await getTenantContext();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized session" },
+        { status: 401 }
+      );
     }
 
-    // Agar ID na mile toh database ka pehla user target karo
-    if (!user) {
-      user = await prisma.user.findFirst();
+    const body = await request.json().catch(() => ({}));
+    const requestedUserId = body?.userId ? String(body.userId) : "";
+    const targetUserId = resolveScopedUserId(tenant, requestedUserId);
+
+    if (!targetUserId) {
+      return NextResponse.json(
+        { success: false, error: "Scoped user context missing" },
+        { status: 400 }
+      );
     }
 
-    let updatedUser;
-    if (user) {
-      // User mil gaya toh update kar do
-      updatedUser = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          ...(name && { name }),
-          ...(phone && { phone }),
-          ...(image !== undefined && { image }), // 👈 Yahan image safely save ho jayegi
-        },
-      });
-    } else {
-      // Agar ek bhi user na ho toh naya create kar do
-      updatedUser = await prisma.user.create({
-        data: {
-          name: name || "Admin",
-          email: "info@fortiusinfocom.com",
-          password: "default_password",
-          phone: phone || "8052058888",
-          image: image || "",
-          role: "SUPER_ADMIN",
-        },
-      });
+    const existingUser = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true },
+    });
+
+    if (!existingUser) {
+      return NextResponse.json(
+        { success: false, error: "User not found or access denied" },
+        { status: 404 }
+      );
     }
+
+    const updateData: any = {};
+    if (typeof body?.name === "string" && body.name.trim()) {
+      updateData.name = body.name.trim();
+    }
+    if (typeof body?.phone === "string" && body.phone.trim()) {
+      updateData.phone = body.phone.trim();
+    }
+    if (body?.image !== undefined) {
+      updateData.image = String(body.image || "");
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: existingUser.id },
+      data: updateData,
+      select: SAFE_USER_SELECT,
+    });
 
     return NextResponse.json({ success: true, user: updatedUser });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "Failed to update profile" }, { status: 500 });
+    console.error("Update Profile Error:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error?.message || "Failed to update profile",
+      },
+      { status: 500 }
+    );
   }
 }

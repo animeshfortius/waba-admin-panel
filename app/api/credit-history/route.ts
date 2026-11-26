@@ -70,75 +70,63 @@ export async function GET() {
         ? Number((baseWallet + virtualBal).toFixed(2))
         : Number(baseWallet.toFixed(2));
 
-    let transactions: any[] = [];
+    const allUsers = await prisma.user.findMany({
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        email: true,
+        role: true,
+        createdById: true,
+      },
+    });
 
-    try {
-      if (isSuperAdmin) {
-        // Super Admin sees wallet recharge / credit history of all added users
-        transactions = await (prisma as any).transaction.findMany({
-          orderBy: { createdAt: "desc" },
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-                name: true,
-                email: true,
-                role: true,
-              },
-            },
-          },
-        });
-      } else if (isReseller) {
-        // Reseller sees own history + history of users created under them
-        const childUsers = await prisma.user.findMany({
-          where: { createdById: actor.id },
-          select: { id: true },
-        });
-        const scopedIds = [actor.id, ...childUsers.map((u) => u.id)];
+    const userMap = new Map<string, any>(allUsers.map((u) => [u.id, u]));
 
-        transactions = await (prisma as any).transaction.findMany({
-          where: { userId: { in: scopedIds } },
-          orderBy: { createdAt: "desc" },
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-                name: true,
-                email: true,
-                role: true,
-              },
-            },
-          },
-        });
+    let scopedUserIds: string[] | null = null;
+    if (!isSuperAdmin) {
+      if (isReseller) {
+        const childIds = allUsers
+          .filter((u) => u.createdById === actor.id)
+          .map((u) => u.id);
+        scopedUserIds = [actor.id, ...childIds];
       } else {
-        // Normal USER sees strictly their own credit history
-        transactions = await (prisma as any).transaction.findMany({
-          where: { userId: actor.id },
-          orderBy: { createdAt: "desc" },
-        });
+        scopedUserIds = [actor.id];
       }
-    } catch {
-      transactions = [];
     }
 
-    const formattedTransactions = transactions.map((tx: any) => ({
-      id: tx.id,
-      userId: tx.userId,
-      userName:
-        tx.user?.name ||
-        tx.user?.username ||
-        actor.name ||
-        actor.username ||
-        "User",
-      userRole: tx.user?.role || role,
-      fromUser: tx.fromUser || tx.source || "Super Admin",
-      amount: Number(tx.amount ?? 0),
-      type: tx.type || "CREDIT",
-      createdAt: tx.createdAt,
-      description: tx.description || tx.remarks || "Wallet recharge entry",
-    }));
+    let rawTransactions: any[] = [];
+
+    try {
+      rawTransactions = await (prisma as any).transaction.findMany({
+        ...(scopedUserIds ? { where: { userId: { in: scopedUserIds } } } : {}),
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (txErr) {
+      console.error("Prisma transaction query failed:", txErr);
+      rawTransactions = [];
+    }
+
+    const formattedTransactions = rawTransactions.map((tx: any) => {
+      const targetUser = userMap.get(tx.userId || tx.toUserId || "");
+      return {
+        id: tx.id,
+        userId: tx.userId || tx.toUserId || "",
+        userName:
+          targetUser?.name ||
+          targetUser?.username ||
+          tx.userName ||
+          actor.name ||
+          actor.username ||
+          "User",
+        userRole: targetUser?.role || "USER",
+        fromUser: tx.fromUser || tx.source || tx.adminName || "Super Admin",
+        amount: Number(tx.amount ?? tx.credits ?? 0),
+        type: tx.type || tx.creditType || "CREDIT",
+        createdAt: tx.createdAt,
+        description: tx.description || tx.remarks || "Wallet recharge entry",
+      };
+    });
 
     return NextResponse.json({
       success: true,

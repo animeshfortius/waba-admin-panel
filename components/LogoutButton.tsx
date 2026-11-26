@@ -5,7 +5,7 @@ import { useState } from "react";
 export default function LogoutButton() {
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     if (loggingOut) return;
     setLoggingOut(true);
 
@@ -14,15 +14,7 @@ export default function LogoutButton() {
       sessionStorage.clear();
     } catch (e) {}
 
-    try {
-      await fetch("/api/logout", {
-        method: "POST",
-        cache: "no-store",
-        credentials: "include",
-      });
-    } catch (e) {}
-
-    window.location.replace("/login");
+    window.location.href = "/api/logout";
   };
 
   return (

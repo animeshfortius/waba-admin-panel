@@ -101,6 +101,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const actualBal = Number(currentUser?.actualBalance ?? 0);
   const virtualBal = Number(currentUser?.virtualBalance ?? 0);
+  const walletBal = Number(
+    currentUser?.walletBalance ?? currentUser?.virtualBalance ?? 0
+  );
 
   const displayName =
     currentUser?.name || currentUser?.username || "Fortius Infocom";
@@ -134,15 +137,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   </Link>
                 )}
 
-                {(isSuperAdmin || isReseller) && (
+                {isSuperAdmin || isReseller ? (
+                  <>
+                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs hidden sm:block font-mono">
+                      ACTUAL: {formatINR(actualBal)}
+                    </div>
+
+                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs hidden sm:block font-mono">
+                      VIRTUAL: {formatINR(virtualBal)}
+                    </div>
+                  </>
+                ) : (
                   <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs hidden sm:block font-mono">
-                    ACTUAL: {formatINR(actualBal)}
+                    WALLET BALANCE: {formatINR(walletBal)}
                   </div>
                 )}
-
-                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs hidden sm:block font-mono">
-                  VIRTUAL: {formatINR(virtualBal)}
-                </div>
               </div>
             )}
 

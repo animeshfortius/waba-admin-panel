@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { resolveTenantBranding } from "@/lib/tenantBranding";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 
 export async function POST(req: Request) {
   try {
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
     let authUser: any = null;
     let assignedRole = "USER";
 
-    // Emergency Super Admin login
+    // Emergency Super Admin login ONLY for exact admin + Admin@123
     if (username.toLowerCase() === "admin" && password === "Admin@123") {
       assignedRole = "SUPER_ADMIN";
       authUser = {
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
       }
 
       authUser = user;
-      assignedRole = String(user.role || "USER").toUpperCase();
+      assignedRole = String(user.role || "USER").trim().toUpperCase();
     }
 
     const hostHeader = req.headers.get("host");
@@ -90,6 +91,8 @@ export async function POST(req: Request) {
       JWT_SECRET,
       { expiresIn: "7d" }
     );
+
+    const isProd = process.env.NODE_ENV === "production";
 
     const response = NextResponse.json({
       success: true,
@@ -109,25 +112,21 @@ export async function POST(req: Request) {
       branding,
     });
 
-    response.cookies.set("token", token, {
-      httpOnly: true,
-      sameSite: "lax",
+    const cookieOpts = {
+      sameSite: "lax" as const,
       path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
+      maxAge: COOKIE_MAX_AGE,
+      secure: isProd,
+    };
 
-    response.cookies.set("userId", authUser.id, {
+    response.cookies.set("token", token, { ...cookieOpts, httpOnly: true });
+    response.cookies.set("userId", String(authUser.id), {
+      ...cookieOpts,
       httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
     });
-
     response.cookies.set("userRole", assignedRole, {
+      ...cookieOpts,
       httpOnly: false,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
     });
 
     return response;

@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { prisma } from "@/lib/prisma";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+const JWT_SECRET =
+  process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
@@ -15,7 +16,9 @@ export async function GET() {
   try {
     const cookieStore = await cookies();
     const token =
-      cookieStore.get("token")?.value || cookieStore.get("auth_token")?.value;
+      cookieStore.get("token")?.value ||
+      cookieStore.get("waba_token")?.value ||
+      cookieStore.get("auth_token")?.value;
 
     if (!token) {
       return NextResponse.json(
@@ -25,7 +28,7 @@ export async function GET() {
     }
 
     const decoded: any = jwt.verify(token, JWT_SECRET);
-    const targetUserId = decoded.userId || decoded.id;
+    const targetUserId = decoded.userId || decoded.id || decoded.sub;
 
     if (!targetUserId) {
       return NextResponse.json(

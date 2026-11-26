@@ -106,8 +106,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   );
 
   const displayName =
-    currentUser?.name || currentUser?.username || "Fortius Infocom";
-  const initials = displayName.substring(0, 2).toUpperCase() || "FI";
+    currentUser?.name || currentUser?.username || "Account";
+  const initials = displayName.substring(0, 2).toUpperCase() || "AC";
 
   const panelLabel = isSuperAdmin
     ? "Super Admin Panel"

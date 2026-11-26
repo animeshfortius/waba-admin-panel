@@ -4,7 +4,8 @@ import jwt from "jsonwebtoken";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+const JWT_SECRET =
+  process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
 
 const ALLOWED_ROLES = [
   "SUPER_ADMIN",

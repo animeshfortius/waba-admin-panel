@@ -270,6 +270,7 @@ function ManageRatesModal({
 export default function UserManagementPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -342,7 +343,7 @@ export default function UserManagementPage() {
     setCurrentUserRole(adminRole);
     setCurrentAdminId(adminId);
 
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data && data.user) {
@@ -355,10 +356,19 @@ export default function UserManagementPage() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch("/api/admin/users");
+      const res = await fetch("/api/admin/users", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        console.warn("GET /api/admin/users status:", res.status);
+        return;
+      }
       const data = await res.json();
       const list = data.users || (Array.isArray(data) ? data : []);
-      setAllUsers(list);
+      if (Array.isArray(list) && list.length > 0) {
+        setAllUsers(list);
+      }
     } catch (err) {
       console.error("Error fetching users:", err);
     }
@@ -397,7 +407,7 @@ export default function UserManagementPage() {
           u.name?.toLowerCase().includes(query) ||
           u.username?.toLowerCase().includes(query) ||
           u.email?.toLowerCase().includes(query) ||
-          u.phone?.includes(query)
+          String(u.phone || "").includes(query)
       );
       setSuggestions(matches);
       setShowSuggestions(true);
@@ -407,46 +417,95 @@ export default function UserManagementPage() {
     }
   };
 
-  const handleSearchClick = () => {
-    if (!searchQuery.trim()) {
+  const applySelectedUser = (found: any) => {
+    setSelectedUser(found);
+    setFormData({
+      name: found.name || found.username || "",
+      email: found.email || "",
+      phone: found.phone || "",
+      role: found.role || "USER",
+      status: "Active",
+      expiryDate: found.expiryDate
+        ? String(found.expiryDate).substring(0, 10)
+        : "2026-10-29",
+    });
+
+    setWhatsappSettings({
+      whatsappApiEnabled: found.whatsappApiEnabled ?? true,
+      chatbotEnabled: found.chatbotEnabled ?? true,
+      secureReporting: found.secureReporting ?? false,
+      internationalAccount: found.internationalAccount ?? false,
+    });
+
+    setShowSuggestions(false);
+    setChangePasswordToggle(false);
+    setNewPasswordInput("");
+  };
+
+  const handleSearchClick = async () => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
       alert("Please enter a username or email to search!");
       return;
     }
 
-    const query = searchQuery.toLowerCase().trim();
-    const found = allUsers.find(
+    const query = trimmed.toLowerCase();
+    let found = allUsers.find(
       (u) =>
         u.name?.toLowerCase().includes(query) ||
         u.username?.toLowerCase().includes(query) ||
         u.email?.toLowerCase().includes(query) ||
-        u.phone?.includes(query)
+        String(u.phone || "").includes(trimmed)
     );
 
+    if (!found) {
+      setSearchLoading(true);
+      try {
+        const res = await fetch(
+          `/api/admin/users?search=${encodeURIComponent(trimmed)}`,
+          {
+            credentials: "include",
+            cache: "no-store",
+          }
+        );
+
+        if (res.status === 401) {
+          alert(
+            "Session unauthorized (401 on /api/admin/users). Please check session/auth and try again."
+          );
+          return;
+        }
+
+        if (res.ok) {
+          const data = await res.json();
+          const list = data.users || (Array.isArray(data) ? data : []);
+          if (Array.isArray(list) && list.length > 0) {
+            setAllUsers((prev) => {
+              const map = new Map(prev.map((item: any) => [item.id, item]));
+              for (const item of list) map.set(item.id, item);
+              return Array.from(map.values());
+            });
+            found =
+              list.find(
+                (u: any) =>
+                  u.name?.toLowerCase().includes(query) ||
+                  u.username?.toLowerCase().includes(query) ||
+                  u.email?.toLowerCase().includes(query) ||
+                  String(u.phone || "").includes(trimmed)
+              ) || list[0];
+          }
+        }
+      } catch (err) {
+        console.error("Search fetch error:", err);
+      } finally {
+        setSearchLoading(false);
+      }
+    }
+
     if (found) {
-      setSelectedUser(found);
-      setFormData({
-        name: found.name || found.username || "",
-        email: found.email || "",
-        phone: found.phone || "",
-        role: found.role || "USER",
-        status: "Active",
-        expiryDate: found.expiryDate
-          ? String(found.expiryDate).substring(0, 10)
-          : "2026-10-29",
-      });
-
-      setWhatsappSettings({
-        whatsappApiEnabled: found.whatsappApiEnabled ?? true,
-        chatbotEnabled: found.chatbotEnabled ?? true,
-        secureReporting: found.secureReporting ?? false,
-        internationalAccount: found.internationalAccount ?? false,
-      });
-
-      setShowSuggestions(false);
-      setChangePasswordToggle(false);
-      setNewPasswordInput("");
+      applySelectedUser(found);
     } else {
-      alert(`User "${searchQuery}" not found in database!`);
+      alert(`User "${trimmed}" not found in database!`);
       setSelectedUser(null);
     }
   };
@@ -712,9 +771,10 @@ export default function UserManagementPage() {
           <button
             type="button"
             onClick={handleSearchClick}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl shadow-2xs cursor-pointer text-xs flex items-center gap-1.5 transition"
+            disabled={searchLoading}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl shadow-2xs cursor-pointer text-xs flex items-center gap-1.5 transition disabled:opacity-50"
           >
-            🔍 Search
+            🔍 {searchLoading ? "Searching..." : "Search"}
           </button>
         </div>
 

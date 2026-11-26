@@ -8,6 +8,7 @@ import { resolveTenantBranding } from "@/lib/tenantBranding";
 const JWT_SECRET =
   process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
+const SUPER_ADMIN_DEFAULT_BALANCE = 1234567890;
 
 export async function POST(req: Request) {
   try {
@@ -37,7 +38,15 @@ export async function POST(req: Request) {
       });
 
       if (dbSuperAdmin) {
-        authUser = dbSuperAdmin;
+        authUser = {
+          ...dbSuperAdmin,
+          actualBalance:
+            Number(dbSuperAdmin.actualBalance ?? 0) ||
+            SUPER_ADMIN_DEFAULT_BALANCE,
+          virtualBalance:
+            Number(dbSuperAdmin.virtualBalance ?? 0) ||
+            SUPER_ADMIN_DEFAULT_BALANCE,
+        };
         assignedRole = "SUPER_ADMIN";
       } else {
         assignedRole = "SUPER_ADMIN";
@@ -50,9 +59,9 @@ export async function POST(req: Request) {
           parentId: null,
           isWhiteLabel: false,
           whiteLabelConfig: null,
-          actualBalance: 0,
-          virtualBalance: 0,
-          walletBalance: 0,
+          actualBalance: SUPER_ADMIN_DEFAULT_BALANCE,
+          virtualBalance: SUPER_ADMIN_DEFAULT_BALANCE,
+          walletBalance: SUPER_ADMIN_DEFAULT_BALANCE,
         };
       }
     } else {

@@ -7,17 +7,19 @@ export default function MyProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [userId, setUserId] = useState("");
-  
-  // Profile states
+  const [roleLabel, setRoleLabel] = useState("USER");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // Profile states (clean empty defaults until actual user loads)
   const [formData, setFormData] = useState({
-    username: "Admin",
-    mobile: "8052058888",
-    email: "info@fortiusinfocom.com",
+    username: "",
+    mobile: "",
+    email: "",
     address: "",
     city: "",
     state: "",
     pinCode: "",
-    apiKey: "4p47cb81-10e5-4c82-821c-7862a71c674c",
+    apiKey: "",
     loginNotification: false,
     profilePic: "",
   });
@@ -31,40 +33,59 @@ export default function MyProfilePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/client/profile")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.user) {
-          setUserId(data.user.id); // 👈 User ID save kar li
-          setFormData((prev) => ({
-            ...prev,
-            username: data.user.username || data.user.name || "Admin",
-            email: data.user.email || "info@fortiusinfocom.com",
-            mobile: data.user.phone || "8052058888",
-            apiKey: data.user.apiKey || "4p47cb81-10e5-4c82-821c-7862a71c674c",
-            profilePic: data.user.image || data.user.profilePic || "", // 👈 DB ki 'image' field map ki
-          }));
+    setLoading(true);
+    setErrorMsg("");
+
+    fetch("/api/client/profile", {
+      cache: "no-store",
+      credentials: "include",
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok || !data.success || !data.user) {
+          throw new Error(data.error || "Failed to load user profile");
         }
+        return data.user;
       })
-      .catch((err) => console.error("Error fetching profile:", err))
+      .then((user) => {
+        setUserId(user.id || "");
+        setRoleLabel(String(user.role || "USER").toUpperCase());
+        setFormData({
+          username: user.username || user.name || "",
+          email: user.email || "",
+          mobile: user.phone || "",
+          address: "",
+          city: "",
+          state: "",
+          pinCode: "",
+          apiKey: user.apiKey || "",
+          loginNotification: false,
+          profilePic: user.image || user.profilePic || "",
+        });
+      })
+      .catch((err) => {
+        console.error("Error fetching profile:", err);
+        setErrorMsg(err.message || "Unable to fetch profile details");
+      })
       .finally(() => setLoading(false));
   }, []);
 
-  const handlePersonalChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handlePersonalChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Asli Profile Save Function (With API call)
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
       const payload = {
-        userId: userId,
+        ...(userId ? { userId } : {}),
         name: formData.username,
         phone: formData.mobile,
-        image: formData.profilePic, // 👈 Backend ko 'image' key ke roop mein bhej rahe hain
+        image: formData.profilePic,
         address: formData.address,
         city: formData.city,
         state: formData.state,
@@ -74,10 +95,20 @@ export default function MyProfilePage() {
       const res = await fetch("/api/client/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        credentials: "include",
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.user) {
+        setFormData((prev) => ({
+          ...prev,
+          username: data.user.username || data.user.name || prev.username,
+          email: data.user.email || prev.email,
+          mobile: data.user.phone ?? prev.mobile,
+          apiKey: data.user.apiKey || prev.apiKey,
+          profilePic: data.user.image || prev.profilePic,
+        }));
         alert("Profile details & picture saved successfully to database!");
       } else {
         alert("Error: " + (data.error || "Failed to save"));
@@ -96,6 +127,7 @@ export default function MyProfilePage() {
   };
 
   const copyApiKey = () => {
+    if (!formData.apiKey) return;
     navigator.clipboard.writeText(formData.apiKey);
     alert("API Key copied to clipboard!");
   };
@@ -105,20 +137,34 @@ export default function MyProfilePage() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, profilePic: reader.result as string }));
+        setFormData((prev) => ({
+          ...prev,
+          profilePic: reader.result as string,
+        }));
       };
       reader.readAsDataURL(file);
     }
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-gray-500 font-sans text-xs">Loading Profile...</div>;
+    return (
+      <div className="p-8 text-center text-gray-500 font-sans text-xs">
+        Loading Profile...
+      </div>
+    );
+  }
+
+  if (errorMsg) {
+    return (
+      <div className="p-8 text-center text-rose-600 font-sans text-xs">
+        {errorMsg}
+      </div>
+    );
   }
 
   return (
     <div className="w-full font-sans text-xs">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        
         {/* Left Sidebar Profile Card */}
         <div className="md:col-span-1 space-y-4">
           <div className="bg-white border border-gray-200 rounded-2xl p-6 text-center shadow-xs">
@@ -131,7 +177,7 @@ export default function MyProfilePage() {
                 />
               ) : (
                 <div className="w-20 h-20 bg-slate-900 text-white rounded-full flex items-center justify-center text-xl font-extrabold shadow">
-                  👤
+                  {(formData.username || "U").substring(0, 2).toUpperCase()}
                 </div>
               )}
               <input
@@ -151,11 +197,15 @@ export default function MyProfilePage() {
               </button>
             </div>
 
-            <h2 className="font-bold text-gray-800 text-sm">{formData.username}</h2>
-            <p className="text-gray-400 text-[11px] mb-3">{formData.email}</p>
-            
+            <h2 className="font-bold text-gray-800 text-sm">
+              {formData.username || "User"}
+            </h2>
+            <p className="text-gray-400 text-[11px] mb-3">
+              {formData.email || ""}
+            </p>
+
             <div className="inline-block bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1 rounded-full text-[10px] font-bold">
-              ● Active Member
+              ● {roleLabel}
             </div>
           </div>
 
@@ -190,12 +240,12 @@ export default function MyProfilePage() {
               <span>⚡</span> Quick Summary
             </h3>
             <div className="flex justify-between text-gray-500 border-b pb-2">
-              <span>Member Since</span>
-              <span className="font-semibold text-gray-800">Jun 12, 2026</span>
+              <span>Account Role</span>
+              <span className="font-semibold text-gray-800">{roleLabel}</span>
             </div>
             <div className="flex justify-between text-gray-500">
-              <span>Valid Until</span>
-              <span className="font-semibold text-rose-600">Dec 31, 2040</span>
+              <span>Account Status</span>
+              <span className="font-semibold text-emerald-600">Active</span>
             </div>
           </div>
         </div>
@@ -205,14 +255,20 @@ export default function MyProfilePage() {
           {activeTab === "personal" ? (
             <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-xs w-full">
               <div className="border-b pb-4 mb-6">
-                <h2 className="font-bold text-gray-900 text-sm">Personal Information</h2>
-                <p className="text-gray-400 text-[11px]">Keep your account details up to date.</p>
+                <h2 className="font-bold text-gray-900 text-sm">
+                  Personal Information
+                </h2>
+                <p className="text-gray-400 text-[11px]">
+                  Keep your account details up to date.
+                </p>
               </div>
 
               <form onSubmit={handleSaveProfile} className="space-y-4 w-full">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block font-bold text-gray-700 mb-1">USERNAME</label>
+                    <label className="block font-bold text-gray-700 mb-1">
+                      USERNAME
+                    </label>
                     <input
                       type="text"
                       name="username"
@@ -223,7 +279,9 @@ export default function MyProfilePage() {
                   </div>
 
                   <div>
-                    <label className="block font-bold text-gray-700 mb-1">MOBILE NUMBER</label>
+                    <label className="block font-bold text-gray-700 mb-1">
+                      MOBILE NUMBER
+                    </label>
                     <input
                       type="text"
                       name="mobile"
@@ -235,7 +293,9 @@ export default function MyProfilePage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">EMAIL ADDRESS</label>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    EMAIL ADDRESS
+                  </label>
                   <input
                     type="email"
                     name="email"
@@ -246,7 +306,9 @@ export default function MyProfilePage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">PERMANENT ADDRESS</label>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    PERMANENT ADDRESS
+                  </label>
                   <textarea
                     name="address"
                     rows={3}
@@ -259,7 +321,9 @@ export default function MyProfilePage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block font-bold text-gray-700 mb-1">CITY</label>
+                    <label className="block font-bold text-gray-700 mb-1">
+                      CITY
+                    </label>
                     <input
                       type="text"
                       name="city"
@@ -269,7 +333,9 @@ export default function MyProfilePage() {
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-gray-700 mb-1">STATE</label>
+                    <label className="block font-bold text-gray-700 mb-1">
+                      STATE
+                    </label>
                     <input
                       type="text"
                       name="state"
@@ -279,7 +345,9 @@ export default function MyProfilePage() {
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-gray-700 mb-1">PIN CODE</label>
+                    <label className="block font-bold text-gray-700 mb-1">
+                      PIN CODE
+                    </label>
                     <input
                       type="text"
                       name="pinCode"
@@ -291,7 +359,9 @@ export default function MyProfilePage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">PUBLIC API KEY</label>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    PUBLIC API KEY
+                  </label>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -314,12 +384,23 @@ export default function MyProfilePage() {
                     type="checkbox"
                     id="notif"
                     checked={formData.loginNotification}
-                    onChange={(e) => setFormData(prev => ({ ...prev, loginNotification: e.target.checked }))}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        loginNotification: e.target.checked,
+                      }))
+                    }
                     className="w-4 h-4 text-blue-600 rounded border-gray-300 cursor-pointer"
                   />
-                  <label htmlFor="notif" className="text-gray-700 font-medium cursor-pointer">
+                  <label
+                    htmlFor="notif"
+                    className="text-gray-700 font-medium cursor-pointer"
+                  >
                     Enable login notifications via SMS/Email <br />
-                    <span className="text-[10px] text-gray-400">Get alerted every time your account is accessed from a new device.</span>
+                    <span className="text-[10px] text-gray-400">
+                      Get alerted every time your account is accessed from a new
+                      device.
+                    </span>
                   </label>
                 </div>
 
@@ -329,7 +410,8 @@ export default function MyProfilePage() {
                     disabled={saving}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl shadow transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
-                    <span>💾</span> {saving ? "Saving..." : "Save Profile Details"}
+                    <span>💾</span>{" "}
+                    {saving ? "Saving..." : "Save Profile Details"}
                   </button>
                 </div>
               </form>
@@ -337,38 +419,67 @@ export default function MyProfilePage() {
           ) : (
             <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-xs w-full">
               <div className="border-b pb-4 mb-6">
-                <h2 className="font-bold text-gray-900 text-sm">Security Settings</h2>
-                <p className="text-gray-400 text-[11px]">Manage your account access and data delivery.</p>
+                <h2 className="font-bold text-gray-900 text-sm">
+                  Security Settings
+                </h2>
+                <p className="text-gray-400 text-[11px]">
+                  Manage your account access and data delivery.
+                </p>
               </div>
 
-              <form onSubmit={handleUpdateSecurity} className="space-y-6 w-full">
+              <form
+                onSubmit={handleUpdateSecurity}
+                className="space-y-6 w-full"
+              >
                 <div className="space-y-4">
-                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Network Security</h3>
+                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
+                    Network Security
+                  </h3>
                   <div className="flex items-center justify-between p-4 border border-gray-100 rounded-xl bg-gray-50">
                     <div>
-                      <div className="font-bold text-gray-800">IP Whitelisting</div>
-                      <div className="text-[10px] text-gray-400">Restrict account access to specific IP addresses.</div>
+                      <div className="font-bold text-gray-800">
+                        IP Whitelisting
+                      </div>
+                      <div className="text-[10px] text-gray-400">
+                        Restrict account access to specific IP addresses.
+                      </div>
                     </div>
                     <input
                       type="checkbox"
                       checked={securitySettings.ipWhitelisting}
-                      onChange={(e) => setSecuritySettings(prev => ({ ...prev, ipWhitelisting: e.target.checked }))}
+                      onChange={(e) =>
+                        setSecuritySettings((prev) => ({
+                          ...prev,
+                          ipWhitelisting: e.target.checked,
+                        }))
+                      }
                       className="w-5 h-5 text-blue-600 rounded border-gray-300 cursor-pointer"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Real-Time Integration</h3>
+                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
+                    Real-Time Integration
+                  </h3>
                   <div className="flex items-center justify-between p-4 border border-gray-100 rounded-xl bg-gray-50">
                     <div>
-                      <div className="font-bold text-gray-800">DLR Webhook (Push Delivery)</div>
-                      <div className="text-[10px] text-gray-400">Receive delivery status updates via webhook.</div>
+                      <div className="font-bold text-gray-800">
+                        DLR Webhook (Push Delivery)
+                      </div>
+                      <div className="text-[10px] text-gray-400">
+                        Receive delivery status updates via webhook.
+                      </div>
                     </div>
                     <input
                       type="checkbox"
                       checked={securitySettings.dlrWebhook}
-                      onChange={(e) => setSecuritySettings(prev => ({ ...prev, dlrWebhook: e.target.checked }))}
+                      onChange={(e) =>
+                        setSecuritySettings((prev) => ({
+                          ...prev,
+                          dlrWebhook: e.target.checked,
+                        }))
+                      }
                       className="w-5 h-5 text-blue-600 rounded border-gray-300 cursor-pointer"
                     />
                   </div>
@@ -386,7 +497,6 @@ export default function MyProfilePage() {
             </div>
           )}
         </div>
-
       </div>
     </div>
   );

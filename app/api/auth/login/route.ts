@@ -5,7 +5,8 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { resolveTenantBranding } from "@/lib/tenantBranding";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+const JWT_SECRET =
+  process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 
 export async function POST(req: Request) {

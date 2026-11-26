@@ -26,7 +26,6 @@ model User {
   utilityRate    Float   @default(0.1550)
   serviceRate    Float   @default(0.1550)
   authRate       Float   @default(0.1550)
-  transactions Transaction[]
 
   // WhatsApp Account Settings Toggles
   whatsappApiEnabled   Boolean @default(true)
@@ -41,6 +40,7 @@ model User {
   childUsers       User[]              @relation("UserHierarchy")
   wabaAccounts     WabaAccount[]
   transactions     WalletTransaction[]
+  creditEntries    Transaction[]
   whiteLabelConfig WhiteLabelConfig?
 }
 
@@ -336,6 +336,7 @@ model AutomationSessionState {
 
   @@unique([phoneNumberId, customerPhone])
 }
+
 model Transaction {
   id          String   @id @default(cuid())
   userId      String

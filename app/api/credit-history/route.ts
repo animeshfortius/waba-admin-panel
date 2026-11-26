@@ -95,19 +95,43 @@ export async function GET() {
       }
     }
 
-    let rawTransactions: any[] = [];
+    let walletTxRows: any[] = [];
+    let creditTxRows: any[] = [];
 
     try {
-      rawTransactions = await (prisma as any).transaction.findMany({
+      walletTxRows = await prisma.walletTransaction.findMany({
         ...(scopedUserIds ? { where: { userId: { in: scopedUserIds } } } : {}),
         orderBy: { createdAt: "desc" },
       });
-    } catch (txErr) {
-      console.error("Prisma transaction query failed:", txErr);
-      rawTransactions = [];
+    } catch (walletErr) {
+      console.error("WalletTransaction query failed:", walletErr);
+      walletTxRows = [];
     }
 
-    const formattedTransactions = rawTransactions.map((tx: any) => {
+    try {
+      creditTxRows = await (prisma as any).transaction.findMany({
+        ...(scopedUserIds ? { where: { userId: { in: scopedUserIds } } } : {}),
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (creditErr) {
+      console.error("Transaction query failed:", creditErr);
+      creditTxRows = [];
+    }
+
+    const combinedMap = new Map<string, any>();
+    for (const row of [...creditTxRows, ...walletTxRows]) {
+      if (row?.id && !combinedMap.has(row.id)) {
+        combinedMap.set(row.id, row);
+      }
+    }
+
+    const mergedRows = Array.from(combinedMap.values()).sort(
+      (a, b) =>
+        new Date(b.createdAt || 0).getTime() -
+        new Date(a.createdAt || 0).getTime()
+    );
+
+    const formattedTransactions = mergedRows.map((tx: any) => {
       const targetUser = userMap.get(tx.userId || tx.toUserId || "");
       return {
         id: tx.id,
@@ -120,9 +144,13 @@ export async function GET() {
           actor.username ||
           "User",
         userRole: targetUser?.role || "USER",
-        fromUser: tx.fromUser || tx.source || tx.adminName || "Super Admin",
+        fromUser:
+          tx.fromUser ||
+          tx.source ||
+          tx.adminName ||
+          (tx.balanceType === "VIRTUAL" ? "Super Admin (Virtual)" : "Super Admin"),
         amount: Number(tx.amount ?? tx.credits ?? 0),
-        type: tx.type || tx.creditType || "CREDIT",
+        type: tx.type || tx.balanceType || tx.creditType || "CREDIT",
         createdAt: tx.createdAt,
         description: tx.description || tx.remarks || "Wallet recharge entry",
       };

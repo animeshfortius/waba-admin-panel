@@ -327,6 +327,18 @@ export default function Sidebar() {
               </Link>
 
               <Link
+                href="/dashboard/credit-history"
+                className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+                  pathname === "/dashboard/credit-history"
+                    ? "bg-emerald-600 text-white font-bold"
+                    : "hover:bg-slate-800 text-slate-300"
+                }`}
+              >
+                <span>📜</span>
+                <span>Credit History</span>
+              </Link>
+
+              <Link
                 href="/dashboard/templates"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
                   pathname === "/dashboard/templates"

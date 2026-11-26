@@ -6,17 +6,51 @@ import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
+interface AuthUser {
+  id: string;
+  username: string;
+  name?: string;
+  email?: string;
+  role: string;
+  isWhiteLabel?: boolean;
+  actualBalance?: number;
+  virtualBalance?: number;
+  walletBalance?: number;
+}
+
+function formatINR(amount: number) {
+  return `₹${Number(amount || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [agentData, setAgentData] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [profilePic, setProfilePic] = useState("");
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    // Database se profile picture fetch karna
-    fetch("/api/client/profile")
+    fetch("/api/auth/me", { cache: "no-store", credentials: "include" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.user) {
+          const normalizedRole = String(data.user.role || "USER")
+            .trim()
+            .toUpperCase();
+          setCurrentUser({
+            ...data.user,
+            role: normalizedRole,
+          });
+        }
+      })
+      .catch((err) => console.error("Error fetching current user:", err));
+
+    fetch("/api/client/profile", { cache: "no-store", credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.user && data.user.image) {
@@ -30,8 +64,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       try {
         const parsedAgent = JSON.parse(agentStr);
         setAgentData(parsedAgent);
-        
-        // Security Guard: Restrict agent based on assigned permissions
+
         const allowedPaths = ["/dashboard/chat"];
         if (parsedAgent.sendTemplate) allowedPaths.push("/dashboard/templates");
         if (parsedAgent.sendCampaign) allowedPaths.push("/dashboard/campaigns");
@@ -43,16 +76,41 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       } catch (e) {
         console.error(e);
       }
+    } else {
+      setAgentData(null);
     }
 
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [pathname, router]);
+
+  const role = String(currentUser?.role || "USER").trim().toUpperCase();
+  const isSuperAdmin = role === "SUPER_ADMIN";
+  const isReseller =
+    role === "RESELLER" ||
+    role === "WHITE_LABEL_RESELLER" ||
+    Boolean(currentUser?.isWhiteLabel);
+
+  const actualBal = Number(currentUser?.actualBalance ?? 0);
+  const virtualBal = Number(currentUser?.virtualBalance ?? 0);
+
+  const displayName =
+    currentUser?.name || currentUser?.username || "Fortius Infocom";
+  const initials = displayName.substring(0, 2).toUpperCase() || "FI";
+
+  const panelLabel = isSuperAdmin
+    ? "Super Admin Panel"
+    : isReseller
+    ? "Reseller Panel"
+    : "User Panel";
 
   return (
     <div className="flex min-h-screen bg-gray-50 text-xs font-sans">
@@ -65,20 +123,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
 
           <div className="flex items-center gap-4">
-            {!agentData && (
+            {!agentData && currentUser && (
               <div className="flex items-center gap-3">
-                <Link
-                  href="/admin"
-                  className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition"
-                >
-                  <span>⚙️</span> Admin
-                </Link>
+                {isSuperAdmin && (
+                  <Link
+                    href="/admin"
+                    className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition"
+                  >
+                    <span>⚙️</span> Admin
+                  </Link>
+                )}
 
-                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs hidden sm:block">
-                  ACTUAL: ₹1,234,567,890.00
-                </div>
-                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs hidden sm:block">
-                  VIRTUAL: ₹1,234,567,890.00
+                {(isSuperAdmin || isReseller) && (
+                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs hidden sm:block font-mono">
+                    ACTUAL: {formatINR(actualBal)}
+                  </div>
+                )}
+
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs hidden sm:block font-mono">
+                  VIRTUAL: {formatINR(virtualBal)}
                 </div>
               </div>
             )}
@@ -101,16 +164,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   />
                 ) : (
                   <div className="w-9 h-9 bg-slate-900 text-white font-extrabold rounded-full flex items-center justify-center text-xs shadow tracking-wider">
-                    FI
+                    {initials}
                   </div>
                 )}
 
                 <div className="text-right hidden sm:block">
                   <div className="font-bold text-gray-800 text-xs">
-                    {agentData ? agentData.name : "Fortius Infocom"}
+                    {agentData ? agentData.name : displayName}
                   </div>
-                  <div className="text-[10px] text-gray-400 capitalize">
-                    {agentData ? "Live Agent" : "Admin Panel"}
+                  <div className="text-[10px] text-gray-400">
+                    {agentData ? "Live Agent" : panelLabel}
                   </div>
                 </div>
               </div>
@@ -148,9 +211,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </header>
 
-        <main className="flex-1 p-6 overflow-y-auto">
-          {children}
-        </main>
+        <main className="flex-1 p-6 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

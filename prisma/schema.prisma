@@ -26,6 +26,7 @@ model User {
   utilityRate    Float   @default(0.1550)
   serviceRate    Float   @default(0.1550)
   authRate       Float   @default(0.1550)
+  transactions Transaction[]
 
   // WhatsApp Account Settings Toggles
   whatsappApiEnabled   Boolean @default(true)

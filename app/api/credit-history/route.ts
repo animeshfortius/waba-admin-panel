@@ -50,17 +50,21 @@ async function getLoggedInUser() {
 
 export async function GET() {
   try {
-    const user = await getLoggedInUser();
-    if (!user) {
+    const actor = await getLoggedInUser();
+    if (!actor) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
       );
     }
 
-    const role = String(user.role || "USER").toUpperCase();
-    const baseWallet = Number(user.walletBalance ?? user.actualBalance ?? 0);
-    const virtualBal = Number(user.virtualBalance ?? 0);
+    const role = String(actor.role || "USER").toUpperCase();
+    const isSuperAdmin = role === "SUPER_ADMIN";
+    const isReseller =
+      role === "RESELLER" || role === "WHITE_LABEL_RESELLER";
+
+    const baseWallet = Number(actor.walletBalance ?? actor.actualBalance ?? 0);
+    const virtualBal = Number(actor.virtualBalance ?? 0);
     const effectiveWalletBalance =
       role === "USER"
         ? Number((baseWallet + virtualBal).toFixed(2))
@@ -68,33 +72,80 @@ export async function GET() {
 
     let transactions: any[] = [];
 
-    if (user.id !== "emergency-admin-id") {
-      try {
+    try {
+      if (isSuperAdmin) {
+        // Super Admin sees wallet recharge / credit history of all added users
         transactions = await (prisma as any).transaction.findMany({
-          where: { userId: user.id },
+          orderBy: { createdAt: "desc" },
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                name: true,
+                email: true,
+                role: true,
+              },
+            },
+          },
+        });
+      } else if (isReseller) {
+        // Reseller sees own history + history of users created under them
+        const childUsers = await prisma.user.findMany({
+          where: { createdById: actor.id },
+          select: { id: true },
+        });
+        const scopedIds = [actor.id, ...childUsers.map((u) => u.id)];
+
+        transactions = await (prisma as any).transaction.findMany({
+          where: { userId: { in: scopedIds } },
+          orderBy: { createdAt: "desc" },
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                name: true,
+                email: true,
+                role: true,
+              },
+            },
+          },
+        });
+      } else {
+        // Normal USER sees strictly their own credit history
+        transactions = await (prisma as any).transaction.findMany({
+          where: { userId: actor.id },
           orderBy: { createdAt: "desc" },
         });
-      } catch {
-        transactions = [];
       }
+    } catch {
+      transactions = [];
     }
 
     const formattedTransactions = transactions.map((tx: any) => ({
       id: tx.id,
-      userName: user.name || user.username,
+      userId: tx.userId,
+      userName:
+        tx.user?.name ||
+        tx.user?.username ||
+        actor.name ||
+        actor.username ||
+        "User",
+      userRole: tx.user?.role || role,
       fromUser: tx.fromUser || tx.source || "Super Admin",
       amount: Number(tx.amount ?? 0),
       type: tx.type || "CREDIT",
       createdAt: tx.createdAt,
-      description: tx.description || tx.remarks || "Credit entry",
+      description: tx.description || tx.remarks || "Wallet recharge entry",
     }));
 
     return NextResponse.json({
       success: true,
       account: {
-        id: user.id,
-        username: user.username,
-        name: user.name || user.username,
+        id: actor.id,
+        username: actor.username,
+        name: actor.name || actor.username,
         role,
         walletBalance: effectiveWalletBalance,
         virtualBalance: role === "USER" ? 0 : virtualBal,

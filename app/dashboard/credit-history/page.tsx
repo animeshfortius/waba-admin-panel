@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 
 interface CreditItem {
   id: string;
+  userId?: string;
   userName: string;
+  userRole?: string;
   fromUser: string;
   amount: number;
   type: string;
@@ -26,6 +28,7 @@ export default function CreditHistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [transactions, setTransactions] = useState<CreditItem[]>([]);
+  const [filterQuery, setFilterQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +68,23 @@ export default function CreditHistoryPage() {
     };
   }, []);
 
-  const isNormalUser = String(account?.role || "USER").toUpperCase() === "USER";
+  const role = String(account?.role || "USER").toUpperCase();
+  const isNormalUser = role === "USER";
+  const isAdminOrReseller =
+    role === "SUPER_ADMIN" ||
+    role === "RESELLER" ||
+    role === "WHITE_LABEL_RESELLER";
+
+  const filteredTransactions = transactions.filter((tx) => {
+    const q = filterQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      tx.userName?.toLowerCase().includes(q) ||
+      tx.fromUser?.toLowerCase().includes(q) ||
+      tx.type?.toLowerCase().includes(q) ||
+      tx.description?.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto text-xs font-sans">
@@ -75,14 +94,19 @@ export default function CreditHistoryPage() {
             Dashboard › Credit History
           </div>
           <h1 className="text-xl font-bold text-slate-900 mt-0.5">
-            Credit History {account ? `(${account.name || account.username})` : ""}
+            {role === "SUPER_ADMIN"
+              ? "All Users Wallet Recharge & Credit History"
+              : isAdminOrReseller
+              ? "Team & Account Credit History"
+              : `Credit History (${account?.name || account?.username || "User"})`}
           </h1>
         </div>
 
         {account && (
           <div className="flex flex-wrap gap-3 font-bold">
             <span className="bg-purple-50 text-purple-800 px-3.5 py-2 rounded-xl border border-purple-200">
-              Wallet Balance: ₹{Number(account.walletBalance || 0).toFixed(2)}
+              {role === "SUPER_ADMIN" ? "Actual Balance" : "Wallet Balance"}: ₹
+              {Number(account.walletBalance || 0).toFixed(2)}
             </span>
             {!isNormalUser && (
               <span className="bg-slate-100 text-slate-800 px-3.5 py-2 rounded-xl border border-slate-200">
@@ -94,13 +118,29 @@ export default function CreditHistoryPage() {
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h2 className="font-bold text-slate-800 text-sm">
-            Account Credit Entries ({transactions.length})
-          </h2>
-          <span className="text-[11px] text-slate-400">
-            Showing entries for your logged-in account only
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <h2 className="font-bold text-slate-800 text-sm">
+              Wallet Recharge Entries ({filteredTransactions.length})
+            </h2>
+            <span className="text-[11px] text-slate-400">
+              {role === "SUPER_ADMIN"
+                ? "Showing all added users' wallet recharge and credit entries"
+                : isAdminOrReseller
+                ? "Showing your account and your created users' credit entries"
+                : "Showing entries for your logged-in account only"}
+            </span>
+          </div>
+
+          {isAdminOrReseller && (
+            <input
+              type="text"
+              placeholder="Filter by username, type or remarks..."
+              value={filterQuery}
+              onChange={(e) => setFilterQuery(e.target.value)}
+              className="border border-slate-300 rounded-xl px-3.5 py-2 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 w-64"
+            />
+          )}
         </div>
 
         {loading ? (
@@ -109,9 +149,9 @@ export default function CreditHistoryPage() {
           </div>
         ) : error ? (
           <div className="p-8 text-center text-rose-600 font-semibold">{error}</div>
-        ) : transactions.length === 0 ? (
+        ) : filteredTransactions.length === 0 ? (
           <div className="p-10 text-center text-slate-400">
-            No credit history entries found for this account yet.
+            No credit history entries found.
           </div>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-slate-200/80">
@@ -127,7 +167,7 @@ export default function CreditHistoryPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {transactions.map((tx) => (
+                {filteredTransactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-slate-50 text-slate-700 font-medium">
                     <td className="p-3 font-bold text-slate-800">{tx.userName}</td>
                     <td className="p-3">{tx.fromUser}</td>

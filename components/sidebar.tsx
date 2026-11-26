@@ -10,11 +10,20 @@ interface SidebarBranding {
   primaryColor?: string;
 }
 
+interface WhiteLabelConfigInfo {
+  isActive?: boolean;
+  brandName?: string | null;
+  domain?: string | null;
+  customDomain?: string | null;
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const [isAgentMode, setIsAgentMode] = useState(false);
   const [agentData, setAgentData] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>("");
+  const [whiteLabelConfig, setWhiteLabelConfig] =
+    useState<WhiteLabelConfigInfo | null>(null);
   const [branding, setBranding] = useState<SidebarBranding>({
     brandName: "Fortius Infocom",
     logoUrl: null,
@@ -60,17 +69,25 @@ export default function Sidebar() {
     fetch("/api/auth/me")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.user?.role) {
-          setUserRole(String(data.user.role).toUpperCase());
+        if (data?.user) {
+          setUserRole(String(data.user.role || "USER").toUpperCase());
+          setWhiteLabelConfig(data.user.whiteLabelConfig || null);
         }
       })
       .catch(() => {});
   }, [pathname]);
 
-  const canAccessAdmin =
-    userRole === "SUPER_ADMIN" ||
-    userRole === "WHITE_LABEL_RESELLER" ||
-    userRole === "RESELLER";
+  const isSuperAdmin = userRole === "SUPER_ADMIN";
+  const isReseller =
+    userRole === "WHITE_LABEL_RESELLER" || userRole === "RESELLER";
+
+  const hasResellerBranding = Boolean(
+    whiteLabelConfig?.isActive &&
+      (String(whiteLabelConfig?.brandName || "").trim() ||
+        String(
+          whiteLabelConfig?.domain || whiteLabelConfig?.customDomain || ""
+        ).trim())
+  );
 
   const headerTitle = isAgentMode
     ? "Agent Portal"
@@ -150,9 +167,9 @@ export default function Sidebar() {
               </button>
             </>
           ) : (
-            /* ADMIN / CLIENT VIEW: Full Menus */
+            /* ROLE-BASED VIEW: SUPER_ADMIN / RESELLER / USER */
             <>
-              {canAccessAdmin && (
+              {isSuperAdmin && (
                 <Link
                   href="/admin"
                   className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
@@ -164,6 +181,65 @@ export default function Sidebar() {
                   <span>🛡️</span>
                   <span>Admin Panel</span>
                 </Link>
+              )}
+
+              {isReseller && (
+                <div className="pb-2 mb-2 border-b border-slate-800 space-y-1">
+                  <div className="px-4 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Reseller Controls
+                  </div>
+
+                  <Link
+                    href="/admin/branding"
+                    className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+                      pathname.startsWith("/admin/branding")
+                        ? "bg-amber-600 text-white font-bold"
+                        : "hover:bg-slate-800 text-amber-300"
+                    }`}
+                  >
+                    <span>🎨</span>
+                    <span>Site Branding</span>
+                  </Link>
+
+                  {hasResellerBranding ? (
+                    <Link
+                      href="/admin/user-management"
+                      className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+                        pathname.startsWith("/admin/user-management")
+                          ? "bg-indigo-600 text-white font-bold"
+                          : "hover:bg-slate-800 text-indigo-300"
+                      }`}
+                    >
+                      <span>👥</span>
+                      <span>Manage Users</span>
+                    </Link>
+                  ) : (
+                    <div
+                      title="Activate Site Branding first to create users"
+                      className="flex items-center justify-between px-4 py-2.5 rounded-lg text-slate-500 bg-slate-800/40 cursor-not-allowed select-none"
+                    >
+                      <span className="flex items-center space-x-3">
+                        <span>🔒</span>
+                        <span>Manage Users</span>
+                      </span>
+                      <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-amber-400">
+                        Branding Req.
+                      </span>
+                    </div>
+                  )}
+
+                  <Link
+                    href="/admin/transfer"
+                    className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+                      pathname.startsWith("/admin/transfer")
+                        ? "bg-emerald-600 text-white font-bold"
+                        : "hover:bg-slate-800 text-emerald-300"
+                    }`}
+                  >
+                    <span>💸</span>
+                    <span>Transfer Funds</span>
+                  </Link>
+                </div>
               )}
 
               <Link

@@ -12,13 +12,25 @@ export async function GET() {
       cookieStore.get("token")?.value || cookieStore.get("auth_token")?.value;
 
     if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, user: null, error: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
     const decoded: any = jwt.verify(token, JWT_SECRET);
+    const targetUserId = decoded.userId || decoded.id;
 
-    if (decoded.userId === "emergency-admin-id") {
+    if (!targetUserId) {
+      return NextResponse.json(
+        { success: false, user: null, error: "Invalid token payload" },
+        { status: 401 }
+      );
+    }
+
+    if (targetUserId === "emergency-admin-id") {
       return NextResponse.json({
+        success: true,
         user: {
           id: "emergency-admin-id",
           username: "admin",
@@ -26,15 +38,16 @@ export async function GET() {
           email: "admin@admin.com",
           role: "SUPER_ADMIN",
           isWhiteLabel: false,
-          walletBalance: 1234567890,
-          actualBalance: 1234567890,
-          virtualBalance: 1234567890,
+          walletBalance: 0,
+          actualBalance: 0,
+          virtualBalance: 0,
+          whiteLabelConfig: null,
         },
       });
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId || decoded.id },
+      where: { id: targetUserId },
       select: {
         id: true,
         username: true,
@@ -54,13 +67,25 @@ export async function GET() {
     });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, user: null, error: "User not found" },
+        { status: 404 }
+      );
     }
 
-    return NextResponse.json({ user });
+    return NextResponse.json({
+      success: true,
+      user: {
+        ...user,
+        role: String(user.role || "USER").toUpperCase(),
+        walletBalance: Number(user.walletBalance ?? 0),
+        actualBalance: Number(user.actualBalance ?? 0),
+        virtualBalance: Number(user.virtualBalance ?? 0),
+      },
+    });
   } catch (error) {
     return NextResponse.json(
-      { error: "Invalid token or session expired" },
+      { success: false, user: null, error: "Invalid token or session expired" },
       { status: 401 }
     );
   }

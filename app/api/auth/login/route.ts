@@ -32,6 +32,9 @@ export async function POST(req: Request) {
         email: "admin@admin.com",
         role: "SUPER_ADMIN",
         isWhiteLabel: false,
+        actualBalance: 0,
+        virtualBalance: 0,
+        walletBalance: 0,
       };
     } else {
       const user = await prisma.user.findFirst({
@@ -70,7 +73,7 @@ export async function POST(req: Request) {
       }
 
       authUser = user;
-      assignedRole = user.role || "USER";
+      assignedRole = String(user.role || "USER").toUpperCase();
     }
 
     const hostHeader = req.headers.get("host");
@@ -99,24 +102,30 @@ export async function POST(req: Request) {
         role: assignedRole,
         isWhiteLabel,
         whiteLabelConfig: authUser.whiteLabelConfig || null,
+        actualBalance: Number(authUser.actualBalance ?? 0),
+        virtualBalance: Number(authUser.virtualBalance ?? 0),
+        walletBalance: Number(authUser.walletBalance ?? 0),
       },
       branding,
     });
 
     response.cookies.set("token", token, {
       httpOnly: true,
+      sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
     });
 
     response.cookies.set("userId", authUser.id, {
       httpOnly: true,
+      sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
     });
 
     response.cookies.set("userRole", assignedRole, {
       httpOnly: false,
+      sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
     });

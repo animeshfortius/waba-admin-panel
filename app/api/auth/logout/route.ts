@@ -3,19 +3,31 @@ import { cookies } from "next/headers";
 
 export async function POST() {
   try {
-    // Next.js ke latest versions ke liye 'await cookies()' use karna zaroori hai
     const cookieStore = await cookies();
-    
-    // Cookie delete karein
-    cookieStore.delete("token"); 
 
-    return NextResponse.json(
-      { message: "Logged out successfully" },
+    const cookieNames = ["token", "auth_token", "userId", "userRole"];
+    for (const name of cookieNames) {
+      cookieStore.delete(name);
+    }
+
+    const response = NextResponse.json(
+      { success: true, message: "Logged out successfully" },
       { status: 200 }
     );
+
+    for (const name of cookieNames) {
+      response.cookies.set(name, "", {
+        httpOnly: name !== "userRole",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 0,
+      });
+    }
+
+    return response;
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message },
+      { success: false, error: error.message },
       { status: 500 }
     );
   }

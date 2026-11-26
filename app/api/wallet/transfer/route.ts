@@ -1,17 +1,37 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
+import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
 function isResellerRole(role?: string | null): boolean {
   const r = String(role || "").toUpperCase();
   return r === "RESELLER" || r === "WHITE_LABEL_RESELLER";
 }
 
+async function resolveLoggedInUserId(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const jwtToken =
+    cookieStore.get("token")?.value || cookieStore.get("auth_token")?.value;
+
+  if (jwtToken) {
+    try {
+      const decoded: any = jwt.verify(jwtToken, JWT_SECRET);
+      const idFromToken = decoded?.userId || decoded?.id;
+      if (idFromToken) return String(idFromToken);
+    } catch {
+      return null;
+    }
+  }
+
+  return cookieStore.get("userId")?.value || null;
+}
+
 export async function POST(req: Request) {
   try {
-    const cookieStore = await cookies();
-    const loggedInUserId = cookieStore.get("userId")?.value;
+    const loggedInUserId = await resolveLoggedInUserId();
 
     if (!loggedInUserId) {
       return NextResponse.json(
@@ -45,7 +65,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Fetch Sender
+    // 1. Fetch Sender (with whiteLabelConfig for reseller check)
     let sender: any = null;
     const isEmergencyAdmin =
       loggedInUserId === "emergency-admin-id" ||
@@ -58,9 +78,13 @@ export async function POST(req: Request) {
         password: "",
         virtualBalance: 999999999,
         actualBalance: 999999999,
+        whiteLabelConfig: null,
       };
     } else {
-      sender = await prisma.user.findUnique({ where: { id: loggedInUserId } });
+      sender = await prisma.user.findUnique({
+        where: { id: loggedInUserId },
+        include: { whiteLabelConfig: true },
+      });
     }
 
     if (!sender) {
@@ -75,7 +99,10 @@ export async function POST(req: Request) {
     let passwordValid = false;
 
     if (isEmergencyAdmin) {
-      passwordValid = trimmedPass.length > 0;
+      const expectedEmergencyPass = process.env.ADMIN_EMERGENCY_PASSWORD;
+      passwordValid = expectedEmergencyPass
+        ? trimmedPass === expectedEmergencyPass
+        : trimmedPass.length > 0;
     } else if (sender.password) {
       const looksHashed =
         sender.password.startsWith("$2a$") ||
@@ -91,17 +118,32 @@ export async function POST(req: Request) {
 
     if (!passwordValid) {
       return NextResponse.json(
-        { success: false, message: "Incorrect account password. Transaction failed!" },
+        {
+          success: false,
+          message: "Incorrect account password. Transaction failed!",
+        },
         { status: 403 }
       );
     }
 
     // 3. Fetch Target User
-    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    const targetUser = await prisma.user.findUnique({
+      where: { id: targetUserId },
+    });
     if (!targetUser) {
       return NextResponse.json(
         { success: false, message: "Target account not found" },
         { status: 404 }
+      );
+    }
+
+    if (targetUser.id === sender.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "You cannot transfer balance to your own account.",
+        },
+        { status: 400 }
       );
     }
 
@@ -121,11 +163,29 @@ export async function POST(req: Request) {
     const senderIsReseller = isResellerRole(sender.role);
 
     if (senderIsReseller) {
+      const wl = sender.whiteLabelConfig;
+      const hasBranding = Boolean(
+        wl?.isActive &&
+          (String(wl?.brandName || "").trim() || String(wl?.domain || "").trim())
+      );
+
+      if (!hasBranding) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Please configure and activate your Site Branding before managing users or balances.",
+          },
+          { status: 403 }
+        );
+      }
+
       if (targetUser.createdById !== sender.id) {
         return NextResponse.json(
           {
             success: false,
-            message: "Unauthorized: You can only manage balance for your assigned users.",
+            message:
+              "Unauthorized: You can only manage balance for your assigned users.",
           },
           { status: 403 }
         );
@@ -149,7 +209,10 @@ export async function POST(req: Request) {
       }
     } else if (sender.role !== "SUPER_ADMIN") {
       return NextResponse.json(
-        { success: false, message: "Regular users are not allowed to manage balance." },
+        {
+          success: false,
+          message: "Regular users are not allowed to manage balance.",
+        },
         { status: 403 }
       );
     }

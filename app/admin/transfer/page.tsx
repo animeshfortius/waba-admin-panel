@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 interface UserOption {
   id: string;
@@ -19,6 +20,7 @@ function isResellerRole(role?: string | null): boolean {
 }
 
 export default function TransferPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<UserOption[]>([]);
   const [targetUserId, setTargetUserId] = useState("");
   const [amount, setAmount] = useState("");
@@ -27,10 +29,31 @@ export default function TransferPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const role = String(data?.user?.role || "USER").toUpperCase();
+        const allowed =
+          role === "SUPER_ADMIN" ||
+          role === "RESELLER" ||
+          role === "WHITE_LABEL_RESELLER";
+        if (!allowed) {
+          router.replace("/");
+          return;
+        }
+        setAuthorized(true);
+      })
+      .catch(() => {
+        router.replace("/");
+      });
+  }, [router]);
 
   const loadUsers = () => {
     fetch("/api/admin/users")
-      .then((res) => res.json())
+      .then((res) => (res.ok ? res.json() : { users: [] }))
       .then((data) => {
         const list = Array.isArray(data?.users) ? data.users : [];
         setUsers(list);
@@ -39,8 +62,10 @@ export default function TransferPage() {
   };
 
   useEffect(() => {
-    loadUsers();
-  }, []);
+    if (authorized) {
+      loadUsers();
+    }
+  }, [authorized]);
 
   const selectedUser = useMemo(
     () => users.find((u) => u.id === targetUserId) || null,
@@ -91,6 +116,14 @@ export default function TransferPage() {
       setLoading(false);
     }
   };
+
+  if (!authorized) {
+    return (
+      <div className="p-6 text-xs text-slate-500">
+        Checking transfer permissions...
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-lg mx-auto bg-white rounded-2xl border border-slate-200/80 shadow-sm mt-8 space-y-4 text-xs">

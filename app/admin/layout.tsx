@@ -4,12 +4,20 @@ import Sidebar from "@/components/sidebar";
 import LogoutButton from "@/components/LogoutButton";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 interface BrandingInfo {
   isWhiteLabel?: boolean;
   brandName?: string;
   logoUrl?: string | null;
   serverIp?: string;
+}
+
+interface WhiteLabelConfigInfo {
+  isActive?: boolean;
+  brandName?: string | null;
+  domain?: string | null;
+  customDomain?: string | null;
 }
 
 interface CurrentUserInfo {
@@ -19,6 +27,7 @@ interface CurrentUserInfo {
   actualBalance?: number;
   virtualBalance?: number;
   walletBalance?: number;
+  whiteLabelConfig?: WhiteLabelConfigInfo | null;
 }
 
 function formatINR(amount?: number): string {
@@ -29,7 +38,9 @@ function formatINR(amount?: number): string {
   })}`;
 }
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function PanelLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [branding, setBranding] = useState<BrandingInfo>({
     isWhiteLabel: false,
@@ -38,6 +49,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     serverIp: "171.50.181.171",
   });
   const [currentUser, setCurrentUser] = useState<CurrentUserInfo | null>(null);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,17 +85,76 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, []);
 
   useEffect(() => {
+    let active = true;
+
     fetch("/api/auth/me")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
+        if (!active) return;
         if (data?.user) {
-          setCurrentUser(data.user);
+          setCurrentUser({
+            ...data.user,
+            role: String(data.user.role || "USER").toUpperCase(),
+          });
         }
       })
       .catch(() => {
         // Ignore if session endpoint not ready
+      })
+      .finally(() => {
+        if (active) setSessionLoaded(true);
       });
+
+    return () => {
+      active = false;
+    };
   }, []);
+
+  const role = String(currentUser?.role || "USER").toUpperCase();
+  const isSuperAdmin = role === "SUPER_ADMIN";
+  const isReseller = role === "RESELLER" || role === "WHITE_LABEL_RESELLER";
+  const canViewActualBalance = isSuperAdmin || isReseller;
+
+  const wl = currentUser?.whiteLabelConfig;
+  const hasResellerBranding = Boolean(
+    wl?.isActive &&
+      (String(wl?.brandName || "").trim() ||
+        String(wl?.domain || wl?.customDomain || "").trim())
+  );
+  const canManageUsers = isSuperAdmin || (isReseller && hasResellerBranding);
+
+  useEffect(() => {
+    if (!sessionLoaded) return;
+
+    if (pathname?.startsWith("/admin")) {
+      // Normal USER ko kisi bhi /admin route par nahi jaane dena
+      if (!isSuperAdmin && !isReseller) {
+        router.replace("/");
+        return;
+      }
+
+      // Reseller ko sirf reseller tools par allow karein
+      if (isReseller) {
+        const resellerAllowed = [
+          "/admin/transfer",
+          "/admin/user-management",
+          "/admin/branding",
+          "/admin/white-label",
+        ];
+        const isAllowedPath = resellerAllowed.some((p) => pathname.startsWith(p));
+        if (!isAllowedPath) {
+          router.replace("/");
+          return;
+        }
+
+        // Bina site branding ke user-management par jaane par branding page par bhejein
+        if (pathname.startsWith("/admin/user-management") && !hasResellerBranding) {
+          router.replace("/admin/branding");
+          return;
+        }
+      }
+    }
+  }, [sessionLoaded, pathname, isSuperAdmin, isReseller, hasResellerBranding, router]);
 
   const brandTitle = branding.brandName || "Fortius Infocom";
   const initials =
@@ -94,14 +165,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       .map((part) => part[0]?.toUpperCase())
       .join("") || "FI";
 
-  const actualDisplay =
-    currentUser?.actualBalance !== undefined
-      ? formatINR(currentUser.actualBalance)
-      : "₹0.00";
-  const virtualDisplay =
-    currentUser?.virtualBalance !== undefined
-      ? formatINR(currentUser.virtualBalance)
-      : "₹0.00";
+  const actualDisplay = formatINR(currentUser?.actualBalance);
+  const virtualDisplay = formatINR(currentUser?.virtualBalance);
 
   return (
     <div className="flex min-h-screen bg-slate-50/90 text-xs font-sans text-slate-800">
@@ -123,16 +188,55 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           <div className="flex items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2.5">
-              <Link
-                href="/admin"
-                className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
-              >
-                <span>⚙️</span> Admin
-              </Link>
+              {isSuperAdmin && (
+                <Link
+                  href="/admin"
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
+                >
+                  <span>⚙️</span> Admin
+                </Link>
+              )}
 
-              <div className="bg-emerald-50/90 border border-emerald-200/80 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-[11px] shadow-2xs hidden sm:block">
-                ACTUAL: {actualDisplay}
-              </div>
+              {isReseller && (
+                <>
+                  <Link
+                    href="/admin/branding"
+                    className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
+                  >
+                    <span>🎨</span> Site Branding
+                  </Link>
+
+                  {canManageUsers ? (
+                    <Link
+                      href="/admin/user-management"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
+                    >
+                      <span>👥</span> Manage Users
+                    </Link>
+                  ) : (
+                    <span
+                      title="Configure and activate your Site Branding first to create users"
+                      className="bg-slate-100 text-slate-400 border border-slate-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 cursor-not-allowed select-none"
+                    >
+                      <span>🔒</span> Manage Users
+                    </span>
+                  )}
+
+                  <Link
+                    href="/admin/transfer"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
+                  >
+                    <span>💸</span> Transfer Funds
+                  </Link>
+                </>
+              )}
+
+              {canViewActualBalance && (
+                <div className="bg-emerald-50/90 border border-emerald-200/80 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-[11px] shadow-2xs hidden sm:block">
+                  ACTUAL: {actualDisplay}
+                </div>
+              )}
+
               <div className="bg-sky-50/90 border border-sky-200/80 text-sky-800 px-3 py-1.5 rounded-xl font-bold text-[11px] shadow-2xs hidden sm:block">
                 VIRTUAL: {virtualDisplay}
               </div>
@@ -160,7 +264,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     {currentUser?.name || currentUser?.username || brandTitle}
                   </div>
                   <div className="text-[10px] text-slate-400 capitalize">
-                    {currentUser?.role ? currentUser.role.replace(/_/g, " ").toLowerCase() : "Admin Panel"}
+                    {role.replace(/_/g, " ").toLowerCase()}
                   </div>
                 </div>
               </div>

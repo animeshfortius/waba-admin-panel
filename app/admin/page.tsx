@@ -103,7 +103,8 @@ export default function AdminDashboardPage() {
           if (eligible.length > 0) {
             const target =
               eligible.find(
-                (item: ResellerUser) => item.id === (preferredId || selectedResellerId)
+                (item: ResellerUser) =>
+                  item.id === (preferredId || selectedResellerId)
               ) || eligible[0];
             setSelectedResellerId(target.id);
             populateFromUser(target);
@@ -244,8 +245,10 @@ export default function AdminDashboardPage() {
           </div>
           <h1 className="text-xl font-bold text-slate-900 mt-0.5">
             {activeSection === "hub" && "Administrator Control Center"}
-            {activeSection === "site_branding" && "Site Branding & White-Label Setup"}
-            {activeSection === "system_traffic" && "System Traffic & Monitoring"}
+            {activeSection === "site_branding" &&
+              "Site Branding & White-Label Setup"}
+            {activeSection === "system_traffic" &&
+              "System Traffic & Monitoring"}
           </h1>
         </div>
 
@@ -289,8 +292,12 @@ export default function AdminDashboardPage() {
                       {card.badge}
                     </span>
                   </div>
-                  <h3 className="font-bold text-slate-900 text-sm">{card.title}</h3>
-                  <p className="text-[11px] text-slate-500 leading-relaxed">{card.desc}</p>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    {card.title}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    {card.desc}
+                  </p>
                 </Link>
               ))}
 
@@ -301,12 +308,16 @@ export default function AdminDashboardPage() {
                   className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-emerald-300 cursor-pointer transition space-y-2.5 group"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-2xl group-hover:scale-110 transition">🎨</span>
+                    <span className="text-2xl group-hover:scale-110 transition">
+                      🎨
+                    </span>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                       White-Label
                     </span>
                   </div>
-                  <h3 className="font-bold text-slate-900 text-sm">Site Branding</h3>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    Site Branding
+                  </h3>
                   <p className="text-[11px] text-slate-500 leading-relaxed">
                     Custom domain, A-record IP, SSL, logo & reseller branding.
                   </p>
@@ -324,8 +335,12 @@ export default function AdminDashboardPage() {
                 onClick={() => setActiveSection("system_traffic")}
                 className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-slate-300 cursor-pointer transition space-y-2 group"
               >
-                <div className="text-2xl group-hover:scale-110 transition">📈</div>
-                <h3 className="font-bold text-slate-900 text-sm">System Traffic</h3>
+                <div className="text-2xl group-hover:scale-110 transition">
+                  📈
+                </div>
+                <h3 className="font-bold text-slate-900 text-sm">
+                  System Traffic
+                </h3>
                 <p className="text-[11px] text-slate-500">
                   Monitor real-time system traffic and delivery health.
                 </p>
@@ -421,19 +436,25 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700">SSL Status</label>
+                  <label className="block font-semibold text-slate-700">
+                    SSL Status
+                  </label>
                   <select
                     value={sslStatusInput}
                     onChange={(e) => setSslStatusInput(e.target.value)}
                     className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:bg-white font-semibold"
                   >
-                    <option value="PENDING">PENDING (DNS / Cert Provisioning)</option>
+                    <option value="PENDING">
+                      PENDING (DNS / Cert Provisioning)
+                    </option>
                     <option value="ACTIVE">ACTIVE (SSL Enabled)</option>
                   </select>
                 </div>
 
                 <div className="flex items-center justify-between border border-slate-200 rounded-xl p-3 bg-slate-50 mt-5 sm:mt-0">
-                  <span className="font-semibold text-slate-700">Domain Active</span>
+                  <span className="font-semibold text-slate-700">
+                    Domain Active
+                  </span>
                   <input
                     type="checkbox"
                     checked={isActiveBranding}
@@ -483,7 +504,9 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700">Support Email ID</label>
+                  <label className="block font-semibold text-slate-700">
+                    Support Email ID
+                  </label>
                   <input
                     type="email"
                     value={supportEmailInput}
@@ -507,7 +530,9 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div className="space-y-1 sm:col-span-2">
-                  <label className="block font-semibold text-slate-700">Brand Logo URL</label>
+                  <label className="block font-semibold text-slate-700">
+                    Brand Logo URL
+                  </label>
                   <input
                     type="text"
                     value={logoUrlInput}
@@ -532,7 +557,9 @@ export default function AdminDashboardPage() {
           {activeBrandingTab === "notification" && (
             <div className="space-y-3 max-w-2xl">
               <div className="flex justify-between items-center border border-slate-200 p-3.5 rounded-xl bg-slate-50">
-                <span className="font-semibold text-slate-700">Notify Customer via Email</span>
+                <span className="font-semibold text-slate-700">
+                  Notify Customer via Email
+                </span>
                 <input
                   type="checkbox"
                   checked={notifyEmail}
@@ -613,7 +640,8 @@ export default function AdminDashboardPage() {
             System Traffic & Real-time Monitoring
           </h3>
           <p className="text-slate-500 max-w-md mx-auto">
-            Live analytics, active reseller traffic, and messaging throughput details are ready for monitoring.
+            Live analytics, active reseller traffic, and messaging throughput
+            details are ready for monitoring.
           </p>
         </div>
       )}

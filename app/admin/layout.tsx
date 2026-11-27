@@ -67,7 +67,10 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
     const host = window.location.hostname;
     if (!host || host === "localhost" || host === "127.0.0.1") return;
 
-    fetch(`/api/admin/branding?domain=${encodeURIComponent(host)}`)
+    fetch(`/api/admin/branding?domain=${encodeURIComponent(host)}`, {
+      cache: "no-store",
+      credentials: "include",
+    })
       .then((res) => res.json())
       .then((data) => {
         if (data?.success && data?.config?.isActive) {
@@ -87,7 +90,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     let active = true;
 
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { cache: "no-store", credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!active) return;
@@ -108,7 +111,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
     return () => {
       active = false;
     };
-  }, []);
+  }, [pathname]);
 
   const role = String(currentUser?.role || "USER").toUpperCase();
   const isSuperAdmin = role === "SUPER_ADMIN";
@@ -136,12 +139,17 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
       // Reseller ko sirf reseller tools par allow karein
       if (isReseller) {
         const resellerAllowed = [
+          "/admin",
           "/admin/transfer",
           "/admin/user-management",
+          "/admin/client-list",
+          "/admin/client-tree",
           "/admin/branding",
           "/admin/white-label",
         ];
-        const isAllowedPath = resellerAllowed.some((p) => pathname.startsWith(p));
+        const isAllowedPath = resellerAllowed.some(
+          (p) => pathname === p || pathname.startsWith(`${p}/`)
+        );
         if (!isAllowedPath) {
           router.replace("/");
           return;

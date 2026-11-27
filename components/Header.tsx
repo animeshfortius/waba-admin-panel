@@ -2,7 +2,8 @@
 
 import LogoutButton from "@/components/LogoutButton";
 import Link from "next/link";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 
 interface AuthUser {
   id: string;
@@ -26,27 +27,85 @@ function formatINR(amount: number) {
 }
 
 export default function Header() {
+  const pathname = usePathname();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [profilePic, setProfilePic] = useState("");
 
-  useEffect(() => {
-    fetch("/api/auth/me", { cache: "no-store", credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.user) {
-          const normalizedRole = String(data.user.role || "USER")
-            .trim()
-            .toUpperCase();
-          setCurrentUser({
-            ...data.user,
-            role: normalizedRole,
-          });
-        }
-      })
-      .catch((err) => console.error("Error fetching header user:", err));
+  const syncSessionAndBalances = useCallback(async () => {
+    try {
+      const meRes = await fetch("/api/auth/me", {
+        cache: "no-store",
+        credentials: "include",
+      });
+      if (!meRes.ok) return;
 
+      const meData = await meRes.json();
+      if (!meData?.success || !meData?.user) return;
+
+      const normalizedRole = String(meData.user.role || "USER")
+        .trim()
+        .toUpperCase();
+      const isSuper = normalizedRole === "SUPER_ADMIN";
+      const isRes =
+        normalizedRole === "RESELLER" ||
+        normalizedRole === "WHITE_LABEL_RESELLER" ||
+        Boolean(meData.user.isWhiteLabel);
+
+      let actualBal = isSuper
+        ? SUPER_ADMIN_FIXED_BALANCE
+        : Number(meData.user.actualBalance ?? 0);
+      let virtualBal = isSuper
+        ? SUPER_ADMIN_FIXED_BALANCE
+        : Number(meData.user.virtualBalance ?? 0);
+      let walletBal = isSuper
+        ? SUPER_ADMIN_FIXED_BALANCE
+        : Number(meData.user.walletBalance ?? virtualBal);
+
+      // Ensure live reseller balances from /api/admin/funds when available
+      if (!isSuper && isRes && meData.user.id) {
+        try {
+          const fundsRes = await fetch(
+            `/api/admin/funds?userId=${encodeURIComponent(String(meData.user.id))}`,
+            { cache: "no-store", credentials: "include" }
+          );
+          if (fundsRes.ok) {
+            const fundsData = await fundsRes.json();
+            if (fundsData?.success) {
+              if (fundsData.actualBalance !== undefined) {
+                actualBal = Number(fundsData.actualBalance);
+              }
+              if (fundsData.virtualBalance !== undefined) {
+                virtualBal = Number(fundsData.virtualBalance);
+              }
+              if (fundsData.walletBalance !== undefined) {
+                walletBal = Number(fundsData.walletBalance);
+              }
+            }
+          }
+        } catch {
+          // Fallback to /api/auth/me values
+        }
+      }
+
+      setCurrentUser({
+        ...meData.user,
+        role: normalizedRole,
+        actualBalance: actualBal,
+        virtualBalance: virtualBal,
+        walletBalance: walletBal,
+      });
+    } catch (err) {
+      console.error("Error fetching header user:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    syncSessionAndBalances();
+  }, [pathname, syncSessionAndBalances]);
+
+  useEffect(() => {
     fetch("/api/client/profile", { cache: "no-store", credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
@@ -73,9 +132,10 @@ export default function Header() {
   const role = String(currentUser?.role || "USER").trim().toUpperCase();
   const isSuperAdmin = role === "SUPER_ADMIN";
   const isReseller =
-    role === "RESELLER" ||
-    role === "WHITE_LABEL_RESELLER" ||
-    Boolean(currentUser?.isWhiteLabel);
+    !isSuperAdmin &&
+    (role === "RESELLER" ||
+      role === "WHITE_LABEL_RESELLER" ||
+      Boolean(currentUser?.isWhiteLabel));
 
   const actualBal = isSuperAdmin
     ? SUPER_ADMIN_FIXED_BALANCE

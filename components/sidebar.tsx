@@ -242,17 +242,31 @@ export default function Sidebar() {
             /* ROLE-BASED VIEW: SUPER_ADMIN / RESELLER / USER */
             <>
               {isSuperAdmin && (
-                <Link
-                  href="/admin"
-                  className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-                    pathname.startsWith("/admin")
-                      ? "bg-indigo-600 text-white font-bold"
-                      : "hover:bg-slate-800 text-indigo-300"
-                  }`}
-                >
-                  <span>🛡️</span>
-                  <span>Admin Panel</span>
-                </Link>
+                <>
+                  <Link
+                    href="/admin"
+                    className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+                      pathname.startsWith("/admin")
+                        ? "bg-indigo-600 text-white font-bold"
+                        : "hover:bg-slate-800 text-indigo-300"
+                    }`}
+                  >
+                    <span>🛡️</span>
+                    <span>Admin Panel</span>
+                  </Link>
+
+                  <Link
+                    href="/dashboard/meta-reports"
+                    className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
+                      pathname === "/dashboard/meta-reports"
+                        ? "bg-cyan-600 text-white font-bold"
+                        : "hover:bg-slate-800 text-cyan-300"
+                    }`}
+                  >
+                    <span>📈</span>
+                    <span>Meta User Reports</span>
+                  </Link>
+                </>
               )}
 
               {isReseller && (

@@ -380,12 +380,18 @@ export default function UserManagementPage() {
     if (refData.success) {
       const nextActual = Number(refData.actualBalance ?? 0);
       const nextVirtual = Number(refData.virtualBalance ?? 0);
-      setWalletBalance(nextActual);
+      const nextWallet = Number(refData.walletBalance ?? nextActual);
+      setWalletBalance(nextWallet);
       setOversellBalance(nextVirtual);
       setTransactions(refData.transactions || []);
       setSelectedUser((prev: any) =>
         prev && prev.id === userId
-          ? { ...prev, actualBalance: nextActual, virtualBalance: nextVirtual }
+          ? {
+              ...prev,
+              actualBalance: nextActual,
+              virtualBalance: nextVirtual,
+              walletBalance: nextWallet,
+            }
           : prev
       );
     }

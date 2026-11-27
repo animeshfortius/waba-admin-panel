@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-const SUPER_ADMIN_FIXED_BALANCE = 123456789;
+import {
+  SUPER_ADMIN_FIXED_BALANCE,
+  isResellerRole,
+  isSuperAdminRole,
+  applyUnifiedResellerBalance,
+} from "@/lib/unifiedBalance";
 
 // 1. User ki Transactions and Balances Fetch Karne ke liye (GET)
 export async function GET(req: Request) {
@@ -37,8 +41,7 @@ export async function GET(req: Request) {
       );
     }
 
-    const isSuperAdmin =
-      String(user.role || "").trim().toUpperCase() === "SUPER_ADMIN";
+    const isSuperAdmin = isSuperAdminRole(user.role);
 
     return NextResponse.json({
       success: true,
@@ -71,7 +74,10 @@ export async function POST(req: Request) {
     const numAmount = parseFloat(amount);
     if (!userId || isNaN(numAmount) || numAmount <= 0) {
       return NextResponse.json(
-        { success: false, message: "Valid userId and positive amount are required" },
+        {
+          success: false,
+          message: "Valid userId and positive amount are required",
+        },
         { status: 400 }
       );
     }
@@ -87,45 +93,82 @@ export async function POST(req: Request) {
       );
     }
 
-    const isTargetSuperAdmin =
-      String(existingUser.role || "").trim().toUpperCase() === "SUPER_ADMIN";
+    const isTargetSuperAdmin = isSuperAdminRole(existingUser.role);
+    const isTargetReseller = isResellerRole(existingUser.role);
     const isActual = creditType === "Actual";
-    const updateBalanceData: any = {};
 
-    // Super Admin balance stays fixed at 123456789 and never mutates
-    if (isTargetSuperAdmin) {
-      updateBalanceData.actualBalance = SUPER_ADMIN_FIXED_BALANCE;
-      updateBalanceData.virtualBalance = SUPER_ADMIN_FIXED_BALANCE;
-      updateBalanceData.walletBalance = SUPER_ADMIN_FIXED_BALANCE;
-    } else if (isActual) {
-      updateBalanceData.actualBalance =
-        Number(existingUser.actualBalance || 0) + numAmount;
-      updateBalanceData.walletBalance =
-        Number(existingUser.walletBalance || 0) + numAmount;
-    } else {
-      updateBalanceData.virtualBalance =
-        Number(existingUser.virtualBalance || 0) + numAmount;
-    }
+    const [updatedUser, newTransaction] = await prisma.$transaction(
+      async (tx) => {
+        let nextUser;
 
-    const [updatedUser, newTransaction] = await prisma.$transaction([
-      prisma.user.update({
-        where: { id: userId },
-        data: updateBalanceData,
-      }),
-      prisma.walletTransaction.create({
-        data: {
-          userId,
-          amount: numAmount,
-          type: isActual ? "Actual Balance" : "Virtual / Oversell",
-          balanceType: isActual ? "ACTUAL" : "VIRTUAL",
-          description: remarks || "Admin Credit Addition",
-        },
-      }),
-    ]);
+        // Super Admin balance stays fixed at 123456789 and never mutates
+        if (isTargetSuperAdmin) {
+          nextUser = await tx.user.update({
+            where: { id: userId },
+            data: {
+              actualBalance: SUPER_ADMIN_FIXED_BALANCE,
+              virtualBalance: SUPER_ADMIN_FIXED_BALANCE,
+              walletBalance: SUPER_ADMIN_FIXED_BALANCE,
+            },
+          });
+        } else if (isTargetReseller) {
+          // Reseller / Sub-Reseller: Actual aur Virtual dono mein same amount add
+          nextUser = await applyUnifiedResellerBalance({
+            tx,
+            userId,
+            amount: numAmount,
+            direction: "CREDIT",
+          });
+        } else {
+          // Regular USER: purana behavior
+          const updateBalanceData: any = {};
+          if (isActual) {
+            updateBalanceData.actualBalance =
+              Number(existingUser.actualBalance || 0) + numAmount;
+            updateBalanceData.walletBalance =
+              Number(existingUser.walletBalance || 0) + numAmount;
+          } else {
+            updateBalanceData.virtualBalance =
+              Number(existingUser.virtualBalance || 0) + numAmount;
+          }
+
+          nextUser = await tx.user.update({
+            where: { id: userId },
+            data: updateBalanceData,
+          });
+        }
+
+        const createdTx = await tx.walletTransaction.create({
+          data: {
+            userId,
+            amount: numAmount,
+            type: isTargetReseller
+              ? "Unified Reseller Recharge (Actual + Virtual)"
+              : isActual
+              ? "Actual Balance"
+              : "Virtual / Oversell",
+            balanceType: isTargetReseller
+              ? "BOTH"
+              : isActual
+              ? "ACTUAL"
+              : "VIRTUAL",
+            description:
+              remarks ||
+              (isTargetReseller
+                ? `Unified ₹${numAmount} credited to both Actual & Virtual balance`
+                : "Admin Credit Addition"),
+          },
+        });
+
+        return [nextUser, createdTx];
+      }
+    );
 
     return NextResponse.json({
       success: true,
-      message: "Fund transferred successfully!",
+      message: isTargetReseller
+        ? `₹${numAmount.toFixed(2)} credited to both Actual & Virtual balance!`
+        : "Fund transferred successfully!",
       user: updatedUser,
       transaction: newTransaction,
     });

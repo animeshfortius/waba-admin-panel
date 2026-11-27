@@ -45,7 +45,7 @@ export default function BalanceTransferModal({
     setLoading(true);
     try {
       const effectiveBalanceType: "VIRTUAL" | "ACTUAL" = targetIsReseller
-        ? balanceType
+        ? "ACTUAL"
         : "VIRTUAL";
 
       const res = await fetch("/api/wallet/transfer", {
@@ -86,8 +86,11 @@ export default function BalanceTransferModal({
               Transfer Funds ({user?.username || user?.name || "User"})
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Role: <span className="font-semibold text-slate-700">{user?.role || "USER"}</span> • Actual: ₹
-              {Number(user?.actualBalance ?? 0).toFixed(2)} • Virtual: ₹
+              Role:{" "}
+              <span className="font-semibold text-slate-700">
+                {user?.role || "USER"}
+              </span>{" "}
+              • Actual: ₹{Number(user?.actualBalance ?? 0).toFixed(2)} • Virtual: ₹
               {Number(user?.virtualBalance ?? 0).toFixed(2)}
             </p>
           </div>
@@ -122,16 +125,9 @@ export default function BalanceTransferModal({
               Balance Wallet
             </label>
             {targetIsReseller ? (
-              <select
-                value={balanceType}
-                onChange={(e) =>
-                  setBalanceType(e.target.value === "ACTUAL" ? "ACTUAL" : "VIRTUAL")
-                }
-                className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-medium"
-              >
-                <option value="ACTUAL">Actual Balance</option>
-                <option value="VIRTUAL">Virtual Balance</option>
-              </select>
+              <div className="w-full border border-emerald-200 bg-emerald-50 text-emerald-800 rounded-xl px-3 py-2 font-semibold">
+                Synced (Actual + Virtual)
+              </div>
             ) : (
               <div className="w-full border border-slate-200 bg-slate-100 text-slate-700 rounded-xl px-3 py-2 font-semibold">
                 Virtual Balance Only (User Account)

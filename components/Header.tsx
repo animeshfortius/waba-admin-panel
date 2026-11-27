@@ -16,6 +16,8 @@ interface AuthUser {
   walletBalance?: number;
 }
 
+const SUPER_ADMIN_FIXED_BALANCE = 123456789;
+
 function formatINR(amount: number) {
   return `₹${Number(amount || 0).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -75,11 +77,15 @@ export default function Header() {
     role === "WHITE_LABEL_RESELLER" ||
     Boolean(currentUser?.isWhiteLabel);
 
-  const actualBal = Number(currentUser?.actualBalance ?? 0);
-  const virtualBal = Number(currentUser?.virtualBalance ?? 0);
-  const walletBal = Number(
-    currentUser?.walletBalance ?? currentUser?.virtualBalance ?? 0
-  );
+  const actualBal = isSuperAdmin
+    ? SUPER_ADMIN_FIXED_BALANCE
+    : Number(currentUser?.actualBalance ?? 0);
+  const virtualBal = isSuperAdmin
+    ? SUPER_ADMIN_FIXED_BALANCE
+    : Number(currentUser?.virtualBalance ?? 0);
+  const walletBal = isSuperAdmin
+    ? SUPER_ADMIN_FIXED_BALANCE
+    : Number(currentUser?.walletBalance ?? currentUser?.virtualBalance ?? 0);
 
   const displayName =
     currentUser?.name || currentUser?.username || "Account";

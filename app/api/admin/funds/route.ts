@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const SUPER_ADMIN_FIXED_BALANCE = 123456789;
+
 // 1. User ki Transactions and Balances Fetch Karne ke liye (GET)
 export async function GET(req: Request) {
   try {
@@ -14,10 +16,11 @@ export async function GET(req: Request) {
       );
     }
 
-    // Database se user aur uske saare WalletTransactions fetch karna
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
+        id: true,
+        role: true,
         actualBalance: true,
         virtualBalance: true,
         walletBalance: true,
@@ -34,11 +37,20 @@ export async function GET(req: Request) {
       );
     }
 
+    const isSuperAdmin =
+      String(user.role || "").trim().toUpperCase() === "SUPER_ADMIN";
+
     return NextResponse.json({
       success: true,
-      actualBalance: user.actualBalance,
-      virtualBalance: user.virtualBalance,
-      walletBalance: user.walletBalance,
+      actualBalance: isSuperAdmin
+        ? SUPER_ADMIN_FIXED_BALANCE
+        : user.actualBalance,
+      virtualBalance: isSuperAdmin
+        ? SUPER_ADMIN_FIXED_BALANCE
+        : user.virtualBalance,
+      walletBalance: isSuperAdmin
+        ? SUPER_ADMIN_FIXED_BALANCE
+        : user.walletBalance,
       transactions: user.transactions,
     });
   } catch (error: any) {
@@ -64,7 +76,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // User check karna
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -76,18 +87,26 @@ export async function POST(req: Request) {
       );
     }
 
-    // Balance update object prepare karna
+    const isTargetSuperAdmin =
+      String(existingUser.role || "").trim().toUpperCase() === "SUPER_ADMIN";
     const isActual = creditType === "Actual";
     const updateBalanceData: any = {};
 
-    if (isActual) {
-      updateBalanceData.actualBalance = existingUser.actualBalance + numAmount;
-      updateBalanceData.walletBalance = existingUser.walletBalance + numAmount;
+    // Super Admin balance stays fixed at 123456789 and never mutates
+    if (isTargetSuperAdmin) {
+      updateBalanceData.actualBalance = SUPER_ADMIN_FIXED_BALANCE;
+      updateBalanceData.virtualBalance = SUPER_ADMIN_FIXED_BALANCE;
+      updateBalanceData.walletBalance = SUPER_ADMIN_FIXED_BALANCE;
+    } else if (isActual) {
+      updateBalanceData.actualBalance =
+        Number(existingUser.actualBalance || 0) + numAmount;
+      updateBalanceData.walletBalance =
+        Number(existingUser.walletBalance || 0) + numAmount;
     } else {
-      updateBalanceData.virtualBalance = existingUser.virtualBalance + numAmount;
+      updateBalanceData.virtualBalance =
+        Number(existingUser.virtualBalance || 0) + numAmount;
     }
 
-    // Atomic transaction: User balance update karo aur WalletTransaction log entry banao
     const [updatedUser, newTransaction] = await prisma.$transaction([
       prisma.user.update({
         where: { id: userId },
@@ -97,7 +116,8 @@ export async function POST(req: Request) {
         data: {
           userId,
           amount: numAmount,
-          type: creditType === "Actual" ? "Actual Balance" : "Virtual / Oversell",
+          type: isActual ? "Actual Balance" : "Virtual / Oversell",
+          balanceType: isActual ? "ACTUAL" : "VIRTUAL",
           description: remarks || "Admin Credit Addition",
         },
       }),

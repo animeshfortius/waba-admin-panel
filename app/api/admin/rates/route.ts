@@ -1,5 +1,61 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import jwt from "jsonwebtoken";
 import { prisma } from "@/lib/prisma";
+
+const JWT_SECRET =
+  process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
+
+type ActorRole =
+  | "SUPER_ADMIN"
+  | "WHITE_LABEL_RESELLER"
+  | "RESELLER"
+  | "USER";
+
+function normalizeRole(rawRole?: string | null): ActorRole {
+  const upper = String(rawRole || "USER").trim().toUpperCase();
+  if (
+    upper === "WHITE_LABEL_RESELLER" ||
+    upper === "WHITE_LABEL" ||
+    upper === "WHITELABEL"
+  ) {
+    return "WHITE_LABEL_RESELLER";
+  }
+  if (upper === "RESELLER") return "RESELLER";
+  if (upper === "SUPER_ADMIN" || upper === "ADMIN") return "SUPER_ADMIN";
+  return "USER";
+}
+
+async function getAuthenticatedActor() {
+  const cookieStore = await cookies();
+  const token =
+    cookieStore.get("token")?.value ||
+    cookieStore.get("waba_token")?.value ||
+    cookieStore.get("auth_token")?.value;
+
+  if (!token) return null;
+
+  try {
+    const decoded: any = jwt.verify(token, JWT_SECRET);
+    const actorId = decoded?.userId || decoded?.id || decoded?.sub;
+    if (!actorId) return null;
+
+    if (actorId === "emergency-admin-id") {
+      return { id: "emergency-admin-id", role: "SUPER_ADMIN" as ActorRole };
+    }
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: actorId },
+      select: { id: true, role: true },
+    });
+
+    if (!dbUser) return null;
+
+    return { id: dbUser.id, role: normalizeRole(dbUser.role) };
+  } catch {
+    return null;
+  }
+}
 
 function parseRateValue(val: unknown, fallback: number): number {
   const num = Number(val);
@@ -12,6 +68,25 @@ function parseRateValue(val: unknown, fallback: number): number {
 // 1. GET: User ke sabhi 4 categories ke rates fetch karna
 export async function GET(req: Request) {
   try {
+    const actor = await getAuthenticatedActor();
+    if (!actor) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const isSuperAdmin = actor.role === "SUPER_ADMIN";
+    const isReseller =
+      actor.role === "RESELLER" || actor.role === "WHITE_LABEL_RESELLER";
+
+    if (!isSuperAdmin && !isReseller) {
+      return NextResponse.json(
+        { success: false, message: "Forbidden" },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
 
@@ -26,6 +101,8 @@ export async function GET(req: Request) {
       where: { id: userId },
       select: {
         id: true,
+        role: true,
+        createdById: true,
         perMsgRate: true,
         utilityRate: true,
         serviceRate: true,
@@ -37,6 +114,17 @@ export async function GET(req: Request) {
       return NextResponse.json(
         { success: false, message: "User not found" },
         { status: 404 }
+      );
+    }
+
+    if (
+      !isSuperAdmin &&
+      (normalizeRole(user.role) === "SUPER_ADMIN" ||
+        user.createdById !== actor.id)
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Forbidden: User outside your account scope" },
+        { status: 403 }
       );
     }
 
@@ -61,6 +149,25 @@ export async function GET(req: Request) {
 // 2. POST: Saare 4 rates ko database me save karna
 export async function POST(req: Request) {
   try {
+    const actor = await getAuthenticatedActor();
+    if (!actor) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const isSuperAdmin = actor.role === "SUPER_ADMIN";
+    const isReseller =
+      actor.role === "RESELLER" || actor.role === "WHITE_LABEL_RESELLER";
+
+    if (!isSuperAdmin && !isReseller) {
+      return NextResponse.json(
+        { success: false, message: "Forbidden" },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const { userId, rates } = body;
 
@@ -73,13 +180,24 @@ export async function POST(req: Request) {
 
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true },
+      select: { id: true, role: true, createdById: true },
     });
 
     if (!existingUser) {
       return NextResponse.json(
         { success: false, message: "User not found" },
         { status: 404 }
+      );
+    }
+
+    if (
+      !isSuperAdmin &&
+      (normalizeRole(existingUser.role) === "SUPER_ADMIN" ||
+        existingUser.createdById !== actor.id)
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Forbidden: User outside your account scope" },
+        { status: 403 }
       );
     }
 

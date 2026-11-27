@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 interface WabaDetail {
   id: string;
@@ -90,6 +90,7 @@ function getStatusBadgeStyle(status: string) {
 }
 
 export default function AdminMetaReportsDashboard() {
+  const [viewerRole, setViewerRole] = useState<string>("SUPER_ADMIN");
   const [reports, setReports] = useState<UserMetaReport[]>([]);
   const [totals, setTotals] = useState({
     totalUsers: 0,
@@ -116,6 +117,22 @@ export default function AdminMetaReportsDashboard() {
   const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
   const [copiedKeyId, setCopiedKeyId] = useState<string>("");
 
+  const normalizedViewerRole = String(viewerRole || "SUPER_ADMIN")
+    .trim()
+    .toUpperCase();
+  const isSuperAdminViewer = normalizedViewerRole === "SUPER_ADMIN";
+
+  useEffect(() => {
+    fetch("/api/auth/me", { cache: "no-store", credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user?.role) {
+          setViewerRole(String(data.user.role).trim().toUpperCase());
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const toggleRevealKey = (userId: string) => {
     setRevealedKeys((prev) => ({ ...prev, [userId]: !prev[userId] }));
   };
@@ -133,59 +150,79 @@ export default function AdminMetaReportsDashboard() {
     }
   };
 
-  const fetchMetaReports = async (
-    isManualSync = false,
-    overrideCustom?: boolean,
-    overrideFrom?: string,
-    overrideTo?: string
-  ) => {
-    try {
-      setError("");
-      if (isManualSync) setSyncing(true);
-      else setLoading(true);
+  const fetchMetaReports = useCallback(
+    async (
+      isManualSync = false,
+      overrideCustom?: boolean,
+      overrideFrom?: string,
+      overrideTo?: string
+    ) => {
+      try {
+        setError("");
+        if (isManualSync) setSyncing(true);
+        else setLoading(true);
 
-      const useCustom =
-        overrideCustom !== undefined ? overrideCustom : isCustomRange;
-      const startVal = overrideFrom !== undefined ? overrideFrom : fromDate;
-      const endVal = overrideTo !== undefined ? overrideTo : toDate;
+        const useCustom =
+          overrideCustom !== undefined ? overrideCustom : isCustomRange;
+        const startVal = overrideFrom !== undefined ? overrideFrom : fromDate;
+        const endVal = overrideTo !== undefined ? overrideTo : toDate;
 
-      const params = new URLSearchParams({
-        days: String(days),
-        userId: selectedUser,
-        live: "true",
-      });
+        const params = new URLSearchParams({
+          days: String(days),
+          userId: selectedUser,
+          live: "true",
+        });
 
-      if (useCustom && startVal && endVal) {
-        params.set("startDate", startVal);
-        params.set("endDate", endVal);
+        if (useCustom && startVal && endVal) {
+          params.set("startDate", startVal);
+          params.set("endDate", endVal);
+        }
+
+        const res = await fetch(`/api/admin/meta-reports?${params.toString()}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          setError(data.error || "Failed to fetch Meta reports");
+        } else {
+          const rawList: UserMetaReport[] = Array.isArray(data.reports)
+            ? data.reports
+            : [];
+          const safeReports = isSuperAdminViewer
+            ? rawList
+            : rawList.filter(
+                (r) => String(r?.role || "").trim().toUpperCase() !== "SUPER_ADMIN"
+              );
+
+          setReports(safeReports);
+          setTotals(data.totals || totals);
+          setLastSyncedAt(
+            new Date().toLocaleTimeString("en-IN", {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            })
+          );
+        }
+      } catch (err: any) {
+        setError(err?.message || "Network error");
+      } finally {
+        setLoading(false);
+        setSyncing(false);
       }
-
-      const res = await fetch(`/api/admin/meta-reports?${params.toString()}`, {
-        cache: "no-store",
-        credentials: "include",
-      });
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        setError(data.error || "Failed to fetch Meta reports");
-      } else {
-        setReports(data.reports || []);
-        setTotals(data.totals || totals);
-        setLastSyncedAt(
-          new Date().toLocaleTimeString("en-IN", {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          })
-        );
-      }
-    } catch (err: any) {
-      setError(err?.message || "Network error");
-    } finally {
-      setLoading(false);
-      setSyncing(false);
-    }
-  };
+    },
+    [
+      days,
+      fromDate,
+      isCustomRange,
+      isSuperAdminViewer,
+      selectedUser,
+      toDate,
+      totals,
+    ]
+  );
 
   useEffect(() => {
     setFromDate(getDateStringWithOffset(7));
@@ -198,7 +235,7 @@ export default function AdminMetaReportsDashboard() {
       fetchMetaReports(false, false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days, selectedUser, isCustomRange]);
+  }, [days, selectedUser, isCustomRange, isSuperAdminViewer]);
 
   const handlePresetClick = (presetDays: number) => {
     setIsCustomRange(false);
@@ -329,6 +366,13 @@ export default function AdminMetaReportsDashboard() {
     ? "Last 24 Hours"
     : `Last ${days} Days`;
 
+  const roleBadgeText =
+    normalizedViewerRole === "WHITE_LABEL_RESELLER"
+      ? "WHITE-LABEL RESELLER • META GRAPH v21.0"
+      : normalizedViewerRole === "RESELLER"
+      ? "RESELLER • META GRAPH v21.0"
+      : "SUPER ADMIN • META GRAPH v21.0";
+
   return (
     <div className="p-6 space-y-6 bg-slate-50/90 min-h-screen">
       {/* Top Executive Header */}
@@ -337,7 +381,7 @@ export default function AdminMetaReportsDashboard() {
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                SUPER ADMIN • META GRAPH v21.0
+                {roleBadgeText}
               </span>
               <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
                 Window: {activeRangeLabel}

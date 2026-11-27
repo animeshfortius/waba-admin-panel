@@ -1,13 +1,34 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
+import { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const JWT_SECRET =
   process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
 const GRAPH_VERSION = "v21.0";
 
-async function verifySuperAdmin() {
+type ActorRole =
+  | "SUPER_ADMIN"
+  | "WHITE_LABEL_RESELLER"
+  | "RESELLER"
+  | "USER";
+
+function normalizeRole(rawRole?: string | null): ActorRole {
+  const upper = String(rawRole || "USER").trim().toUpperCase();
+  if (
+    upper === "WHITE_LABEL_RESELLER" ||
+    upper === "WHITE_LABEL" ||
+    upper === "WHITELABEL"
+  ) {
+    return "WHITE_LABEL_RESELLER";
+  }
+  if (upper === "RESELLER") return "RESELLER";
+  if (upper === "SUPER_ADMIN" || upper === "ADMIN") return "SUPER_ADMIN";
+  return "USER";
+}
+
+async function verifyReportActor() {
   const cookieStore = await cookies();
   const token =
     cookieStore.get("token")?.value ||
@@ -22,7 +43,7 @@ async function verifySuperAdmin() {
     if (!userId) return null;
 
     if (userId === "emergency-admin-id") {
-      return { id: "emergency-admin-id", role: "SUPER_ADMIN" };
+      return { id: "emergency-admin-id", role: "SUPER_ADMIN" as ActorRole };
     }
 
     const user = await prisma.user.findUnique({
@@ -30,11 +51,14 @@ async function verifySuperAdmin() {
       select: { id: true, role: true },
     });
 
-    if (!user || String(user.role).toUpperCase() !== "SUPER_ADMIN") {
+    if (!user) return null;
+
+    const role = normalizeRole(user.role);
+    if (!["SUPER_ADMIN", "WHITE_LABEL_RESELLER", "RESELLER"].includes(role)) {
       return null;
     }
 
-    return user;
+    return { id: user.id, role };
   } catch {
     return null;
   }
@@ -42,14 +66,15 @@ async function verifySuperAdmin() {
 
 export async function GET(req: Request) {
   try {
-    const admin = await verifySuperAdmin();
-    if (!admin) {
+    const actor = await verifyReportActor();
+    if (!actor) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized: Super Admin access only" },
+        { success: false, error: "Unauthorized: Admin or Reseller access only" },
         { status: 401 }
       );
     }
 
+    const isSuperAdmin = actor.role === "SUPER_ADMIN";
     const { searchParams } = new URL(req.url);
     const days = Number(searchParams.get("days") || 7);
     const selectedUserId = searchParams.get("userId") || "ALL";
@@ -72,18 +97,50 @@ export async function GET(req: Request) {
     const unixStart = Math.floor(sinceDate.getTime() / 1000);
     const unixEnd = Math.floor(untilDate.getTime() / 1000);
 
+    const allowedScopeWhere: Prisma.UserWhereInput = isSuperAdmin
+      ? { role: { not: Role.SUPER_ADMIN } }
+      : {
+          AND: [
+            { role: { not: Role.SUPER_ADMIN } },
+            {
+              OR: [{ id: actor.id }, { createdById: actor.id }],
+            },
+          ],
+        };
+
+    if (selectedUserId !== "ALL" && !isSuperAdmin) {
+      const targetAllowed = await prisma.user.findFirst({
+        where: {
+          AND: [{ id: selectedUserId }, allowedScopeWhere],
+        },
+        select: { id: true },
+      });
+      if (!targetAllowed) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden: User outside your account scope" },
+          { status: 403 }
+        );
+      }
+    }
+
     const rawUsers = await prisma.user.findMany({
       where:
         selectedUserId !== "ALL"
-          ? { id: selectedUserId }
-          : { role: { not: "SUPER_ADMIN" } },
+          ? {
+              AND: [{ id: selectedUserId }, allowedScopeWhere],
+            }
+          : allowedScopeWhere,
       include: {
         wabaAccounts: true,
       },
       orderBy: { createdAt: "desc" },
     });
 
-    const users = rawUsers.map((u: any) => ({
+    const scopedUsers = rawUsers.filter(
+      (u: any) => String(u?.role || "").trim().toUpperCase() !== "SUPER_ADMIN"
+    );
+
+    const users = scopedUsers.map((u: any) => ({
       id: u.id,
       name: u.name,
       username: u.username,
@@ -102,18 +159,23 @@ export async function GET(req: Request) {
       wabaAccounts: u.wabaAccounts || [],
     }));
 
-    const logs = await prisma.campaignLog.findMany({
-      where: {
-        createdAt: { gte: sinceDate, lte: untilDate },
-        ...(selectedUserId !== "ALL" ? { userId: selectedUserId } : {}),
-      },
-      select: {
-        userId: true,
-        channel: true,
-        status: true,
-        cost: true,
-      },
-    });
+    const scopedUserIds = users.map((u) => u.id);
+
+    const logs =
+      scopedUserIds.length > 0
+        ? await prisma.campaignLog.findMany({
+            where: {
+              createdAt: { gte: sinceDate, lte: untilDate },
+              userId: { in: scopedUserIds },
+            },
+            select: {
+              userId: true,
+              channel: true,
+              status: true,
+              cost: true,
+            },
+          })
+        : [];
 
     const userReports = await Promise.all(
       users.map(async (u) => {

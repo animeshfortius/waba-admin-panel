@@ -9,6 +9,7 @@ interface ResellerUser {
   username?: string | null;
   email: string;
   role: string;
+  createdById?: string | null;
   isWhiteLabel?: boolean;
   whiteLabelConfig?: {
     domain?: string;
@@ -24,6 +25,7 @@ interface ResellerUser {
 }
 
 export default function AdminDashboardPage() {
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [activeSection, setActiveSection] = useState<string>("hub");
   const [activeBrandingTab, setActiveBrandingTab] = useState<string>("domain");
 
@@ -50,6 +52,11 @@ export default function AdminDashboardPage() {
   const [smtpUser, setSmtpUser] = useState("");
   const [smtpPass, setSmtpPass] = useState("");
 
+  const roleUpper = String(currentUser?.role || "").trim().toUpperCase();
+  const isSuperAdmin = roleUpper === "SUPER_ADMIN";
+  const isWhiteLabelReseller = roleUpper === "WHITE_LABEL_RESELLER";
+  const canAccessSiteBranding = isSuperAdmin || isWhiteLabelReseller;
+
   const populateFromUser = useCallback((u: ResellerUser) => {
     const cfg = u.whiteLabelConfig;
     setDomainInput(cfg?.domain || "");
@@ -63,32 +70,71 @@ export default function AdminDashboardPage() {
     setIsActiveBranding(cfg?.isActive ?? true);
   }, []);
 
-  const loadResellers = useCallback(async (preferredId?: string) => {
-    try {
-      const res = await fetch("/api/admin/users");
-      const data = await res.json();
-      if (data?.success && Array.isArray(data.users)) {
-        const eligible = data.users.filter((u: ResellerUser) =>
-          ["SUPER_ADMIN", "WHITE_LABEL_RESELLER", "RESELLER"].includes(String(u.role))
-        );
-        setResellers(eligible);
-
-        if (eligible.length > 0) {
-          const target =
-            eligible.find((item: ResellerUser) => item.id === (preferredId || selectedResellerId)) ||
-            eligible[0];
-          setSelectedResellerId(target.id);
-          populateFromUser(target);
+  useEffect(() => {
+    fetch("/api/auth/me", { cache: "no-store", credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user) {
+          setCurrentUser(data.user);
         }
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadResellers = useCallback(
+    async (preferredId?: string) => {
+      try {
+        const res = await fetch("/api/admin/users", {
+          cache: "no-store",
+          credentials: "include",
+        });
+        const data = await res.json();
+        if (data?.success && Array.isArray(data.users)) {
+          const eligible = data.users.filter((u: ResellerUser) => {
+            const uRole = String(u.role || "").toUpperCase();
+            if (uRole === "SUPER_ADMIN") return false;
+            if (isWhiteLabelReseller && currentUser?.id) {
+              return u.id === currentUser.id || u.createdById === currentUser.id;
+            }
+            return ["WHITE_LABEL_RESELLER", "RESELLER"].includes(uRole);
+          });
+          setResellers(eligible);
+
+          if (eligible.length > 0) {
+            const target =
+              eligible.find(
+                (item: ResellerUser) => item.id === (preferredId || selectedResellerId)
+              ) || eligible[0];
+            setSelectedResellerId(target.id);
+            populateFromUser(target);
+          } else if (isWhiteLabelReseller && currentUser) {
+            setSelectedResellerId(currentUser.id);
+            populateFromUser(currentUser);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading resellers:", err);
       }
-    } catch (err) {
-      console.error("Error loading resellers:", err);
-    }
-  }, [populateFromUser, selectedResellerId]);
+    },
+    [
+      currentUser,
+      isWhiteLabelReseller,
+      populateFromUser,
+      selectedResellerId,
+    ]
+  );
 
   useEffect(() => {
-    loadResellers();
-  }, [loadResellers]);
+    if (currentUser) {
+      loadResellers();
+    }
+  }, [currentUser, loadResellers]);
+
+  useEffect(() => {
+    if (activeSection === "site_branding" && !canAccessSiteBranding) {
+      setActiveSection("hub");
+    }
+  }, [activeSection, canAccessSiteBranding]);
 
   const handleResellerChange = async (userId: string) => {
     setSelectedResellerId(userId);
@@ -98,7 +144,10 @@ export default function AdminDashboardPage() {
     }
 
     try {
-      const res = await fetch(`/api/admin/branding?userId=${encodeURIComponent(userId)}`);
+      const res = await fetch(
+        `/api/admin/branding?userId=${encodeURIComponent(userId)}`,
+        { cache: "no-store", credentials: "include" }
+      );
       const data = await res.json();
       if (data?.success && data?.config) {
         const cfg = data.config;
@@ -118,6 +167,7 @@ export default function AdminDashboardPage() {
   };
 
   const handleSaveWhiteLabelBranding = async () => {
+    if (!canAccessSiteBranding) return;
     if (!domainInput.trim()) {
       alert("Please enter a custom domain (e.g., waba.clientbrand.com)");
       return;
@@ -128,8 +178,9 @@ export default function AdminDashboardPage() {
       const res = await fetch("/api/admin/branding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
-          userId: selectedResellerId || undefined,
+          userId: selectedResellerId || currentUser?.id,
           domain: domainInput.trim(),
           brandName: brandNameInput.trim(),
           logoUrl: logoUrlInput.trim() || null,
@@ -243,22 +294,24 @@ export default function AdminDashboardPage() {
                 </Link>
               ))}
 
-              {/* Site Branding Card */}
-              <div
-                onClick={() => setActiveSection("site_branding")}
-                className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-emerald-300 cursor-pointer transition space-y-2.5 group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl group-hover:scale-110 transition">🎨</span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    White-Label
-                  </span>
+              {/* Site Branding Card: Only SUPER_ADMIN & WHITE_LABEL_RESELLER */}
+              {canAccessSiteBranding && (
+                <div
+                  onClick={() => setActiveSection("site_branding")}
+                  className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-emerald-300 cursor-pointer transition space-y-2.5 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl group-hover:scale-110 transition">🎨</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      White-Label
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-sm">Site Branding</h3>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Custom domain, A-record IP, SSL, logo & reseller branding.
+                  </p>
                 </div>
-                <h3 className="font-bold text-slate-900 text-sm">Site Branding</h3>
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Custom domain, A-record IP, SSL, logo & reseller branding.
-                </p>
-              </div>
+              )}
             </div>
           </div>
 
@@ -283,7 +336,7 @@ export default function AdminDashboardPage() {
       )}
 
       {/* SITE BRANDING & WHITE-LABEL SECTION */}
-      {activeSection === "site_branding" && (
+      {activeSection === "site_branding" && canAccessSiteBranding && (
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 space-y-6">
           <div className="flex flex-wrap border-b border-slate-200 gap-6 text-xs font-semibold text-slate-500">
             {[
@@ -307,38 +360,45 @@ export default function AdminDashboardPage() {
             ))}
           </div>
 
-          {(activeBrandingTab === "domain" || activeBrandingTab === "reseller") && (
-            <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <div className="font-bold text-slate-800">Select White-Label / Reseller Account</div>
-                <div className="text-[11px] text-slate-500">
-                  Point reseller&apos;s DNS A-Record to{" "}
-                  <span className="font-mono font-bold text-slate-800">{serverIpInput}</span>
+          {(activeBrandingTab === "domain" || activeBrandingTab === "reseller") &&
+            isSuperAdmin && (
+              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="font-bold text-slate-800">
+                    Select White-Label / Reseller Account
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Point reseller&apos;s DNS A-Record to{" "}
+                    <span className="font-mono font-bold text-slate-800">
+                      {serverIpInput}
+                    </span>
+                  </div>
                 </div>
+                <select
+                  value={selectedResellerId}
+                  onChange={(e) => handleResellerChange(e.target.value)}
+                  className="border border-slate-300 rounded-xl px-3.5 py-2 bg-white font-semibold text-slate-800 min-w-[240px]"
+                >
+                  {resellers.length === 0 ? (
+                    <option value="">No Reseller Account Found</option>
+                  ) : (
+                    resellers.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name || r.username} ({r.role})
+                      </option>
+                    ))
+                  )}
+                </select>
               </div>
-              <select
-                value={selectedResellerId}
-                onChange={(e) => handleResellerChange(e.target.value)}
-                className="border border-slate-300 rounded-xl px-3.5 py-2 bg-white font-semibold text-slate-800 min-w-[240px]"
-              >
-                {resellers.length === 0 ? (
-                  <option value="">Default Admin / Partner</option>
-                ) : (
-                  resellers.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name || r.username} ({r.role})
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-          )}
+            )}
 
           {activeBrandingTab === "domain" && (
             <div className="space-y-4 max-w-2xl">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700">Custom Domain Name</label>
+                  <label className="block font-semibold text-slate-700">
+                    Custom Domain Name
+                  </label>
                   <input
                     type="text"
                     value={domainInput}
@@ -349,7 +409,9 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700">Target Server IP (A-Record)</label>
+                  <label className="block font-semibold text-slate-700">
+                    Target Server IP (A-Record)
+                  </label>
                   <input
                     type="text"
                     value={serverIpInput}
@@ -396,7 +458,9 @@ export default function AdminDashboardPage() {
             <div className="space-y-4 max-w-2xl">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700">Brand / Company Name</label>
+                  <label className="block font-semibold text-slate-700">
+                    Brand / Company Name
+                  </label>
                   <input
                     type="text"
                     value={brandNameInput}
@@ -407,7 +471,9 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700">Primary Accent Color</label>
+                  <label className="block font-semibold text-slate-700">
+                    Primary Accent Color
+                  </label>
                   <input
                     type="color"
                     value={primaryColorInput}
@@ -428,7 +494,9 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700">Support Phone / WhatsApp</label>
+                  <label className="block font-semibold text-slate-700">
+                    Support Phone / WhatsApp
+                  </label>
                   <input
                     type="text"
                     value={supportPhoneInput}
@@ -473,7 +541,9 @@ export default function AdminDashboardPage() {
                 />
               </div>
               <div className="flex justify-between items-center border border-slate-200 p-3.5 rounded-xl bg-slate-50">
-                <span className="font-semibold text-slate-700">Low Balance Alert Notification</span>
+                <span className="font-semibold text-slate-700">
+                  Low Balance Alert Notification
+                </span>
                 <input
                   type="checkbox"
                   checked={notifyLowBalance}

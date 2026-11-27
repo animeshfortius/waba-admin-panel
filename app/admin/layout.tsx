@@ -201,7 +201,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
                 <>
                   <Link
                     href="/admin/branding"
-                    className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
                   >
                     <span>🎨</span> Site Branding
                   </Link>

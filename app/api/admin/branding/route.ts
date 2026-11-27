@@ -1,5 +1,67 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import jwt from "jsonwebtoken";
 import { prisma } from "@/lib/prisma";
+
+const JWT_SECRET =
+  process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
+
+type ActorRole =
+  | "SUPER_ADMIN"
+  | "WHITE_LABEL_RESELLER"
+  | "RESELLER"
+  | "USER";
+
+function normalizeRole(rawRole?: string | null): ActorRole {
+  const upper = String(rawRole || "USER").trim().toUpperCase();
+  if (
+    upper === "WHITE_LABEL_RESELLER" ||
+    upper === "WHITE_LABEL" ||
+    upper === "WHITELABEL"
+  ) {
+    return "WHITE_LABEL_RESELLER";
+  }
+  if (upper === "RESELLER") return "RESELLER";
+  if (upper === "SUPER_ADMIN" || upper === "ADMIN") return "SUPER_ADMIN";
+  return "USER";
+}
+
+async function getAuthenticatedActor() {
+  const cookieStore = await cookies();
+  const token =
+    cookieStore.get("token")?.value ||
+    cookieStore.get("waba_token")?.value ||
+    cookieStore.get("auth_token")?.value;
+
+  if (!token) return null;
+
+  try {
+    const decoded: any = jwt.verify(token, JWT_SECRET);
+    const userId = decoded?.userId || decoded?.id || decoded?.sub;
+    if (!userId) return null;
+
+    if (userId === "emergency-admin-id") {
+      return { id: "emergency-admin-id", role: "SUPER_ADMIN" as ActorRole };
+    }
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, isWhiteLabel: true },
+    });
+
+    if (!dbUser) return null;
+
+    const normalized = normalizeRole(dbUser.role);
+    const effectiveRole: ActorRole =
+      normalized === "RESELLER" && dbUser.isWhiteLabel
+        ? "WHITE_LABEL_RESELLER"
+        : normalized;
+
+    return { id: dbUser.id, role: effectiveRole };
+  } catch {
+    return null;
+  }
+}
 
 function cleanDomainInput(input?: string | null): string {
   if (!input) return "";
@@ -14,11 +76,36 @@ function cleanDomainInput(input?: string | null): string {
 // 1. GET: Fetch White-Label branding by userId, domain, or list all configs
 export async function GET(req: Request) {
   try {
+    const actor = await getAuthenticatedActor();
+    if (!actor) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const isSuperAdmin = actor.role === "SUPER_ADMIN";
+    const isWhiteLabelReseller = actor.role === "WHITE_LABEL_RESELLER";
+
+    if (!isSuperAdmin && !isWhiteLabelReseller) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Branding access restricted" },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
     const domain = cleanDomainInput(searchParams.get("domain"));
 
     if (userId) {
+      if (!isSuperAdmin && userId !== actor.id) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden: You can only view your own branding" },
+          { status: 403 }
+        );
+      }
+
       const config = await prisma.whiteLabelConfig.findUnique({
         where: { userId },
         include: {
@@ -39,10 +126,19 @@ export async function GET(req: Request) {
           },
         },
       });
+
+      if (config && !isSuperAdmin && config.userId !== actor.id) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden: Branding outside your account scope" },
+          { status: 403 }
+        );
+      }
+
       return NextResponse.json({ success: true, config });
     }
 
     const configs = await prisma.whiteLabelConfig.findMany({
+      where: isSuperAdmin ? undefined : { userId: actor.id },
       orderBy: { createdAt: "desc" },
       include: {
         user: {
@@ -51,7 +147,11 @@ export async function GET(req: Request) {
       },
     });
 
-    return NextResponse.json({ success: true, configs });
+    const safeConfigs = isSuperAdmin
+      ? configs
+      : configs.filter((c: any) => c.userId === actor.id);
+
+    return NextResponse.json({ success: true, configs: safeConfigs });
   } catch (error: any) {
     console.error("Error fetching white-label branding:", error);
     return NextResponse.json(
@@ -64,6 +164,27 @@ export async function GET(req: Request) {
 // 2. POST: Create or update White-Label domain & branding config
 export async function POST(req: Request) {
   try {
+    const actor = await getAuthenticatedActor();
+    if (!actor) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const isSuperAdmin = actor.role === "SUPER_ADMIN";
+    const isWhiteLabelReseller = actor.role === "WHITE_LABEL_RESELLER";
+
+    if (!isSuperAdmin && !isWhiteLabelReseller) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Forbidden: Only Super Admin and White-Label Resellers can configure branding",
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const {
       userId,
@@ -90,11 +211,17 @@ export async function POST(req: Request) {
 
     let targetUserId = userId;
     if (!targetUserId) {
-      const firstAdminOrReseller = await prisma.user.findFirst({
-        where: { role: { in: ["SUPER_ADMIN", "WHITE_LABEL_RESELLER", "RESELLER"] } },
-        select: { id: true },
-      });
-      targetUserId = firstAdminOrReseller?.id;
+      if (isWhiteLabelReseller) {
+        targetUserId = actor.id;
+      } else {
+        const firstAdminOrReseller = await prisma.user.findFirst({
+          where: {
+            role: { in: ["SUPER_ADMIN", "WHITE_LABEL_RESELLER", "RESELLER"] },
+          },
+          select: { id: true },
+        });
+        targetUserId = firstAdminOrReseller?.id;
+      }
     }
 
     if (!targetUserId) {
@@ -104,11 +231,28 @@ export async function POST(req: Request) {
       );
     }
 
+    if (!isSuperAdmin && targetUserId !== actor.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Forbidden: You can only update your own White-Label branding",
+        },
+        { status: 403 }
+      );
+    }
+
     const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
     if (!targetUser) {
       return NextResponse.json(
         { success: false, error: "Target user not found" },
         { status: 404 }
+      );
+    }
+
+    if (!isSuperAdmin && normalizeRole(targetUser.role) === "SUPER_ADMIN") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Cannot modify Super Admin branding" },
+        { status: 403 }
       );
     }
 
@@ -182,6 +326,22 @@ export async function POST(req: Request) {
 // 3. DELETE: Remove White-Label config by userId or domain
 export async function DELETE(req: Request) {
   try {
+    const actor = await getAuthenticatedActor();
+    if (!actor) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const isSuperAdmin = actor.role === "SUPER_ADMIN";
+    if (!isSuperAdmin) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Super Admin access required" },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
     const domain = cleanDomainInput(searchParams.get("domain"));

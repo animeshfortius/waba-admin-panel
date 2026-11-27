@@ -1,7 +1,7 @@
 "use client";
 
 import BalanceTransferModal from "@/components/BalanceTransferModal";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -333,15 +333,48 @@ export default function UserManagementPage() {
   const [oversellBalance, setOversellBalance] = useState(0);
   const [transactions, setTransactions] = useState<any[]>([]);
 
-  useEffect(() => {
-    fetchUsers();
+  const normalizedRole = String(currentUserRole || "").trim().toUpperCase();
+  const isSuperAdmin = normalizedRole === "SUPER_ADMIN";
 
+  const sanitizeUsersForViewer = useCallback(
+    (list: any[]) => {
+      if (!Array.isArray(list)) return [];
+      if (isSuperAdmin) return list;
+      return list.filter(
+        (u) => String(u?.role || "").trim().toUpperCase() !== "SUPER_ADMIN"
+      );
+    },
+    [isSuperAdmin]
+  );
+
+  const fetchUsers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/users", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        console.warn("GET /api/admin/users status:", res.status);
+        return;
+      }
+      const data = await res.json();
+      const list = data.users || (Array.isArray(data) ? data : []);
+      const safeList = sanitizeUsersForViewer(list);
+      if (Array.isArray(safeList) && safeList.length > 0) {
+        setAllUsers(safeList);
+      }
+    } catch (err) {
+      console.error("Error fetching users:", err);
+    }
+  }, [sanitizeUsersForViewer]);
+
+  useEffect(() => {
     const adminRole =
-      localStorage.getItem("userRole") || localStorage.getItem("adminRole") || "SUPER_ADMIN";
+      localStorage.getItem("userRole") || localStorage.getItem("adminRole") || "";
     const adminId = localStorage.getItem("userId") || localStorage.getItem("adminId") || "";
 
-    setCurrentUserRole(adminRole);
-    setCurrentAdminId(adminId);
+    if (adminRole) setCurrentUserRole(adminRole);
+    if (adminId) setCurrentAdminId(adminId);
 
     fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
@@ -354,25 +387,9 @@ export default function UserManagementPage() {
       .catch(() => {});
   }, []);
 
-  const fetchUsers = async () => {
-    try {
-      const res = await fetch("/api/admin/users", {
-        credentials: "include",
-        cache: "no-store",
-      });
-      if (!res.ok) {
-        console.warn("GET /api/admin/users status:", res.status);
-        return;
-      }
-      const data = await res.json();
-      const list = data.users || (Array.isArray(data) ? data : []);
-      if (Array.isArray(list) && list.length > 0) {
-        setAllUsers(list);
-      }
-    } catch (err) {
-      console.error("Error fetching users:", err);
-    }
-  };
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
 
   const refreshSelectedUserFunds = async (userId: string) => {
     const refRes = await fetch(`/api/admin/funds?userId=${encodeURIComponent(userId)}`);
@@ -424,6 +441,15 @@ export default function UserManagementPage() {
   };
 
   const applySelectedUser = (found: any) => {
+    if (
+      !isSuperAdmin &&
+      String(found?.role || "").trim().toUpperCase() === "SUPER_ADMIN"
+    ) {
+      alert(`User "${searchQuery.trim()}" not found in database!`);
+      setSelectedUser(null);
+      return;
+    }
+
     setSelectedUser(found);
     setFormData({
       name: found.name || found.username || "",
@@ -484,11 +510,15 @@ export default function UserManagementPage() {
 
         if (res.ok) {
           const data = await res.json();
-          const list = data.users || (Array.isArray(data) ? data : []);
+          const list = sanitizeUsersForViewer(
+            data.users || (Array.isArray(data) ? data : [])
+          );
           if (Array.isArray(list) && list.length > 0) {
             setAllUsers((prev) => {
               const map = new Map(prev.map((item: any) => [item.id, item]));
-              for (const item of list) map.set(item.id, item);
+              for (const item of sanitizeUsersForViewer(list)) {
+                map.set(item.id, item);
+              }
               return Array.from(map.values());
             });
             found =
@@ -888,7 +918,7 @@ export default function UserManagementPage() {
                       onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                       className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:outline-none font-medium"
                     >
-                      <option value="SUPER_ADMIN">Super Admin</option>
+                      {isSuperAdmin && <option value="SUPER_ADMIN">Super Admin</option>}
                       <option value="WHITE_LABEL_RESELLER">White Label Reseller</option>
                       <option value="RESELLER">Reseller</option>
                       <option value="USER">User</option>
@@ -1315,29 +1345,37 @@ export default function UserManagementPage() {
                         </td>
                       </tr>
                     ) : (
-                      transactions.map((tx: any) => (
-                        <tr
-                          key={tx.id}
-                          className="hover:bg-slate-50 text-slate-700 font-medium"
-                        >
-                          <td className="p-3 font-bold text-slate-800">
-                            {formData.name || selectedUser.username}
-                          </td>
-                          <td className="p-3">Super Admin</td>
-                          <td className="p-3 font-bold text-emerald-600">
-                            ₹{Number(tx.amount || 0).toFixed(2)}
-                          </td>
-                          <td className="p-3">
-                            <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
-                              {tx.type}
-                            </span>
-                          </td>
-                          <td className="p-3 font-mono text-[11px] text-slate-500">
-                            {new Date(tx.createdAt).toLocaleString()}
-                          </td>
-                          <td className="p-3 text-slate-600">{tx.description}</td>
-                        </tr>
-                      ))
+                      transactions.map((tx: any) => {
+                        const rawFromRole = String(tx.fromRole || "").trim().toUpperCase();
+                        const displayFromUser =
+                          !isSuperAdmin && rawFromRole === "SUPER_ADMIN"
+                            ? "Parent Account"
+                            : tx.fromUserName || "Super Admin";
+
+                        return (
+                          <tr
+                            key={tx.id}
+                            className="hover:bg-slate-50 text-slate-700 font-medium"
+                          >
+                            <td className="p-3 font-bold text-slate-800">
+                              {formData.name || selectedUser.username}
+                            </td>
+                            <td className="p-3">{displayFromUser}</td>
+                            <td className="p-3 font-bold text-emerald-600">
+                              ₹{Number(tx.amount || 0).toFixed(2)}
+                            </td>
+                            <td className="p-3">
+                              <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+                                {tx.type}
+                              </span>
+                            </td>
+                            <td className="p-3 font-mono text-[11px] text-slate-500">
+                              {new Date(tx.createdAt).toLocaleString()}
+                            </td>
+                            <td className="p-3 text-slate-600">{tx.description}</td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

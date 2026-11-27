@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
+import { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
@@ -71,8 +72,8 @@ async function getAuthenticatedActor() {
   }
 }
 
-// 1. GET: Fetch users scoped by role (SUPER_ADMIN sees all; RESELLER sees own users)
-export async function GET() {
+// 1. GET: Fetch users scoped by role (SUPER_ADMIN sees all; RESELLER / WHITE_LABEL_RESELLER sees own users)
+export async function GET(req: Request) {
   try {
     const actor = await getAuthenticatedActor();
 
@@ -91,9 +92,34 @@ export async function GET() {
     }
 
     const isSuperAdmin = actor.role === "SUPER_ADMIN";
+    const { searchParams } = new URL(req.url);
+    const search = String(searchParams.get("search") || "").trim();
+
+    const scopeWhere: Prisma.UserWhereInput = isSuperAdmin
+      ? {}
+      : {
+          AND: [
+            { createdById: actor.id },
+            { role: { not: Role.SUPER_ADMIN } },
+          ],
+        };
+
+    const searchWhere: Prisma.UserWhereInput = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: "insensitive" } },
+            { username: { contains: search, mode: "insensitive" } },
+            { email: { contains: search, mode: "insensitive" } },
+            { phone: { contains: search } },
+          ],
+        }
+      : {};
 
     const users = await prisma.user.findMany({
-      where: isSuperAdmin ? undefined : { createdById: actor.id },
+      where: {
+        ...scopeWhere,
+        ...searchWhere,
+      },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
@@ -117,14 +143,22 @@ export async function GET() {
         internationalAccount: true,
         createdById: true,
         createdAt: true,
-        createdBy: {
-          select: { id: true, name: true, username: true, role: true },
-        },
+        createdBy: isSuperAdmin
+          ? {
+              select: { id: true, name: true, username: true, role: true },
+            }
+          : false,
         whiteLabelConfig: true,
       },
     });
 
-    return NextResponse.json({ success: true, users }, { status: 200 });
+    const safeUsers = isSuperAdmin
+      ? users
+      : users.filter(
+          (u: any) => String(u?.role || "").trim().toUpperCase() !== "SUPER_ADMIN"
+        );
+
+    return NextResponse.json({ success: true, users: safeUsers }, { status: 200 });
   } catch (error: any) {
     console.error("Error fetching users:", error);
     return NextResponse.json(
@@ -156,27 +190,6 @@ export async function POST(req: Request) {
     const isSuperAdmin = actor.role === "SUPER_ADMIN";
     const isReseller =
       actor.role === "RESELLER" || actor.role === "WHITE_LABEL_RESELLER";
-
-    // Reseller site branding lock check
-    if (isReseller) {
-      const wl = actor.whiteLabelConfig;
-      const hasBranding = Boolean(
-        wl?.isActive &&
-          (String(wl?.brandName || "").trim() ||
-            String(wl?.domain || "").trim())
-      );
-
-      if (!hasBranding) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Site Branding required: Please configure and activate your Brand Name and Domain before creating users.",
-          },
-          { status: 403 }
-        );
-      }
-    }
 
     const body = await req.json();
     const {
@@ -223,26 +236,16 @@ export async function POST(req: Request) {
 
     let assignedRole = normalizeRole(role);
 
-    // Resellers cannot create SUPER_ADMIN or WHITE_LABEL_RESELLER accounts
-    if (isReseller) {
-      if (assignedRole === "SUPER_ADMIN") {
-        return NextResponse.json(
-          { success: false, error: "Forbidden role assignment" },
-          { status: 403 }
-        );
-      }
-      if (
-        actor.role === "RESELLER" &&
-        assignedRole === "WHITE_LABEL_RESELLER"
-      ) {
-        assignedRole = "USER";
-      }
+    if (isReseller && assignedRole === "SUPER_ADMIN") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden role assignment" },
+        { status: 403 }
+      );
     }
 
     const hashedPassword = await bcrypt.hash(String(password), 10);
     const isWhiteLabel = assignedRole === "WHITE_LABEL_RESELLER";
 
-    // Parent creator assignment: Resellers are always set as parent of their created users
     let parentId: string | null = null;
     if (isReseller) {
       parentId = actor.id;
@@ -253,7 +256,7 @@ export async function POST(req: Request) {
         parentId = actor.id;
       } else {
         const superAdmin = await prisma.user.findFirst({
-          where: { role: "SUPER_ADMIN" },
+          where: { role: Role.SUPER_ADMIN },
           select: { id: true },
         });
         parentId = superAdmin?.id || null;
@@ -267,6 +270,8 @@ export async function POST(req: Request) {
       .replace(/\/.*$/, "")
       .replace(/^www\./, "");
 
+    const cleanBrandName = String(brandName || "").trim();
+
     const newUser = await prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
         data: {
@@ -274,7 +279,7 @@ export async function POST(req: Request) {
           name: String(name || finalUsername).trim(),
           email: cleanEmail,
           password: hashedPassword,
-          role: assignedRole,
+          role: assignedRole as Role,
           isWhiteLabel,
           phone: phone ? String(phone).trim() : "",
           expiryDate: expiryDate ? String(expiryDate) : null,
@@ -282,12 +287,12 @@ export async function POST(req: Request) {
         },
       });
 
-      if (isWhiteLabel && cleanDomain) {
+      if (isWhiteLabel && (cleanDomain || cleanBrandName)) {
         await tx.whiteLabelConfig.create({
           data: {
             userId: created.id,
             domain: cleanDomain,
-            brandName: String(brandName || created.name || finalUsername).trim(),
+            brandName: cleanBrandName || created.name || finalUsername,
             supportEmail: cleanEmail,
             supportPhone: phone ? String(phone).trim() : null,
             sslStatus: "PENDING",

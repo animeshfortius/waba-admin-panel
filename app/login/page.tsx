@@ -1,17 +1,32 @@
 "use client";
 
 import { useState } from "react";
+import CaptchaBox from "@/components/CaptchaBox";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [captchaInput, setCaptchaInput] = useState("");
+  const [expectedCaptcha, setExpectedCaptcha] = useState("");
+  const [refreshCaptchaKey, setRefreshCaptchaKey] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    // Case-insensitive captcha check
+    if (
+      !captchaInput.trim() ||
+      captchaInput.trim().toLowerCase() !== expectedCaptcha.trim().toLowerCase()
+    ) {
+      setError("Invalid captcha code. Please try again.");
+      setRefreshCaptchaKey((prev) => prev + 1);
+      return;
+    }
+
     setLoading(true);
 
     const cleanUser = username.trim();
@@ -33,12 +48,14 @@ export default function LoginPage() {
           window.location.replace("/dashboard");
         } else {
           setError(data.error || data.message || "Invalid username or password");
+          setRefreshCaptchaKey((prev) => prev + 1);
           setLoading(false);
         }
       })
       .catch((err) => {
         console.error("Login error:", err);
         setError("Connection failed. Please try again.");
+        setRefreshCaptchaKey((prev) => prev + 1);
         setLoading(false);
       });
   };
@@ -72,7 +89,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-6">
+        <form onSubmit={handleLogin} className="space-y-5">
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-600 ml-1">
               Username / Email
@@ -107,6 +124,14 @@ export default function LoginPage() {
               {showPassword ? "👁️‍🗨️" : "👁️"}
             </button>
           </div>
+
+          {/* Case-Insensitive Captcha below Username & Password */}
+          <CaptchaBox
+            value={captchaInput}
+            onChange={setCaptchaInput}
+            onCodeChange={setExpectedCaptcha}
+            refreshTrigger={refreshCaptchaKey}
+          />
 
           <div className="flex items-center justify-between text-xs py-1">
             <label className="flex items-center space-x-2 text-slate-600 cursor-pointer font-medium">

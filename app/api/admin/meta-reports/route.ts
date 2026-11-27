@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 const JWT_SECRET =
   process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
 const GRAPH_VERSION = "v21.0";
@@ -93,7 +95,9 @@ export async function GET(req: Request) {
         u.apiKey ||
         u.api_key ||
         u.panelApiKey ||
-        (Array.isArray(u.apiKeys) ? u.apiKeys[0]?.key || u.apiKeys[0]?.token || "" : "") ||
+        (Array.isArray(u.apiKeys)
+          ? u.apiKeys[0]?.key || u.apiKeys[0]?.token || ""
+          : "") ||
         "",
       walletBalance: u.walletBalance,
       virtualBalance: u.virtualBalance,

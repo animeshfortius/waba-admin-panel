@@ -36,7 +36,7 @@ interface UserMetaReport {
   };
 }
 
-function getDefaultDateString(offsetDays = 0) {
+function getDateStringWithOffset(offsetDays = 0) {
   const d = new Date(Date.now() - offsetDays * 24 * 60 * 60 * 1000);
   return d.toISOString().split("T")[0];
 }
@@ -102,8 +102,8 @@ export default function AdminMetaReportsDashboard() {
   });
   const [days, setDays] = useState<number>(7);
   const [isCustomRange, setIsCustomRange] = useState<boolean>(false);
-  const [fromDate, setFromDate] = useState<string>(getDefaultDateString(7));
-  const [toDate, setToDate] = useState<string>(getDefaultDateString(0));
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
   const [selectedUser, setSelectedUser] = useState("ALL");
   const [qualityFilter, setQualityFilter] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
@@ -188,6 +188,11 @@ export default function AdminMetaReportsDashboard() {
   };
 
   useEffect(() => {
+    setFromDate(getDateStringWithOffset(7));
+    setToDate(getDateStringWithOffset(0));
+  }, []);
+
+  useEffect(() => {
     setCurrentPage(1);
     if (!isCustomRange) {
       fetchMetaReports(false, false);
@@ -198,8 +203,8 @@ export default function AdminMetaReportsDashboard() {
   const handlePresetClick = (presetDays: number) => {
     setIsCustomRange(false);
     setDays(presetDays);
-    setFromDate(getDefaultDateString(presetDays));
-    setToDate(getDefaultDateString(0));
+    setFromDate(getDateStringWithOffset(presetDays));
+    setToDate(getDateStringWithOffset(0));
     setCurrentPage(1);
   };
 
@@ -655,7 +660,9 @@ export default function AdminMetaReportsDashboard() {
                           </div>
                           <div className="flex items-center justify-between gap-1.5">
                             <span className="font-mono text-[11px] text-slate-800 break-all">
-                              {isRevealed ? item.apiKey || "Not Generated" : maskApiKey(item.apiKey)}
+                              {isRevealed
+                                ? item.apiKey || "Not Generated"
+                                : maskApiKey(item.apiKey)}
                             </span>
                             {hasKey && (
                               <div className="flex items-center gap-1 shrink-0">

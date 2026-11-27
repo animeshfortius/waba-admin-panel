@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 const JWT_SECRET =
   process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
 
+const SUPER_ADMIN_FIXED_BALANCE = 123456789;
+
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
   Pragma: "no-cache",
@@ -49,9 +51,9 @@ export async function GET() {
             role: "SUPER_ADMIN",
             parentId: null,
             isWhiteLabel: false,
-            walletBalance: 1234567890,
-            actualBalance: 1234567890,
-            virtualBalance: 1234567890,
+            walletBalance: SUPER_ADMIN_FIXED_BALANCE,
+            actualBalance: SUPER_ADMIN_FIXED_BALANCE,
+            virtualBalance: SUPER_ADMIN_FIXED_BALANCE,
             whiteLabelConfig: null,
           },
         },
@@ -97,15 +99,17 @@ export async function GET() {
 
     const parentId = user.createdById ?? null;
     const normalizedRole = String(user.role || "USER").trim().toUpperCase();
+    const isSuperAdmin = normalizedRole === "SUPER_ADMIN";
     const rawWallet = Number(user.walletBalance ?? user.actualBalance ?? 0);
     const rawVirtual = Number(user.virtualBalance ?? 0);
 
-    // For normal USER accounts, merge virtual balance into walletBalance
-    // so top header and wallet displays stay in sync.
-    const effectiveWalletBalance =
-      normalizedRole === "USER"
-        ? Number((rawWallet + rawVirtual).toFixed(2))
-        : Number(rawWallet.toFixed(2));
+    // Super Admin keeps fixed 123456789 across actual & virtual balances.
+    // Normal USER merges virtual balance into walletBalance.
+    const effectiveWalletBalance = isSuperAdmin
+      ? SUPER_ADMIN_FIXED_BALANCE
+      : normalizedRole === "USER"
+      ? Number((rawWallet + rawVirtual).toFixed(2))
+      : Number(rawWallet.toFixed(2));
 
     return NextResponse.json(
       {
@@ -115,9 +119,14 @@ export async function GET() {
           parentId,
           role: normalizedRole,
           walletBalance: effectiveWalletBalance,
-          actualBalance: Number((user.actualBalance ?? 0).toFixed(2)),
-          virtualBalance:
-            normalizedRole === "USER" ? 0 : Number(rawVirtual.toFixed(2)),
+          actualBalance: isSuperAdmin
+            ? SUPER_ADMIN_FIXED_BALANCE
+            : Number((user.actualBalance ?? 0).toFixed(2)),
+          virtualBalance: isSuperAdmin
+            ? SUPER_ADMIN_FIXED_BALANCE
+            : normalizedRole === "USER"
+            ? 0
+            : Number(rawVirtual.toFixed(2)),
         },
       },
       { headers: NO_STORE_HEADERS }

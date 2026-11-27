@@ -72,23 +72,33 @@ export async function GET(req: Request) {
     const unixStart = Math.floor(sinceDate.getTime() / 1000);
     const unixEnd = Math.floor(untilDate.getTime() / 1000);
 
-    const users = await prisma.user.findMany({
+    const rawUsers = await prisma.user.findMany({
       where:
         selectedUserId !== "ALL"
           ? { id: selectedUserId }
           : { role: { not: "SUPER_ADMIN" } },
-      select: {
-        id: true,
-        name: true,
-        username: true,
-        email: true,
-        role: true,
-        walletBalance: true,
-        virtualBalance: true,
+      include: {
         wabaAccounts: true,
       },
       orderBy: { createdAt: "desc" },
     });
+
+    const users = rawUsers.map((u: any) => ({
+      id: u.id,
+      name: u.name,
+      username: u.username,
+      email: u.email,
+      role: u.role,
+      apiKey:
+        u.apiKey ||
+        u.api_key ||
+        u.panelApiKey ||
+        (Array.isArray(u.apiKeys) ? u.apiKeys[0]?.key || u.apiKeys[0]?.token || "" : "") ||
+        "",
+      walletBalance: u.walletBalance,
+      virtualBalance: u.virtualBalance,
+      wabaAccounts: u.wabaAccounts || [],
+    }));
 
     const logs = await prisma.campaignLog.findMany({
       where: {
@@ -208,6 +218,7 @@ export async function GET(req: Request) {
           username: u.username || "-",
           email: u.email,
           role: u.role,
+          apiKey: u.apiKey,
           walletBalance: Number(
             (
               Number(u.walletBalance || 0) + Number(u.virtualBalance || 0)

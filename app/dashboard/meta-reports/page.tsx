@@ -35,6 +35,11 @@ interface UserMetaReport {
   };
 }
 
+function getDefaultDateString(offsetDays = 0) {
+  const d = new Date(Date.now() - offsetDays * 24 * 60 * 60 * 1000);
+  return d.toISOString().split("T")[0];
+}
+
 export default function AdminMetaReportsDashboard() {
   const [reports, setReports] = useState<UserMetaReport[]>([]);
   const [totals, setTotals] = useState({
@@ -46,23 +51,49 @@ export default function AdminMetaReportsDashboard() {
     failed: 0,
     spend: 0,
   });
-  const [days, setDays] = useState(7);
+  const [days, setDays] = useState<number>(7);
+  const [isCustomRange, setIsCustomRange] = useState<boolean>(false);
+  const [fromDate, setFromDate] = useState<string>(getDefaultDateString(7));
+  const [toDate, setToDate] = useState<string>(getDefaultDateString(0));
   const [selectedUser, setSelectedUser] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
+  const [pageSize, setPageSize] = useState<number>(20);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
 
-  const fetchMetaReports = async (isManualSync = false) => {
+  const fetchMetaReports = async (
+    isManualSync = false,
+    overrideCustom?: boolean,
+    overrideFrom?: string,
+    overrideTo?: string
+  ) => {
     try {
       setError("");
       if (isManualSync) setSyncing(true);
       else setLoading(true);
 
-      const res = await fetch(
-        `/api/admin/meta-reports?days=${days}&userId=${selectedUser}&live=true`,
-        { cache: "no-store", credentials: "include" }
-      );
+      const useCustom =
+        overrideCustom !== undefined ? overrideCustom : isCustomRange;
+      const startVal = overrideFrom !== undefined ? overrideFrom : fromDate;
+      const endVal = overrideTo !== undefined ? overrideTo : toDate;
+
+      const params = new URLSearchParams({
+        days: String(days),
+        userId: selectedUser,
+        live: "true",
+      });
+
+      if (useCustom && startVal && endVal) {
+        params.set("startDate", startVal);
+        params.set("endDate", endVal);
+      }
+
+      const res = await fetch(`/api/admin/meta-reports?${params.toString()}`, {
+        cache: "no-store",
+        credentials: "include",
+      });
       const data = await res.json();
 
       if (!res.ok || !data.success) {
@@ -80,12 +111,35 @@ export default function AdminMetaReportsDashboard() {
   };
 
   useEffect(() => {
-    fetchMetaReports(false);
+    setCurrentPage(1);
+    if (!isCustomRange) {
+      fetchMetaReports(false, false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days, selectedUser]);
+  }, [days, selectedUser, isCustomRange]);
+
+  const handlePresetClick = (presetDays: number) => {
+    setIsCustomRange(false);
+    setDays(presetDays);
+    setFromDate(getDefaultDateString(presetDays));
+    setToDate(getDefaultDateString(0));
+    setCurrentPage(1);
+  };
+
+  const handleApplyCustomRange = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fromDate || !toDate) return;
+    if (fromDate > toDate) {
+      setError("From Date cannot be greater than To Date.");
+      return;
+    }
+    setCurrentPage(1);
+    fetchMetaReports(false, true, fromDate, toDate);
+  };
 
   const filteredReports = reports.filter((r) => {
-    const q = searchTerm.toLowerCase();
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return true;
     return (
       r.name.toLowerCase().includes(q) ||
       r.username.toLowerCase().includes(q) ||
@@ -93,6 +147,14 @@ export default function AdminMetaReportsDashboard() {
       r.wabas.some((w) => w.displayPhone.toLowerCase().includes(q))
     );
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredReports.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const paginatedReports = filteredReports.slice(
+    startIndex,
+    startIndex + pageSize
+  );
 
   const exportCsv = () => {
     const headers = [
@@ -123,6 +185,7 @@ export default function AdminMetaReportsDashboard() {
       r.metrics.spend.toFixed(2),
     ]);
 
+    const rangeLabel = isCustomRange ? `${fromDate}_to_${toDate}` : `${days}d`;
     const csvContent =
       "data:text/csv;charset=utf-8," +
       [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
@@ -130,7 +193,7 @@ export default function AdminMetaReportsDashboard() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `admin-meta-user-reports-${days}d.csv`);
+    link.setAttribute("download", `admin-meta-user-reports-${rangeLabel}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -139,49 +202,109 @@ export default function AdminMetaReportsDashboard() {
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
       {/* Header Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <div className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">
-            Super Admin • Global Meta Intelligence
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <div className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">
+              Super Admin • Global Meta Intelligence
+            </div>
+            <h1 className="text-2xl font-extrabold text-slate-900 mt-1">
+              All Users Meta WABA Reports Dashboard
+            </h1>
+            <p className="text-xs text-slate-500 mt-1">
+              Live Meta Graph API analytics, phone quality ratings, messaging tiers & delivery logs across all child users.
+            </p>
           </div>
-          <h1 className="text-2xl font-extrabold text-slate-900 mt-1">
-            All Users Meta WABA Reports Dashboard
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Live Meta Graph API analytics, phone quality ratings, messaging tiers & delivery logs across all child users.
-          </p>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {[1, 7, 30].map((d) => (
+          <div className="flex flex-wrap items-center gap-2">
+            {[1, 7, 30].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => handlePresetClick(d)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                  !isCustomRange && days === d
+                    ? "bg-emerald-600 text-white border-emerald-600"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                {d === 1 ? "Last 24h" : `Last ${d} Days`}
+              </button>
+            ))}
+
             <button
-              key={d}
-              onClick={() => setDays(d)}
+              type="button"
+              onClick={() => setIsCustomRange((prev) => !prev)}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                days === d
-                  ? "bg-emerald-600 text-white border-emerald-600"
+                isCustomRange
+                  ? "bg-indigo-600 text-white border-indigo-600"
                   : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
               }`}
             >
-              {d === 1 ? "Last 24h" : `Last ${d} Days`}
+              📅 Custom Range
             </button>
-          ))}
 
-          <button
-            onClick={() => fetchMetaReports(true)}
-            disabled={syncing}
-            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer disabled:opacity-60"
-          >
-            {syncing ? "Syncing Meta..." : "↻ Sync Live Meta"}
-          </button>
+            <button
+              type="button"
+              onClick={() => fetchMetaReports(true)}
+              disabled={syncing}
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer disabled:opacity-60"
+            >
+              {syncing ? "Syncing Meta..." : "↻ Sync Live Meta"}
+            </button>
 
-          <button
-            onClick={exportCsv}
-            className="px-4 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition cursor-pointer"
-          >
-            ⬇ Export CSV
-          </button>
+            <button
+              type="button"
+              onClick={exportCsv}
+              className="px-4 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition cursor-pointer"
+            >
+              ⬇ Export CSV
+            </button>
+          </div>
         </div>
+
+        {/* Custom Range Date Inputs */}
+        {isCustomRange && (
+          <form
+            onSubmit={handleApplyCustomRange}
+            className="pt-3 border-t border-slate-100 flex flex-wrap items-end gap-3"
+          >
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                From Date
+              </label>
+              <input
+                type="date"
+                value={fromDate}
+                max={toDate || undefined}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                To Date
+              </label>
+              <input
+                type="date"
+                value={toDate}
+                min={fromDate || undefined}
+                onChange={(e) => setToDate(e.target.value)}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition cursor-pointer"
+            >
+              Apply Custom Range
+            </button>
+          </form>
+        )}
       </div>
 
       {/* KPI Summary Cards */}
@@ -253,28 +376,49 @@ export default function AdminMetaReportsDashboard() {
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row gap-3 items-center justify-between">
+      {/* Filter Bar + Page Size (20 / 50 / 100) */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
         <input
           type="text"
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setCurrentPage(1);
+          }}
           placeholder="Search user name, username, email, or WABA number..."
-          className="w-full sm:w-96 rounded-xl border border-slate-200 px-3.5 py-2 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500"
+          className="w-full lg:w-96 rounded-xl border border-slate-200 px-3.5 py-2 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500"
         />
 
-        <select
-          value={selectedUser}
-          onChange={(e) => setSelectedUser(e.target.value)}
-          className="w-full sm:w-64 rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white"
-        >
-          <option value="ALL">All Users ({reports.length})</option>
-          {reports.map((u) => (
-            <option key={u.userId} value={u.userId}>
-              {u.name} (@{u.username})
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={selectedUser}
+            onChange={(e) => setSelectedUser(e.target.value)}
+            className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white"
+          >
+            <option value="ALL">All Users ({reports.length})</option>
+            {reports.map((u) => (
+              <option key={u.userId} value={u.userId}>
+                {u.name} (@{u.username})
+              </option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500">Show:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 bg-white cursor-pointer"
+            >
+              <option value={20}>20 / page</option>
+              <option value={50}>50 / page</option>
+              <option value={100}>100 / page</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -305,14 +449,14 @@ export default function AdminMetaReportsDashboard() {
                     Fetching live reports from Meta Graph API for all users...
                   </td>
                 </tr>
-              ) : filteredReports.length === 0 ? (
+              ) : paginatedReports.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-slate-500">
                     No user reports found for selected filters.
                   </td>
                 </tr>
               ) : (
-                filteredReports.map((item) => (
+                paginatedReports.map((item) => (
                   <tr key={item.userId} className="hover:bg-slate-50/80">
                     <td className="p-4 align-top">
                       <div className="font-bold text-slate-900">{item.name}</div>
@@ -372,7 +516,8 @@ export default function AdminMetaReportsDashboard() {
                       {item.metrics.failed.toLocaleString("en-IN")}
                     </td>
                     <td className="p-4 align-top text-right font-mono font-bold text-slate-800">
-                      ₹{item.walletBalance.toLocaleString("en-IN", {
+                      ₹
+                      {item.walletBalance.toLocaleString("en-IN", {
                         minimumFractionDigits: 2,
                       })}
                     </td>
@@ -381,6 +526,51 @@ export default function AdminMetaReportsDashboard() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Footer */}
+        <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          <div className="text-slate-600 font-medium">
+            Showing{" "}
+            <span className="font-bold text-slate-900">
+              {filteredReports.length === 0 ? 0 : startIndex + 1}
+            </span>{" "}
+            to{" "}
+            <span className="font-bold text-slate-900">
+              {Math.min(startIndex + pageSize, filteredReports.length)}
+            </span>{" "}
+            of{" "}
+            <span className="font-bold text-slate-900">
+              {filteredReports.length}
+            </span>{" "}
+            users
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled={safeCurrentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold disabled:opacity-50 cursor-pointer"
+            >
+              ← Prev
+            </button>
+
+            <span className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold">
+              Page {safeCurrentPage} / {totalPages}
+            </span>
+
+            <button
+              type="button"
+              disabled={safeCurrentPage >= totalPages}
+              onClick={() =>
+                setCurrentPage((p) => Math.min(totalPages, p + 1))
+              }
+              className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold disabled:opacity-50 cursor-pointer"
+            >
+              Next →
+            </button>
+          </div>
         </div>
       </div>
     </div>

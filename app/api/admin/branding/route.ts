@@ -73,7 +73,6 @@ function cleanDomainInput(input?: string | null): string {
     .replace(/^www\./, "");
 }
 
-// 1. GET: Fetch White-Label branding by userId, domain, or list configs
 export async function GET(req: Request) {
   try {
     const actor = await getAuthenticatedActor();
@@ -86,8 +85,9 @@ export async function GET(req: Request) {
 
     const isSuperAdmin = actor.role === "SUPER_ADMIN";
     const isWhiteLabelReseller = actor.role === "WHITE_LABEL_RESELLER";
+    const isNormalReseller = actor.role === "RESELLER";
 
-    if (!isSuperAdmin && !isWhiteLabelReseller) {
+    if (!isSuperAdmin && !isWhiteLabelReseller && !isNormalReseller) {
       return NextResponse.json(
         { success: false, error: "Forbidden: Branding access restricted" },
         { status: 403 }
@@ -182,7 +182,6 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST: Create or update White-Label domain & branding config
 export async function POST(req: Request) {
   try {
     const actor = await getAuthenticatedActor();
@@ -195,13 +194,13 @@ export async function POST(req: Request) {
 
     const isSuperAdmin = actor.role === "SUPER_ADMIN";
     const isWhiteLabelReseller = actor.role === "WHITE_LABEL_RESELLER";
+    const isNormalReseller = actor.role === "RESELLER";
 
-    if (!isSuperAdmin && !isWhiteLabelReseller) {
+    if (!isSuperAdmin && !isWhiteLabelReseller && !isNormalReseller) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Forbidden: Only Super Admin and White-Label Resellers can configure branding",
+          error: "Forbidden: You are not allowed to configure branding",
         },
         { status: 403 }
       );
@@ -224,7 +223,7 @@ export async function POST(req: Request) {
 
     const normalizedDomain = cleanDomainInput(domain);
 
-    if (!normalizedDomain) {
+    if ((isSuperAdmin || isWhiteLabelReseller) && !normalizedDomain) {
       return NextResponse.json(
         { success: false, error: "Valid custom domain is required" },
         { status: 400 }
@@ -233,7 +232,7 @@ export async function POST(req: Request) {
 
     let targetUserId = userId;
     if (!targetUserId) {
-      if (isWhiteLabelReseller) {
+      if (!isSuperAdmin) {
         targetUserId = actor.id;
       } else {
         const firstAdminOrReseller = await prisma.user.findFirst({
@@ -257,8 +256,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Forbidden: You can only update your own White-Label branding",
+          error: "Forbidden: You can only update your own branding settings",
         },
         { status: 403 }
       );
@@ -266,6 +264,7 @@ export async function POST(req: Request) {
 
     const targetUser = await prisma.user.findUnique({
       where: { id: targetUserId },
+      include: { whiteLabelConfig: true },
     });
     if (!targetUser) {
       return NextResponse.json(
@@ -284,23 +283,31 @@ export async function POST(req: Request) {
       );
     }
 
-    const existingByDomain = await prisma.whiteLabelConfig.findUnique({
-      where: { domain: normalizedDomain },
-    });
-    if (existingByDomain && existingByDomain.userId !== targetUserId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "This domain is already assigned to another reseller",
-        },
-        { status: 409 }
-      );
+    const effectiveDomain =
+      normalizedDomain ||
+      cleanDomainInput(targetUser.whiteLabelConfig?.domain) ||
+      `reseller-${targetUser.id}.local`;
+
+    if (normalizedDomain) {
+      const existingByDomain = await prisma.whiteLabelConfig.findUnique({
+        where: { domain: normalizedDomain },
+      });
+      if (existingByDomain && existingByDomain.userId !== targetUserId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "This domain is already assigned to another reseller",
+          },
+          { status: 409 }
+        );
+      }
     }
 
     const activeFlag = isActive !== undefined ? Boolean(isActive) : true;
+    const promoteToWhiteLabel = isSuperAdmin || isWhiteLabelReseller;
 
     const savedConfig = await prisma.$transaction(async (tx) => {
-      if (targetUser.role !== "SUPER_ADMIN") {
+      if (promoteToWhiteLabel && targetUser.role !== "SUPER_ADMIN") {
         await tx.user.update({
           where: { id: targetUserId },
           data: {
@@ -313,20 +320,22 @@ export async function POST(req: Request) {
       return tx.whiteLabelConfig.upsert({
         where: { userId: targetUserId },
         update: {
-          domain: normalizedDomain,
+          ...(promoteToWhiteLabel && normalizedDomain
+            ? { domain: normalizedDomain }
+            : {}),
           brandName: (brandName || targetUser.name || "Partner Portal").trim(),
           logoUrl: logoUrl !== undefined ? logoUrl : undefined,
           faviconUrl: faviconUrl !== undefined ? faviconUrl : undefined,
           primaryColor: primaryColor || "#059669",
           supportEmail: supportEmail !== undefined ? supportEmail : undefined,
           supportPhone: supportPhone !== undefined ? supportPhone : undefined,
-          serverIp: serverIp || "171.50.181.171",
-          sslStatus: sslStatus || "PENDING",
+          ...(promoteToWhiteLabel && serverIp ? { serverIp } : {}),
+          ...(promoteToWhiteLabel && sslStatus ? { sslStatus } : {}),
           isActive: activeFlag,
         },
         create: {
           userId: targetUserId,
-          domain: normalizedDomain,
+          domain: effectiveDomain,
           brandName: (brandName || targetUser.name || "Partner Portal").trim(),
           logoUrl: logoUrl || null,
           faviconUrl: faviconUrl || null,
@@ -342,7 +351,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "White-Label domain & branding saved successfully!",
+      message: "Branding settings saved successfully!",
       config: savedConfig,
     });
   } catch (error: any) {
@@ -357,7 +366,6 @@ export async function POST(req: Request) {
   }
 }
 
-// 3. DELETE: Remove White-Label config by userId or domain
 export async function DELETE(req: Request) {
   try {
     const actor = await getAuthenticatedActor();

@@ -41,7 +41,10 @@ function ManageRatesModal({
 
   useEffect(() => {
     if (user?.id) {
-      fetch(`/api/admin/rates?userId=${encodeURIComponent(user.id)}`)
+      fetch(`/api/admin/rates?userId=${encodeURIComponent(user.id)}`, {
+        cache: "no-store",
+        credentials: "include",
+      })
         .then((res) => res.json())
         .then((data) => {
           if (data?.success && data?.rates) {
@@ -64,7 +67,7 @@ function ManageRatesModal({
   }, [user]);
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { cache: "no-store", credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.user) {
@@ -93,6 +96,7 @@ function ManageRatesModal({
       const res = await fetch("/api/admin/rates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           userId: user.id,
           rates: cleanRates,
@@ -107,7 +111,7 @@ function ManageRatesModal({
         alert("Rates updated successfully!");
         onSuccess();
       } else {
-        alert(data.message || "Failed to update rates");
+        alert(data.message || data.error || "Failed to update rates");
       }
     } catch (err) {
       console.error("Error updating rates:", err);
@@ -151,7 +155,9 @@ function ManageRatesModal({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 <tr>
-                  <td className="p-3 font-medium text-slate-800">🇮🇳 (91) INDIA – IN</td>
+                  <td className="p-3 font-medium text-slate-800">
+                    🇮🇳 (91) INDIA – IN
+                  </td>
                   <td className="p-3 text-slate-600">Utility</td>
                   <td className="p-3">
                     <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-semibold font-mono">
@@ -174,7 +180,9 @@ function ManageRatesModal({
                 </tr>
 
                 <tr>
-                  <td className="p-3 font-medium text-slate-800">🇮🇳 (91) INDIA – IN</td>
+                  <td className="p-3 font-medium text-slate-800">
+                    🇮🇳 (91) INDIA – IN
+                  </td>
                   <td className="p-3 text-slate-600">Service</td>
                   <td className="p-3">
                     <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-semibold font-mono">
@@ -197,7 +205,9 @@ function ManageRatesModal({
                 </tr>
 
                 <tr>
-                  <td className="p-3 font-medium text-slate-800">🇮🇳 (91) INDIA – IN</td>
+                  <td className="p-3 font-medium text-slate-800">
+                    🇮🇳 (91) INDIA – IN
+                  </td>
                   <td className="p-3 text-slate-600">Authentication</td>
                   <td className="p-3">
                     <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-semibold font-mono">
@@ -220,7 +230,9 @@ function ManageRatesModal({
                 </tr>
 
                 <tr>
-                  <td className="p-3 font-medium text-slate-800">🇮🇳 (91) INDIA – IN</td>
+                  <td className="p-3 font-medium text-slate-800">
+                    🇮🇳 (91) INDIA – IN
+                  </td>
                   <td className="p-3 text-slate-600">Marketing</td>
                   <td className="p-3">
                     <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-semibold font-mono">
@@ -280,6 +292,7 @@ export default function UserManagementPage() {
 
   const [currentAdminId, setCurrentAdminId] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState("");
+  const [hasWhiteLabelBranding, setHasWhiteLabelBranding] = useState(true);
 
   const [wabaChannels, setWabaChannels] = useState<any[]>([]);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -335,6 +348,7 @@ export default function UserManagementPage() {
 
   const normalizedRole = String(currentUserRole || "").trim().toUpperCase();
   const isSuperAdmin = normalizedRole === "SUPER_ADMIN";
+  const isWhiteLabelReseller = normalizedRole === "WHITE_LABEL_RESELLER";
 
   const sanitizeUsersForViewer = useCallback(
     (list: any[]) => {
@@ -371,7 +385,8 @@ export default function UserManagementPage() {
   useEffect(() => {
     const adminRole =
       localStorage.getItem("userRole") || localStorage.getItem("adminRole") || "";
-    const adminId = localStorage.getItem("userId") || localStorage.getItem("adminId") || "";
+    const adminId =
+      localStorage.getItem("userId") || localStorage.getItem("adminId") || "";
 
     if (adminRole) setCurrentUserRole(adminRole);
     if (adminId) setCurrentAdminId(adminId);
@@ -382,6 +397,13 @@ export default function UserManagementPage() {
         if (data && data.user) {
           if (data.user.id) setCurrentAdminId(data.user.id);
           if (data.user.role) setCurrentUserRole(data.user.role);
+          const cfg = data.user.whiteLabelConfig;
+          const brandingDone = Boolean(
+            cfg &&
+              (String(cfg.brandName || "").trim() ||
+                String(cfg.domain || "").trim())
+          );
+          setHasWhiteLabelBranding(brandingDone);
         }
       })
       .catch(() => {});
@@ -392,7 +414,10 @@ export default function UserManagementPage() {
   }, [fetchUsers]);
 
   const refreshSelectedUserFunds = async (userId: string) => {
-    const refRes = await fetch(`/api/admin/funds?userId=${encodeURIComponent(userId)}`);
+    const refRes = await fetch(
+      `/api/admin/funds?userId=${encodeURIComponent(userId)}`,
+      { credentials: "include", cache: "no-store" }
+    );
     const refData = await refRes.json();
     if (refData.success) {
       const nextActual = Number(refData.actualBalance ?? 0);
@@ -412,6 +437,15 @@ export default function UserManagementPage() {
           : prev
       );
     }
+  };
+
+  const handleOpenAddUserModal = () => {
+    if (isWhiteLabelReseller && !hasWhiteLabelBranding) {
+      alert("Please fill your Site Branding information before creating a user.");
+      router.push("/admin/branding");
+      return;
+    }
+    setShowAddUserModal(true);
   };
 
   const handleSuggestionSelect = (user: any) => {
@@ -548,7 +582,10 @@ export default function UserManagementPage() {
 
   useEffect(() => {
     if (selectedUser?.id) {
-      fetch(`/api/admin/funds?userId=${encodeURIComponent(selectedUser.id)}`)
+      fetch(`/api/admin/funds?userId=${encodeURIComponent(selectedUser.id)}`, {
+        credentials: "include",
+        cache: "no-store",
+      })
         .then((res) => res.json())
         .then((data) => {
           if (data.success) {
@@ -559,7 +596,10 @@ export default function UserManagementPage() {
         })
         .catch((err) => console.error("Error loading user funds:", err));
 
-      fetch(`/api/admin/waba-accounts?userId=${encodeURIComponent(selectedUser.id)}`)
+      fetch(
+        `/api/admin/waba-accounts?userId=${encodeURIComponent(selectedUser.id)}`,
+        { credentials: "include", cache: "no-store" }
+      )
         .then((res) => res.json())
         .then((data) => {
           if (data.success || Array.isArray(data)) {
@@ -567,28 +607,7 @@ export default function UserManagementPage() {
           }
         })
         .catch(() => {
-          setWabaChannels([
-            {
-              id: "1",
-              wabaNumber: "17118223955",
-              phoneId: "1392605743942712",
-              wabaId: "1606011797347774",
-              displayName: "El Royal Restaurant",
-              configureDate: "02 Nov 2026 11:40:39 AM",
-              webhookUrl: "NA",
-              tps: 50,
-            },
-            {
-              id: "2",
-              wabaNumber: "17114127744",
-              phoneId: "1403660482826321",
-              wabaId: "1415443286878597",
-              displayName: "Arvind Seth",
-              configureDate: "19 Oct 2026 11:32:15 AM",
-              webhookUrl: "NA",
-              tps: 50,
-            },
-          ]);
+          setWabaChannels([]);
         });
     }
   }, [selectedUser?.id]);
@@ -599,6 +618,7 @@ export default function UserManagementPage() {
       const res = await fetch("/api/admin/impersonate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ userId: selectedUser.id }),
       });
       const data = await res.json();
@@ -606,7 +626,7 @@ export default function UserManagementPage() {
         alert(`Logging in as ${selectedUser.name || selectedUser.username}...`);
         window.location.href = data.redirectUrl || "/dashboard";
       } else {
-        alert("Failed to login as user: " + data.message);
+        alert("Failed to login as user: " + (data.message || data.error));
       }
     } catch (err) {
       console.error("Error impersonating user:", err);
@@ -619,6 +639,7 @@ export default function UserManagementPage() {
       const res = await fetch("/api/admin/update-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           userId: selectedUser.id,
           name: formData.name,
@@ -634,7 +655,7 @@ export default function UserManagementPage() {
         alert("User settings updated successfully!");
         fetchUsers();
       } else {
-        alert("Failed to update: " + result.message);
+        alert("Failed to update: " + (result.message || result.error));
       }
     } catch (err) {
       console.error("Error updating user:", err);
@@ -650,6 +671,7 @@ export default function UserManagementPage() {
       const res = await fetch("/api/admin/update-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           userId: selectedUser.id,
           whatsappApiEnabled: whatsappSettings.whatsappApiEnabled,
@@ -663,7 +685,10 @@ export default function UserManagementPage() {
         alert("✅ WhatsApp Account Settings saved successfully!");
         fetchUsers();
       } else {
-        alert("❌ Failed to save settings: " + (data.message || "Unknown error"));
+        alert(
+          "❌ Failed to save settings: " +
+            (data.message || data.error || "Unknown error")
+        );
       }
     } catch (err) {
       console.error("Error saving whatsapp settings:", err);
@@ -676,7 +701,9 @@ export default function UserManagementPage() {
 
     if (
       !confirm(
-        `Are you sure you want to permanently delete "${selectedUser.name || selectedUser.username}"?`
+        `Are you sure you want to permanently delete "${
+          selectedUser.name || selectedUser.username
+        }"?`
       )
     )
       return;
@@ -685,6 +712,7 @@ export default function UserManagementPage() {
       const res = await fetch("/api/admin/users/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           userId: selectedUser.id,
           requesterId: currentAdminId || undefined,
@@ -698,7 +726,10 @@ export default function UserManagementPage() {
         setSearchQuery("");
         fetchUsers();
       } else {
-        alert(data.error || "Access Denied: You do not have permission to delete accounts.");
+        alert(
+          data.error ||
+            "Access Denied: You do not have permission to delete accounts."
+        );
       }
     } catch (err) {
       console.error("Delete error:", err);
@@ -725,6 +756,7 @@ export default function UserManagementPage() {
       const res = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
       });
       const data = await res.json();
@@ -760,7 +792,9 @@ export default function UserManagementPage() {
           <div className="text-[11px] text-slate-400 font-medium">
             Admin Home › User Management
           </div>
-          <h1 className="text-xl font-bold text-slate-900 mt-0.5">Manage User</h1>
+          <h1 className="text-xl font-bold text-slate-900 mt-0.5">
+            Manage User
+          </h1>
         </div>
         <Link
           href="/admin"
@@ -792,8 +826,12 @@ export default function UserManagementPage() {
                     className="p-3 hover:bg-emerald-50/70 cursor-pointer flex justify-between items-center"
                   >
                     <div>
-                      <div className="font-bold text-slate-800">{u.username || u.name}</div>
-                      <div className="text-[10px] text-slate-400">{u.email}</div>
+                      <div className="font-bold text-slate-800">
+                        {u.username || u.name}
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {u.email}
+                      </div>
                     </div>
                     <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-bold">
                       {u.role || "USER"}
@@ -816,7 +854,7 @@ export default function UserManagementPage() {
 
         <button
           type="button"
-          onClick={() => setShowAddUserModal(true)}
+          onClick={handleOpenAddUserModal}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-2xs cursor-pointer text-xs transition"
         >
           + Add User
@@ -828,8 +866,8 @@ export default function UserManagementPage() {
           <div className="text-4xl">🔍</div>
           <h3 className="text-sm font-bold text-slate-800">No User Selected</h3>
           <p className="text-slate-400 max-w-sm mx-auto">
-            Search for a White-Label Reseller, Reseller, or User by typing their username,
-            email, or mobile number above.
+            Search for a White-Label Reseller, Reseller, or User by typing their
+            username, email, or mobile number above.
           </p>
         </div>
       ) : (
@@ -880,20 +918,28 @@ export default function UserManagementPage() {
               <div className="lg:col-span-3 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="block font-semibold text-slate-700">User Name</label>
+                    <label className="block font-semibold text-slate-700">
+                      User Name
+                    </label>
                     <input
                       type="text"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
                       className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:bg-white focus:outline-none"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block font-semibold text-slate-700">Account Status</label>
+                    <label className="block font-semibold text-slate-700">
+                      Account Status
+                    </label>
                     <select
                       value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, status: e.target.value })
+                      }
                       className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:outline-none font-medium"
                     >
                       <option value="Active">Active</option>
@@ -902,7 +948,9 @@ export default function UserManagementPage() {
                   </div>
 
                   <div className="md:col-span-2 space-y-1">
-                    <label className="block font-semibold text-slate-700">API Key</label>
+                    <label className="block font-semibold text-slate-700">
+                      API Key
+                    </label>
                     <input
                       type="text"
                       readOnly
@@ -912,25 +960,37 @@ export default function UserManagementPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block font-semibold text-slate-700">Account Type</label>
+                    <label className="block font-semibold text-slate-700">
+                      Account Type
+                    </label>
                     <select
                       value={formData.role}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, role: e.target.value })
+                      }
                       className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:outline-none font-medium"
                     >
-                      {isSuperAdmin && <option value="SUPER_ADMIN">Super Admin</option>}
-                      <option value="WHITE_LABEL_RESELLER">White Label Reseller</option>
+                      {isSuperAdmin && (
+                        <option value="SUPER_ADMIN">Super Admin</option>
+                      )}
+                      <option value="WHITE_LABEL_RESELLER">
+                        White Label Reseller
+                      </option>
                       <option value="RESELLER">Reseller</option>
                       <option value="USER">User</option>
                     </select>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block font-semibold text-slate-700">Mobile Number</label>
+                    <label className="block font-semibold text-slate-700">
+                      Mobile Number
+                    </label>
                     <input
                       type="text"
                       value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, phone: e.target.value })
+                      }
                       className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:outline-none font-mono"
                     />
                   </div>
@@ -942,22 +1002,30 @@ export default function UserManagementPage() {
                     <input
                       type="date"
                       value={formData.expiryDate}
-                      onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, expiryDate: e.target.value })
+                      }
                       className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:outline-none"
                     />
                   </div>
 
                   <div className="space-y-2 md:col-span-2 border border-slate-200/80 p-4 rounded-xl bg-slate-50/60">
                     <div className="flex justify-between items-center mb-2">
-                      <label className="font-semibold text-slate-700">Password Management</label>
+                      <label className="font-semibold text-slate-700">
+                        Password Management
+                      </label>
                       <label className="flex items-center space-x-2 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={changePasswordToggle}
-                          onChange={(e) => setChangePasswordToggle(e.target.checked)}
+                          onChange={(e) =>
+                            setChangePasswordToggle(e.target.checked)
+                          }
                           className="toggle toggle-success"
                         />
-                        <span className="text-xs font-bold text-slate-600">Change Password?</span>
+                        <span className="text-xs font-bold text-slate-600">
+                          Change Password?
+                        </span>
                       </label>
                     </div>
 
@@ -977,6 +1045,7 @@ export default function UserManagementPage() {
                             const res = await fetch("/api/admin/update-user", {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
+                              credentials: "include",
                               body: JSON.stringify({
                                 userId: selectedUser.id,
                                 password: newPasswordInput,
@@ -1005,11 +1074,15 @@ export default function UserManagementPage() {
                   </div>
 
                   <div className="space-y-1 md:col-span-2">
-                    <label className="block font-semibold text-slate-700">Email Id</label>
+                    <label className="block font-semibold text-slate-700">
+                      Email Id
+                    </label>
                     <input
                       type="email"
                       value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
                       className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:outline-none"
                     />
                   </div>
@@ -1101,7 +1174,9 @@ export default function UserManagementPage() {
                 {whatsappSubTab === "channelList" && (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                      <h3 className="font-bold text-slate-800 text-sm">Channel List</h3>
+                      <h3 className="font-bold text-slate-800 text-sm">
+                        Channel List
+                      </h3>
                     </div>
                     <div className="overflow-x-auto rounded-xl border border-slate-200/80">
                       <table className="w-full text-left border-collapse">
@@ -1120,7 +1195,10 @@ export default function UserManagementPage() {
                         <tbody className="divide-y divide-slate-100">
                           {wabaChannels.length === 0 ? (
                             <tr>
-                              <td colSpan={8} className="p-8 text-center text-slate-400">
+                              <td
+                                colSpan={8}
+                                className="p-8 text-center text-slate-400"
+                              >
                                 No channels found
                               </td>
                             </tr>
@@ -1134,9 +1212,9 @@ export default function UserManagementPage() {
                                   {selectedUser.username || selectedUser.name}
                                 </td>
                                 <td className="p-3 font-mono text-[11px] leading-relaxed">
-                                  WABA Number: {ch.wabaNumber || "17118223955"} <br />
-                                  Phone ID: {ch.phoneId || "1392605743942712"} <br />
-                                  Waba ID: {ch.wabaId || "1606011797347774"}
+                                  WABA Number: {ch.wabaNumber} <br />
+                                  Phone ID: {ch.phoneId} <br />
+                                  Waba ID: {ch.wabaId}
                                 </td>
                                 <td className="p-3">
                                   <span className="bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full text-[10px] font-semibold">
@@ -1144,20 +1222,26 @@ export default function UserManagementPage() {
                                   </span>
                                 </td>
                                 <td className="p-3 font-semibold text-slate-800">
-                                  {ch.displayName || "Active-08"}
+                                  {ch.displayName || "Verified Account"}
                                 </td>
                                 <td className="p-3 font-mono text-[11px] text-slate-500">
-                                  {ch.configureDate || "02 Nov 2026 11:40:39 AM"}
+                                  {ch.configureDate || "N/A"}
                                 </td>
-                                <td className="p-3 text-slate-500">{ch.webhookUrl || "NA"}</td>
-                                <td className="p-3 font-bold text-slate-800">{ch.tps || 50}</td>
+                                <td className="p-3 text-slate-500">
+                                  {ch.webhookUrl || "NA"}
+                                </td>
+                                <td className="p-3 font-bold text-slate-800">
+                                  {ch.tps || 50}
+                                </td>
                                 <td className="p-3 text-right space-x-1 whitespace-nowrap">
                                   <button
                                     type="button"
                                     onClick={() => {
                                       setSelectedChannel(ch);
                                       setWebhookUrlInput(
-                                        ch.webhookUrl === "NA" ? "" : ch.webhookUrl
+                                        ch.webhookUrl === "NA"
+                                          ? ""
+                                          : ch.webhookUrl
                                       );
                                       setTpsInput(ch.tps || "50");
                                       setShowConfigModal(true);
@@ -1186,14 +1270,6 @@ export default function UserManagementPage() {
                                   >
                                     🔑
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => alert("Chat / Session active")}
-                                    className="p-1.5 bg-green-50 text-green-600 rounded border hover:bg-green-100 font-bold cursor-pointer"
-                                    title="Chat Control"
-                                  >
-                                    C
-                                  </button>
                                 </td>
                               </tr>
                             ))
@@ -1211,7 +1287,9 @@ export default function UserManagementPage() {
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="flex items-center justify-between border border-slate-200 p-4 rounded-xl bg-slate-50">
-                        <span className="font-semibold text-slate-700">WhatsApp API Enabled</span>
+                        <span className="font-semibold text-slate-700">
+                          WhatsApp API Enabled
+                        </span>
                         <input
                           type="checkbox"
                           checked={whatsappSettings.whatsappApiEnabled}
@@ -1241,7 +1319,9 @@ export default function UserManagementPage() {
                         />
                       </div>
                       <div className="flex items-center justify-between border border-slate-200 p-4 rounded-xl bg-slate-50">
-                        <span className="font-semibold text-slate-700">Secure Reporting</span>
+                        <span className="font-semibold text-slate-700">
+                          Secure Reporting
+                        </span>
                         <input
                           type="checkbox"
                           checked={whatsappSettings.secureReporting}
@@ -1255,7 +1335,9 @@ export default function UserManagementPage() {
                         />
                       </div>
                       <div className="flex items-center justify-between border border-slate-200 p-4 rounded-xl bg-slate-50">
-                        <span className="font-semibold text-slate-700">International Account</span>
+                        <span className="font-semibold text-slate-700">
+                          International Account
+                        </span>
                         <input
                           type="checkbox"
                           checked={whatsappSettings.internationalAccount}
@@ -1340,13 +1422,18 @@ export default function UserManagementPage() {
                   <tbody className="divide-y divide-slate-100">
                     {transactions.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-slate-400">
+                        <td
+                          colSpan={6}
+                          className="p-8 text-center text-slate-400"
+                        >
                           No data found
                         </td>
                       </tr>
                     ) : (
                       transactions.map((tx: any) => {
-                        const rawFromRole = String(tx.fromRole || "").trim().toUpperCase();
+                        const rawFromRole = String(tx.fromRole || "")
+                          .trim()
+                          .toUpperCase();
                         const displayFromUser =
                           !isSuperAdmin && rawFromRole === "SUPER_ADMIN"
                             ? "Parent Account"
@@ -1372,7 +1459,9 @@ export default function UserManagementPage() {
                             <td className="p-3 font-mono text-[11px] text-slate-500">
                               {new Date(tx.createdAt).toLocaleString()}
                             </td>
-                            <td className="p-3 text-slate-600">{tx.description}</td>
+                            <td className="p-3 text-slate-600">
+                              {tx.description}
+                            </td>
                           </tr>
                         );
                       })
@@ -1399,7 +1488,9 @@ export default function UserManagementPage() {
                     key={idx}
                     className="flex justify-between items-center border border-slate-200 p-3 rounded-xl bg-slate-50"
                   >
-                    <span className="font-semibold text-slate-700">{setting}</span>
+                    <span className="font-semibold text-slate-700">
+                      {setting}
+                    </span>
                     <input
                       type="checkbox"
                       defaultChecked
@@ -1439,7 +1530,9 @@ export default function UserManagementPage() {
 
               <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/60 space-y-3">
                 <div className="flex justify-between items-center">
-                  <h4 className="font-bold text-slate-700">Whitelisted Numbers</h4>
+                  <h4 className="font-bold text-slate-700">
+                    Whitelisted Numbers
+                  </h4>
                   <button
                     type="button"
                     onClick={() => setShowWhitelistModal(true)}
@@ -1459,7 +1552,10 @@ export default function UserManagementPage() {
                   <tbody className="divide-y font-mono">
                     {whitelistNumbers.length === 0 ? (
                       <tr>
-                        <td colSpan={2} className="p-4 text-center text-slate-400 font-sans">
+                        <td
+                          colSpan={2}
+                          className="p-4 text-center text-slate-400 font-sans"
+                        >
                           No Whitelisted numbers found
                         </td>
                       </tr>
@@ -1471,7 +1567,9 @@ export default function UserManagementPage() {
                             <button
                               type="button"
                               onClick={() =>
-                                setWhitelistNumbers(whitelistNumbers.filter((_, i) => i !== idx))
+                                setWhitelistNumbers(
+                                  whitelistNumbers.filter((_, i) => i !== idx)
+                                )
                               }
                               className="text-rose-600 font-bold text-[11px] cursor-pointer"
                             >
@@ -1494,7 +1592,9 @@ export default function UserManagementPage() {
         <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">Add Whitelisted Number</h3>
+              <h3 className="text-base font-bold text-slate-900">
+                Add Whitelisted Number
+              </h3>
               <button
                 type="button"
                 onClick={() => setShowWhitelistModal(false)}
@@ -1561,7 +1661,9 @@ export default function UserManagementPage() {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-600">Webhook URL</label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Webhook URL
+                </label>
                 <input
                   type="text"
                   value={webhookUrlInput}
@@ -1571,7 +1673,9 @@ export default function UserManagementPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600">TPS</label>
+                <label className="text-xs font-semibold text-slate-600">
+                  TPS
+                </label>
                 <input
                   type="number"
                   value={tpsInput}
@@ -1608,7 +1712,9 @@ export default function UserManagementPage() {
         <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
             <div className="text-3xl">🔑</div>
-            <h3 className="text-base font-bold text-slate-900">Are you sure?</h3>
+            <h3 className="text-base font-bold text-slate-900">
+              Are you sure?
+            </h3>
             <p className="text-xs text-slate-600">
               Do you really want to call Register API against this number?
             </p>
@@ -1627,6 +1733,7 @@ export default function UserManagementPage() {
                     const res = await fetch("/api/admin/waba-accounts/register", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
+                      credentials: "include",
                       body: JSON.stringify({
                         wabaNumber: selectedChannel?.wabaNumber,
                         phoneId: selectedChannel?.phoneId,
@@ -1659,8 +1766,12 @@ export default function UserManagementPage() {
         <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
             <div className="text-3xl">⚠️</div>
-            <h3 className="text-base font-bold text-slate-900">Are you sure?</h3>
-            <p className="text-xs text-slate-600">Do you really want to delete this channel?</p>
+            <h3 className="text-base font-bold text-slate-900">
+              Are you sure?
+            </h3>
+            <p className="text-xs text-slate-600">
+              Do you really want to delete this channel?
+            </p>
             <div className="flex justify-center space-x-3 pt-3 border-t border-slate-100">
               <button
                 type="button"
@@ -1706,8 +1817,9 @@ export default function UserManagementPage() {
         <ManageRatesModal
           user={selectedUser}
           onClose={() => setShowRateModal(false)}
-          onSuccess={() => {
+          onSuccess={async () => {
             setShowRateModal(false);
+            await fetchUsers();
           }}
         />
       )}
@@ -1716,7 +1828,9 @@ export default function UserManagementPage() {
         <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">Add New User</h3>
+              <h3 className="text-base font-bold text-slate-900">
+                Add New User
+              </h3>
               <button
                 type="button"
                 onClick={() => setShowAddUserModal(false)}
@@ -1728,31 +1842,41 @@ export default function UserManagementPage() {
 
             <form onSubmit={handleCreateUserSubmit} className="space-y-3.5">
               <div>
-                <label className="text-xs font-semibold text-slate-600">User Name</label>
+                <label className="text-xs font-semibold text-slate-600">
+                  User Name
+                </label>
                 <input
                   type="text"
                   placeholder="Enter User Name"
                   value={newUserData.username}
-                  onChange={(e) => setNewUserData({ ...newUserData, username: e.target.value })}
+                  onChange={(e) =>
+                    setNewUserData({ ...newUserData, username: e.target.value })
+                  }
                   className="w-full border border-slate-300 rounded-xl p-2.5 text-xs mt-1 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600">Password</label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Password
+                </label>
                 <div className="relative mt-1">
                   <input
                     type={showNewUserPassword ? "text" : "password"}
                     placeholder="Enter Password"
                     value={newUserData.password}
-                    onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
+                    onChange={(e) =>
+                      setNewUserData({ ...newUserData, password: e.target.value })
+                    }
                     className="w-full border border-slate-300 rounded-xl p-2.5 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono pr-10"
                     required
                   />
                   <button
                     type="button"
-                    onClick={() => setShowNewUserPassword(!showNewUserPassword)}
+                    onClick={() =>
+                      setShowNewUserPassword(!showNewUserPassword)
+                    }
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 text-sm cursor-pointer"
                   >
                     {showNewUserPassword ? "👁️‍🗨️" : "👁️"}
@@ -1761,50 +1885,71 @@ export default function UserManagementPage() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600">Mobile Number</label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Mobile Number
+                </label>
                 <input
                   type="text"
                   placeholder="Enter Mobile Number"
                   value={newUserData.phone}
-                  onChange={(e) => setNewUserData({ ...newUserData, phone: e.target.value })}
+                  onChange={(e) =>
+                    setNewUserData({ ...newUserData, phone: e.target.value })
+                  }
                   className="w-full border border-slate-300 rounded-xl p-2.5 text-xs mt-1 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600">Mail Id</label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Mail Id
+                </label>
                 <input
                   type="email"
                   placeholder="Enter Email Address"
                   value={newUserData.email}
-                  onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
+                  onChange={(e) =>
+                    setNewUserData({ ...newUserData, email: e.target.value })
+                  }
                   className="w-full border border-slate-300 rounded-xl p-2.5 text-xs mt-1 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600">Account Expiry Date</label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Account Expiry Date
+                </label>
                 <input
                   type="date"
                   value={newUserData.expiryDate}
-                  onChange={(e) => setNewUserData({ ...newUserData, expiryDate: e.target.value })}
+                  onChange={(e) =>
+                    setNewUserData({
+                      ...newUserData,
+                      expiryDate: e.target.value,
+                    })
+                  }
                   className="w-full border border-slate-300 rounded-xl p-2.5 text-xs mt-1 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600">Account Type</label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Account Type
+                </label>
                 <select
                   value={newUserData.role}
-                  onChange={(e) => setNewUserData({ ...newUserData, role: e.target.value })}
+                  onChange={(e) =>
+                    setNewUserData({ ...newUserData, role: e.target.value })
+                  }
                   className="w-full border border-slate-300 rounded-xl p-2.5 text-xs mt-1 bg-slate-50 focus:outline-none focus:border-emerald-500 font-medium"
                 >
                   <option value="USER">User</option>
                   <option value="RESELLER">Reseller</option>
-                  <option value="WHITE_LABEL_RESELLER">White Label Reseller</option>
+                  <option value="WHITE_LABEL_RESELLER">
+                    White Label Reseller
+                  </option>
                 </select>
               </div>
 
@@ -1819,19 +1964,27 @@ export default function UserManagementPage() {
                       placeholder="e.g. waba.clientbrand.com"
                       value={newUserData.customDomain}
                       onChange={(e) =>
-                        setNewUserData({ ...newUserData, customDomain: e.target.value })
+                        setNewUserData({
+                          ...newUserData,
+                          customDomain: e.target.value,
+                        })
                       }
                       className="w-full border border-emerald-300 rounded-xl p-2 text-xs mt-1 bg-white font-mono"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-emerald-900">Brand Name</label>
+                    <label className="text-xs font-semibold text-emerald-900">
+                      Brand Name
+                    </label>
                     <input
                       type="text"
                       placeholder="Client Brand Name"
                       value={newUserData.brandName}
                       onChange={(e) =>
-                        setNewUserData({ ...newUserData, brandName: e.target.value })
+                        setNewUserData({
+                          ...newUserData,
+                          brandName: e.target.value,
+                        })
                       }
                       className="w-full border border-emerald-300 rounded-xl p-2 text-xs mt-1 bg-white"
                     />

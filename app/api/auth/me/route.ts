@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 const JWT_SECRET =
   process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
 
@@ -103,8 +105,6 @@ export async function GET() {
     const rawWallet = Number(user.walletBalance ?? user.actualBalance ?? 0);
     const rawVirtual = Number(user.virtualBalance ?? 0);
 
-    // Super Admin keeps fixed 123456789 across actual & virtual balances.
-    // Normal USER merges virtual balance into walletBalance.
     const effectiveWalletBalance = isSuperAdmin
       ? SUPER_ADMIN_FIXED_BALANCE
       : normalizedRole === "USER"
@@ -131,7 +131,7 @@ export async function GET() {
       },
       { headers: NO_STORE_HEADERS }
     );
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, user: null, error: "Invalid token or session expired" },
       { status: 401, headers: NO_STORE_HEADERS }

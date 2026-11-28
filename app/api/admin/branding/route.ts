@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 const JWT_SECRET =
   process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
 
@@ -73,7 +75,7 @@ function cleanDomainInput(input?: string | null): string {
     .replace(/^www\./, "");
 }
 
-// 1. GET: Fetch White-Label branding by userId, domain, or list all configs
+// 1. GET: Fetch White-Label branding by userId, domain, or list configs
 export async function GET(req: Request) {
   try {
     const actor = await getAuthenticatedActor();
@@ -101,7 +103,10 @@ export async function GET(req: Request) {
     if (userId) {
       if (!isSuperAdmin && userId !== actor.id) {
         return NextResponse.json(
-          { success: false, error: "Forbidden: You can only view your own branding" },
+          {
+            success: false,
+            error: "Forbidden: You can only view your own branding",
+          },
           { status: 403 }
         );
       }
@@ -110,7 +115,13 @@ export async function GET(req: Request) {
         where: { userId },
         include: {
           user: {
-            select: { id: true, name: true, username: true, email: true, role: true },
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              email: true,
+              role: true,
+            },
           },
         },
       });
@@ -122,16 +133,19 @@ export async function GET(req: Request) {
         where: { domain: { equals: domain, mode: "insensitive" } },
         include: {
           user: {
-            select: { id: true, name: true, username: true, email: true, role: true },
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              email: true,
+              role: true,
+            },
           },
         },
       });
 
       if (config && !isSuperAdmin && config.userId !== actor.id) {
-        return NextResponse.json(
-          { success: false, error: "Forbidden: Branding outside your account scope" },
-          { status: 403 }
-        );
+        return NextResponse.json({ success: true, config: null });
       }
 
       return NextResponse.json({ success: true, config });
@@ -142,7 +156,13 @@ export async function GET(req: Request) {
       orderBy: { createdAt: "desc" },
       include: {
         user: {
-          select: { id: true, name: true, username: true, email: true, role: true },
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            email: true,
+            role: true,
+          },
         },
       },
     });
@@ -155,7 +175,10 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("Error fetching white-label branding:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to load branding settings" },
+      {
+        success: false,
+        error: error.message || "Failed to load branding settings",
+      },
       { status: 500 }
     );
   }
@@ -179,7 +202,8 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "Forbidden: Only Super Admin and White-Label Resellers can configure branding",
+          error:
+            "Forbidden: Only Super Admin and White-Label Resellers can configure branding",
         },
         { status: 403 }
       );
@@ -235,13 +259,16 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "Forbidden: You can only update your own White-Label branding",
+          error:
+            "Forbidden: You can only update your own White-Label branding",
         },
         { status: 403 }
       );
     }
 
-    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    const targetUser = await prisma.user.findUnique({
+      where: { id: targetUserId },
+    });
     if (!targetUser) {
       return NextResponse.json(
         { success: false, error: "Target user not found" },
@@ -251,7 +278,10 @@ export async function POST(req: Request) {
 
     if (!isSuperAdmin && normalizeRole(targetUser.role) === "SUPER_ADMIN") {
       return NextResponse.json(
-        { success: false, error: "Forbidden: Cannot modify Super Admin branding" },
+        {
+          success: false,
+          error: "Forbidden: Cannot modify Super Admin branding",
+        },
         { status: 403 }
       );
     }
@@ -261,7 +291,10 @@ export async function POST(req: Request) {
     });
     if (existingByDomain && existingByDomain.userId !== targetUserId) {
       return NextResponse.json(
-        { success: false, error: "This domain is already assigned to another reseller" },
+        {
+          success: false,
+          error: "This domain is already assigned to another reseller",
+        },
         { status: 409 }
       );
     }
@@ -317,7 +350,10 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Error saving white-label branding:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to save branding settings" },
+      {
+        success: false,
+        error: error.message || "Failed to save branding settings",
+      },
       { status: 500 }
     );
   }
@@ -368,7 +404,10 @@ export async function DELETE(req: Request) {
   } catch (error: any) {
     console.error("Error deleting white-label branding:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to delete branding settings" },
+      {
+        success: false,
+        error: error.message || "Failed to delete branding settings",
+      },
       { status: 500 }
     );
   }

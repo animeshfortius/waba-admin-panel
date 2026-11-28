@@ -82,9 +82,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           });
         }
       })
-      .catch(() => {
-        // Keep default Fortius Infocom branding on lookup failure
-      });
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -101,9 +99,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           });
         }
       })
-      .catch(() => {
-        // Ignore if session endpoint not ready
-      })
+      .catch(() => {})
       .finally(() => {
         if (active) setSessionLoaded(true);
       });
@@ -115,7 +111,8 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
 
   const role = String(currentUser?.role || "USER").toUpperCase();
   const isSuperAdmin = role === "SUPER_ADMIN";
-  const isReseller = role === "RESELLER" || role === "WHITE_LABEL_RESELLER";
+  const isWhiteLabel = role === "WHITE_LABEL_RESELLER";
+  const isReseller = role === "RESELLER" || isWhiteLabel;
   const canViewActualBalance = isSuperAdmin || isReseller;
 
   const wl = currentUser?.whiteLabelConfig;
@@ -124,20 +121,19 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
       (String(wl?.brandName || "").trim() ||
         String(wl?.domain || wl?.customDomain || "").trim())
   );
-  const canManageUsers = isSuperAdmin || (isReseller && hasResellerBranding);
+  const canManageUsers =
+    isSuperAdmin || role === "RESELLER" || (isWhiteLabel && hasResellerBranding);
 
   useEffect(() => {
     if (!sessionLoaded) return;
 
     if (pathname?.startsWith("/admin")) {
-      // Normal USER ko kisi bhi /admin route par nahi jaane dena
       if (!isSuperAdmin && !isReseller) {
         router.replace("/");
         return;
       }
 
-      // Reseller ko sirf reseller tools par allow karein
-      if (isReseller) {
+      if (isReseller && !isSuperAdmin) {
         const resellerAllowed = [
           "/admin",
           "/admin/transfer",
@@ -145,7 +141,6 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           "/admin/client-list",
           "/admin/client-tree",
           "/admin/branding",
-          "/admin/white-label",
         ];
         const isAllowedPath = resellerAllowed.some(
           (p) => pathname === p || pathname.startsWith(`${p}/`)
@@ -155,14 +150,24 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           return;
         }
 
-        // Bina site branding ke user-management par jaane par branding page par bhejein
-        if (pathname.startsWith("/admin/user-management") && !hasResellerBranding) {
+        if (
+          isWhiteLabel &&
+          pathname.startsWith("/admin/user-management") &&
+          !hasResellerBranding
+        ) {
           router.replace("/admin/branding");
-          return;
         }
       }
     }
-  }, [sessionLoaded, pathname, isSuperAdmin, isReseller, hasResellerBranding, router]);
+  }, [
+    sessionLoaded,
+    pathname,
+    isSuperAdmin,
+    isReseller,
+    isWhiteLabel,
+    hasResellerBranding,
+    router,
+  ]);
 
   const brandTitle = branding.brandName || "Fortius Infocom";
   const initials =
@@ -205,14 +210,16 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
                 </Link>
               )}
 
-              {isReseller && (
+              {isReseller && !isSuperAdmin && (
                 <>
-                  <Link
-                    href="/admin/branding"
-                    className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
-                  >
-                    <span>🎨</span> Site Branding
-                  </Link>
+                  {isWhiteLabel && (
+                    <Link
+                      href="/admin/branding"
+                      className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
+                    >
+                      <span>🎨</span> Site Branding
+                    </Link>
+                  )}
 
                   {canManageUsers ? (
                     <Link
@@ -222,12 +229,12 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
                       <span>👥</span> Manage Users
                     </Link>
                   ) : (
-                    <span
-                      title="Configure and activate your Site Branding first to create users"
-                      className="bg-slate-100 text-slate-400 border border-slate-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 cursor-not-allowed select-none"
+                    <Link
+                      href="/admin/branding"
+                      className="bg-amber-50 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition"
                     >
-                      <span>🔒</span> Manage Users
-                    </span>
+                      <span>🎨</span> Complete Branding First
+                    </Link>
                   )}
 
                   <Link

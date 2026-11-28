@@ -5,6 +5,8 @@ import { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
+export const dynamic = "force-dynamic";
+
 const JWT_SECRET =
   process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
 
@@ -34,13 +36,15 @@ function normalizeRole(
 async function getAuthenticatedActor() {
   const cookieStore = await cookies();
   const token =
-    cookieStore.get("token")?.value || cookieStore.get("auth_token")?.value;
+    cookieStore.get("token")?.value ||
+    cookieStore.get("waba_token")?.value ||
+    cookieStore.get("auth_token")?.value;
 
   if (!token) return null;
 
   try {
     const decoded: any = jwt.verify(token, JWT_SECRET);
-    const actorId = decoded.userId || decoded.id;
+    const actorId = decoded.userId || decoded.id || decoded.sub;
     if (!actorId) return null;
 
     if (actorId === "emergency-admin-id") {
@@ -72,7 +76,6 @@ async function getAuthenticatedActor() {
   }
 }
 
-// 1. GET: Fetch users scoped by role (SUPER_ADMIN sees all; RESELLER / WHITE_LABEL_RESELLER sees own users)
 export async function GET(req: Request) {
   try {
     const actor = await getAuthenticatedActor();
@@ -155,10 +158,14 @@ export async function GET(req: Request) {
     const safeUsers = isSuperAdmin
       ? users
       : users.filter(
-          (u: any) => String(u?.role || "").trim().toUpperCase() !== "SUPER_ADMIN"
+          (u: any) =>
+            String(u?.role || "").trim().toUpperCase() !== "SUPER_ADMIN"
         );
 
-    return NextResponse.json({ success: true, users: safeUsers }, { status: 200 });
+    return NextResponse.json(
+      { success: true, users: safeUsers },
+      { status: 200 }
+    );
   } catch (error: any) {
     console.error("Error fetching users:", error);
     return NextResponse.json(
@@ -168,7 +175,6 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST: Create a new User, Reseller, or White-Label Reseller
 export async function POST(req: Request) {
   try {
     const actor = await getAuthenticatedActor();
@@ -234,7 +240,7 @@ export async function POST(req: Request) {
       );
     }
 
-    let assignedRole = normalizeRole(role);
+    const assignedRole = normalizeRole(role);
 
     if (isReseller && assignedRole === "SUPER_ADMIN") {
       return NextResponse.json(
@@ -287,7 +293,7 @@ export async function POST(req: Request) {
         },
       });
 
-      if (isWhiteLabel && (cleanDomain || cleanBrandName)) {
+      if (isWhiteLabel && cleanDomain) {
         await tx.whiteLabelConfig.create({
           data: {
             userId: created.id,

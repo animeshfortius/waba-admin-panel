@@ -22,6 +22,7 @@ interface UserMetaReport {
   role: string;
   apiKey?: string;
   walletBalance: number;
+  actualBalance?: number;
   wabaCount: number;
   wabas: WabaDetail[];
   metrics: {
@@ -35,6 +36,16 @@ interface UserMetaReport {
     spend: number;
   };
 }
+
+const INITIAL_TOTALS = {
+  totalUsers: 0,
+  totalWabas: 0,
+  sent: 0,
+  delivered: 0,
+  read: 0,
+  failed: 0,
+  spend: 0,
+};
 
 function getDateStringWithOffset(offsetDays = 0) {
   const d = new Date(Date.now() - offsetDays * 24 * 60 * 60 * 1000);
@@ -89,18 +100,20 @@ function getStatusBadgeStyle(status: string) {
   return "bg-amber-50 text-amber-700 border-amber-200";
 }
 
+function getAccountBalanceValue(item: UserMetaReport): number {
+  const roleUpper = String(item.role || "").trim().toUpperCase();
+  const isResellerRole =
+    roleUpper === "RESELLER" || roleUpper === "WHITE_LABEL_RESELLER";
+  if (isResellerRole && typeof item.actualBalance === "number") {
+    return Number(item.actualBalance);
+  }
+  return Number(item.walletBalance ?? 0);
+}
+
 export default function AdminMetaReportsDashboard() {
   const [viewerRole, setViewerRole] = useState<string>("SUPER_ADMIN");
   const [reports, setReports] = useState<UserMetaReport[]>([]);
-  const [totals, setTotals] = useState({
-    totalUsers: 0,
-    totalWabas: 0,
-    sent: 0,
-    delivered: 0,
-    read: 0,
-    failed: 0,
-    spend: 0,
-  });
+  const [totals, setTotals] = useState(INITIAL_TOTALS);
   const [days, setDays] = useState<number>(7);
   const [isCustomRange, setIsCustomRange] = useState<boolean>(false);
   const [fromDate, setFromDate] = useState<string>("");
@@ -197,7 +210,7 @@ export default function AdminMetaReportsDashboard() {
               );
 
           setReports(safeReports);
-          setTotals(data.totals || totals);
+          setTotals(data.totals || INITIAL_TOTALS);
           setLastSyncedAt(
             new Date().toLocaleTimeString("en-IN", {
               hour: "2-digit",
@@ -213,15 +226,7 @@ export default function AdminMetaReportsDashboard() {
         setSyncing(false);
       }
     },
-    [
-      days,
-      fromDate,
-      isCustomRange,
-      isSuperAdminViewer,
-      selectedUser,
-      toDate,
-      totals,
-    ]
+    [days, fromDate, isCustomRange, isSuperAdminViewer, selectedUser, toDate]
   );
 
   useEffect(() => {
@@ -316,7 +321,7 @@ export default function AdminMetaReportsDashboard() {
       "Read Rate",
       "Failed",
       "Spend (INR)",
-      "Wallet Balance (INR)",
+      "Balance (INR)",
     ];
 
     const rows = filteredReports.map((r) => [
@@ -343,7 +348,7 @@ export default function AdminMetaReportsDashboard() {
       getPercent(r.metrics.read, r.metrics.delivered || r.metrics.sent),
       r.metrics.failed,
       r.metrics.spend.toFixed(2),
-      r.walletBalance.toFixed(2),
+      getAccountBalanceValue(r).toFixed(2),
     ]);
 
     const rangeLabel = isCustomRange ? `${fromDate}_to_${toDate}` : `${days}d`;
@@ -375,7 +380,6 @@ export default function AdminMetaReportsDashboard() {
 
   return (
     <div className="p-6 space-y-6 bg-slate-50/90 min-h-screen">
-      {/* Top Executive Header */}
       <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-4">
         <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
           <div className="space-y-1">
@@ -396,7 +400,7 @@ export default function AdminMetaReportsDashboard() {
               Global Meta WABA Reports & Account Health
             </h1>
             <p className="text-xs text-slate-500">
-              Complete user-wise visibility into panel API keys, connected WhatsApp Business Accounts, phone quality, messaging tiers, message delivery & wallet balances.
+              User-wise visibility into panel API keys, connected WhatsApp Business Accounts, quality ratings, message delivery & balances.
             </p>
           </div>
 
@@ -447,7 +451,6 @@ export default function AdminMetaReportsDashboard() {
           </div>
         </div>
 
-        {/* Custom Range Picker Bar */}
         {isCustomRange && (
           <form
             onSubmit={handleApplyCustomRange}
@@ -491,7 +494,6 @@ export default function AdminMetaReportsDashboard() {
         )}
       </div>
 
-      {/* KPI Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs">
           <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
@@ -566,7 +568,6 @@ export default function AdminMetaReportsDashboard() {
         </div>
       </div>
 
-      {/* Search, User, Quality & Page Size Toolbar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col xl:flex-row gap-3 items-stretch xl:items-center justify-between">
         <div className="flex-1 max-w-md">
           <input
@@ -634,7 +635,6 @@ export default function AdminMetaReportsDashboard() {
         </div>
       )}
 
-      {/* Detailed User-Wise Meta Table */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -646,7 +646,7 @@ export default function AdminMetaReportsDashboard() {
                 <th className="p-4 text-right">Delivered</th>
                 <th className="p-4 text-right">Read</th>
                 <th className="p-4 text-right">Failed</th>
-                <th className="p-4 text-right">Spend / Wallet</th>
+                <th className="p-4 text-right">Spend / Balance</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
@@ -666,13 +666,13 @@ export default function AdminMetaReportsDashboard() {
                 paginatedReports.map((item) => {
                   const isRevealed = Boolean(revealedKeys[item.userId]);
                   const hasKey = Boolean(String(item.apiKey || "").trim());
+                  const displayBalance = getAccountBalanceValue(item);
 
                   return (
                     <tr
                       key={item.userId}
                       className="hover:bg-slate-50/70 transition-colors"
                     >
-                      {/* User Details + Panel API Key */}
                       <td className="p-4 align-top min-w-[235px] space-y-2">
                         <div>
                           <div className="font-bold text-slate-900 text-sm">
@@ -697,7 +697,6 @@ export default function AdminMetaReportsDashboard() {
                           </span>
                         </div>
 
-                        {/* Panel API Key Box */}
                         <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/90 space-y-1">
                           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                             Panel API Key
@@ -732,7 +731,6 @@ export default function AdminMetaReportsDashboard() {
                         </div>
                       </td>
 
-                      {/* WABA & Quality Details */}
                       <td className="p-4 align-top min-w-[320px] space-y-2">
                         {item.wabas.length === 0 ? (
                           <div className="p-2.5 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-[11px] text-slate-400 italic">
@@ -795,7 +793,6 @@ export default function AdminMetaReportsDashboard() {
                         )}
                       </td>
 
-                      {/* Sent */}
                       <td className="p-4 align-top text-right whitespace-nowrap">
                         <div className="font-extrabold text-slate-900 text-sm">
                           {formatNumber(item.metrics.sent)}
@@ -806,7 +803,6 @@ export default function AdminMetaReportsDashboard() {
                         </div>
                       </td>
 
-                      {/* Delivered */}
                       <td className="p-4 align-top text-right whitespace-nowrap">
                         <div className="font-extrabold text-emerald-600 text-sm">
                           {formatNumber(item.metrics.delivered)}
@@ -817,7 +813,6 @@ export default function AdminMetaReportsDashboard() {
                         </div>
                       </td>
 
-                      {/* Read */}
                       <td className="p-4 align-top text-right whitespace-nowrap">
                         <div className="font-extrabold text-sky-600 text-sm">
                           {formatNumber(item.metrics.read)}
@@ -830,7 +825,6 @@ export default function AdminMetaReportsDashboard() {
                         </div>
                       </td>
 
-                      {/* Failed */}
                       <td className="p-4 align-top text-right whitespace-nowrap">
                         <div className="font-extrabold text-rose-600 text-sm">
                           {formatNumber(item.metrics.failed)}
@@ -840,7 +834,6 @@ export default function AdminMetaReportsDashboard() {
                         </div>
                       </td>
 
-                      {/* Spend & Wallet */}
                       <td className="p-4 align-top text-right whitespace-nowrap">
                         <div className="font-mono font-bold text-slate-900">
                           {formatINR(item.metrics.spend)}
@@ -849,7 +842,7 @@ export default function AdminMetaReportsDashboard() {
                           Spend in range
                         </div>
                         <div className="font-mono text-[11px] font-bold text-emerald-700 mt-1.5 pt-1.5 border-t border-slate-100">
-                          Bal: {formatINR(item.walletBalance)}
+                          Bal: {formatINR(displayBalance)}
                         </div>
                       </td>
                     </tr>
@@ -860,7 +853,6 @@ export default function AdminMetaReportsDashboard() {
           </table>
         </div>
 
-        {/* Pagination Footer */}
         <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
           <div className="text-slate-600 font-medium">
             Showing{" "}

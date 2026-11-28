@@ -16,7 +16,7 @@ interface ClientRow {
   virtualBalance: number;
   createdAt?: string | null;
   expiryDate?: string | null;
-  status: string;
+  isActive: boolean;
 }
 
 function formatDateDisplay(val?: string | null, fallback = "N/A"): string {
@@ -45,24 +45,27 @@ export default function ClientListPage() {
 
   useEffect(() => {
     const fallbackRole =
-      localStorage.getItem("userRole") || localStorage.getItem("adminRole") || "SUPER_ADMIN";
+      localStorage.getItem("userRole") ||
+      localStorage.getItem("adminRole") ||
+      "SUPER_ADMIN";
     const fallbackId =
       localStorage.getItem("userId") || localStorage.getItem("adminId") || "";
 
     setCurrentUserRole(fallbackRole);
     setCurrentUserId(fallbackId);
 
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { cache: "no-store", credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.user) {
           if (data.user.id) setCurrentUserId(data.user.id);
-          if (data.user.role) setCurrentUserRole(String(data.user.role).toUpperCase());
+          if (data.user.role)
+            setCurrentUserRole(String(data.user.role).toUpperCase());
         }
       })
       .catch(() => {});
 
-    fetch("/api/admin/users")
+    fetch("/api/admin/users", { cache: "no-store", credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
         if (data?.success && Array.isArray(data.users)) {
@@ -79,7 +82,10 @@ export default function ClientListPage() {
             virtualBalance: Number(u.virtualBalance ?? 0),
             createdAt: u.createdAt || null,
             expiryDate: u.expiryDate || null,
-            status: "Active",
+            isActive:
+              u.isActive !== undefined
+                ? Boolean(u.isActive)
+                : String(u.status || "Active").toLowerCase() !== "inactive",
           }));
           setClients(formattedClients);
         }
@@ -88,11 +94,18 @@ export default function ClientListPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const normalizedRole = String(currentUserRole || "").toUpperCase();
+  const isSuperAdminViewer = normalizedRole === "SUPER_ADMIN";
+
   const visibleClients = useMemo(() => {
-    const normalizedRole = String(currentUserRole || "").toUpperCase();
     return clients.filter((c) => {
+      if (!isSuperAdminViewer && c.role === "SUPER_ADMIN") {
+        return false;
+      }
+
       if (isResellerRole(normalizedRole) && currentUserId) {
-        const isOwned = c.createdById === currentUserId || c.id === currentUserId;
+        const isOwned =
+          c.createdById === currentUserId || c.id === currentUserId;
         if (!isOwned) return false;
       }
 
@@ -112,15 +125,21 @@ export default function ClientListPage() {
 
       return true;
     });
-  }, [clients, currentUserRole, currentUserId, roleFilter, searchTerm]);
+  }, [clients, normalizedRole, isSuperAdminViewer, currentUserId, roleFilter, searchTerm]);
 
   const handleDeleteUser = async (userId: string) => {
-    if (!confirm("Kya aap sach mein is account ko permanently delete karna chahte hain?")) return;
+    if (
+      !confirm(
+        "Are you sure you want to permanently delete this user account?"
+      )
+    )
+      return;
 
     try {
       const res = await fetch("/api/admin/users/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           userId,
           requesterId: currentUserId,
@@ -132,11 +151,15 @@ export default function ClientListPage() {
         alert(data.message || "User deleted successfully.");
         setClients((prev) => prev.filter((c) => c.id !== userId));
       } else {
-        alert(data.error || data.message || "Aapke paas delete karne ki permission nahi hai.");
+        alert(
+          data.error ||
+            data.message ||
+            "You do not have permission to delete this account."
+        );
       }
     } catch (err) {
       console.error("Delete request failed:", err);
-      alert("Server se connect nahi ho paya.");
+      alert("Unable to connect to server.");
     }
   };
 
@@ -184,7 +207,9 @@ export default function ClientListPage() {
               className="border border-slate-300 rounded-xl px-3 py-1.5 bg-white text-xs font-semibold text-slate-700"
             >
               <option value="ALL">All Roles</option>
-              <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+              {isSuperAdminViewer && (
+                <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+              )}
               <option value="WHITE_LABEL_RESELLER">WHITE_LABEL_RESELLER</option>
               <option value="RESELLER">RESELLER</option>
               <option value="USER">USER</option>
@@ -224,7 +249,9 @@ export default function ClientListPage() {
                 visibleClients.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50/80 transition">
                     <td className="p-3.5">
-                      <div className="font-bold text-slate-800">{c.clientName}</div>
+                      <div className="font-bold text-slate-800">
+                        {c.clientName}
+                      </div>
                       {c.customDomain && (
                         <div className="text-[10px] font-mono text-indigo-600">
                           {c.customDomain}
@@ -232,7 +259,9 @@ export default function ClientListPage() {
                       )}
                     </td>
                     <td className="p-3.5 font-mono text-slate-700">
-                      {c.phone !== "N/A" ? `+${c.phone.replace(/^\+/, "")}` : "N/A"}
+                      {c.phone !== "N/A"
+                        ? `+${c.phone.replace(/^\+/, "")}`
+                        : "N/A"}
                     </td>
                     <td className="p-3.5 text-slate-600">{c.email}</td>
                     <td className="p-3.5">
@@ -249,9 +278,15 @@ export default function ClientListPage() {
                       </div>
                     </td>
                     <td className="p-3.5">
-                      <span className="text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                        ✔
-                      </span>
+                      {c.isActive ? (
+                        <span className="text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                          ✔
+                        </span>
+                      ) : (
+                        <span className="text-rose-700 font-bold bg-rose-50 border border-rose-200 px-2 py-0.5 rounded">
+                          ✕
+                        </span>
+                      )}
                     </td>
                     <td className="p-3.5 font-mono text-slate-500">
                       {formatDateDisplay(c.createdAt)}

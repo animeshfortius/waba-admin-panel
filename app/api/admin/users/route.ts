@@ -4,6 +4,10 @@ import jwt from "jsonwebtoken";
 import { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import {
+  getCreatorBrandingDefaults,
+  computeExpiryDateFromMonths,
+} from "@/lib/brandingDefaults";
 
 const JWT_SECRET =
   process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
@@ -293,6 +297,21 @@ export async function POST(req: Request) {
       }
     }
 
+    const defaults = await getCreatorBrandingDefaults(
+      parentId || (actor.id !== "emergency-admin-id" ? actor.id : null)
+    );
+
+    const initialWalletBalance = defaults.defaultWalletBalance;
+    const isCreatedReseller =
+      assignedRole === "RESELLER" || assignedRole === "WHITE_LABEL_RESELLER";
+
+    const resolvedExpiryDate =
+      expiryDate && String(expiryDate).trim()
+        ? String(expiryDate).trim()
+        : defaults.defaultValidityMonths
+        ? computeExpiryDateFromMonths(defaults.defaultValidityMonths)
+        : null;
+
     const cleanDomain = String(customDomain || "")
       .trim()
       .toLowerCase()
@@ -312,10 +331,25 @@ export async function POST(req: Request) {
           role: assignedRole as Role,
           isWhiteLabel,
           phone: phone ? String(phone).trim() : "",
-          expiryDate: expiryDate ? String(expiryDate) : null,
+          expiryDate: resolvedExpiryDate,
           createdById: parentId,
+          walletBalance: initialWalletBalance,
+          actualBalance: initialWalletBalance,
+          virtualBalance: isCreatedReseller ? initialWalletBalance : 0,
         },
       });
+
+      if (initialWalletBalance > 0) {
+        await tx.walletTransaction.create({
+          data: {
+            userId: created.id,
+            amount: initialWalletBalance,
+            type: "Default Opening Balance",
+            balanceType: isCreatedReseller ? "BOTH" : "ACTUAL",
+            description: `Default wallet balance ₹${initialWalletBalance} credited on account creation`,
+          },
+        });
+      }
 
       if (isWhiteLabel && cleanDomain) {
         await tx.whiteLabelConfig.create({
@@ -344,6 +378,8 @@ export async function POST(req: Request) {
         email: newUser.email,
         role: newUser.role,
         isWhiteLabel: newUser.isWhiteLabel,
+        walletBalance: newUser.walletBalance,
+        expiryDate: newUser.expiryDate,
       },
     });
   } catch (error: any) {

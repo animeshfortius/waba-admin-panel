@@ -5,8 +5,6 @@ import { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
-export const dynamic = "force-dynamic";
-
 const JWT_SECRET =
   process.env.JWT_SECRET || "fortius-super-secret-waba-key-2026";
 

@@ -28,6 +28,17 @@ function normalizeRole(rawRole?: string | null): ActorRole {
   return "USER";
 }
 
+function resolveUserBalance(u: any): number {
+  const actual = Number(u?.actualBalance ?? 0);
+  const wallet = Number(u?.walletBalance ?? 0);
+  const virtualBal = Number(u?.virtualBalance ?? 0);
+
+  if (Number.isFinite(actual) && actual !== 0) return actual;
+  if (Number.isFinite(wallet) && wallet !== 0) return wallet;
+  if (Number.isFinite(virtualBal) && virtualBal !== 0) return virtualBal;
+  return Number.isFinite(actual) ? actual : 0;
+}
+
 async function verifyReportActor() {
   const cookieStore = await cookies();
   const token =
@@ -277,11 +288,7 @@ export async function GET(req: Request) {
           metaDelivered > 0 ? metaDelivered : localDelivered;
         const effectiveRead = metaRead > 0 ? metaRead : localRead;
 
-        const actualVal = Number(
-          u.actualBalance !== undefined && u.actualBalance !== null
-            ? u.actualBalance
-            : u.walletBalance ?? 0
-        );
+        const resolvedBalance = Number(resolveUserBalance(u).toFixed(2));
 
         return {
           userId: u.id,
@@ -290,8 +297,9 @@ export async function GET(req: Request) {
           email: u.email,
           role: u.role,
           apiKey: u.apiKey,
-          actualBalance: Number(actualVal.toFixed(2)),
-          walletBalance: Number(actualVal.toFixed(2)),
+          actualBalance: resolvedBalance,
+          walletBalance: resolvedBalance,
+          virtualBalance: Number(Number(u.virtualBalance ?? 0).toFixed(2)),
           wabaCount: wabaDetails.length,
           wabas: wabaDetails,
           metrics: {

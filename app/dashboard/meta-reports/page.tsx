@@ -23,6 +23,7 @@ interface UserMetaReport {
   apiKey?: string;
   walletBalance: number;
   actualBalance?: number | null;
+  virtualBalance?: number | null;
   wabaCount: number;
   wabas: WabaDetail[];
   metrics: {
@@ -101,14 +102,14 @@ function getStatusBadgeStyle(status: string) {
 }
 
 function getAccountBalanceValue(item: UserMetaReport): number {
-  const roleUpper = String(item.role || "").trim().toUpperCase();
-  const isResellerRole =
-    roleUpper === "RESELLER" || roleUpper === "WHITE_LABEL_RESELLER";
-  if (isResellerRole && item.actualBalance !== undefined && item.actualBalance !== null) {
-    const parsedActual = Number(item.actualBalance);
-    return Number.isFinite(parsedActual) ? parsedActual : 0;
-  }
-  return Number(item.walletBalance ?? 0);
+  const actual = Number(item.actualBalance ?? 0);
+  const wallet = Number(item.walletBalance ?? 0);
+  const virtualBal = Number(item.virtualBalance ?? 0);
+
+  if (Number.isFinite(actual) && actual !== 0) return actual;
+  if (Number.isFinite(wallet) && wallet !== 0) return wallet;
+  if (Number.isFinite(virtualBal) && virtualBal !== 0) return virtualBal;
+  return Number.isFinite(actual) ? actual : 0;
 }
 
 export default function AdminMetaReportsDashboard() {

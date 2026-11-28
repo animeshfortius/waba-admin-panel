@@ -38,6 +38,16 @@ function formatINR(amount?: number): string {
   })}`;
 }
 
+function getUserInitials(name?: string | null, username?: string | null): string {
+  const source = String(name || username || "").trim();
+  if (!source) return "AN";
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase() || "AN";
+  }
+  return source.slice(0, 2).toUpperCase() || "AN";
+}
+
 export default function PanelLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -54,7 +64,10 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setDropdownOpen(false);
       }
     }
@@ -121,8 +134,6 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
       (String(wl?.brandName || "").trim() ||
         String(wl?.domain || wl?.customDomain || "").trim())
   );
-  const canManageUsers =
-    isSuperAdmin || role === "RESELLER" || (isWhiteLabel && hasResellerBranding);
 
   useEffect(() => {
     if (!sessionLoaded) return;
@@ -169,14 +180,9 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
     router,
   ]);
 
-  const brandTitle = branding.brandName || "Fortius Infocom";
-  const initials =
-    brandTitle
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join("") || "FI";
+  const displayName =
+    currentUser?.name || currentUser?.username || branding.brandName || "Account";
+  const initials = getUserInitials(currentUser?.name, currentUser?.username);
 
   const actualDisplay = formatINR(currentUser?.actualBalance);
   const virtualDisplay = formatINR(currentUser?.virtualBalance);
@@ -201,51 +207,6 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
 
           <div className="flex items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2.5">
-              {isSuperAdmin && (
-                <Link
-                  href="/admin"
-                  className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
-                >
-                  <span>⚙️</span> Admin
-                </Link>
-              )}
-
-              {isReseller && !isSuperAdmin && (
-                <>
-                  {isWhiteLabel && (
-                    <Link
-                      href="/admin/branding"
-                      className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
-                    >
-                      <span>🎨</span> Site Branding
-                    </Link>
-                  )}
-
-                  {canManageUsers ? (
-                    <Link
-                      href="/admin/user-management"
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
-                    >
-                      <span>👥</span> Manage Users
-                    </Link>
-                  ) : (
-                    <Link
-                      href="/admin/branding"
-                      className="bg-amber-50 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition"
-                    >
-                      <span>🎨</span> Complete Branding First
-                    </Link>
-                  )}
-
-                  <Link
-                    href="/admin/transfer"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
-                  >
-                    <span>💸</span> Transfer Funds
-                  </Link>
-                </>
-              )}
-
               {canViewActualBalance && (
                 <div className="bg-emerald-50/90 border border-emerald-200/80 text-emerald-800 px-3 py-1.5 rounded-xl font-bold text-[11px] shadow-2xs hidden sm:block">
                   ACTUAL: {actualDisplay}
@@ -262,21 +223,13 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
                 onClick={() => setDropdownOpen(!dropdownOpen)}
                 className="flex items-center gap-3 cursor-pointer hover:opacity-85 transition select-none"
               >
-                {branding.logoUrl ? (
-                  <img
-                    src={branding.logoUrl}
-                    alt={brandTitle}
-                    className="w-9 h-9 rounded-full object-cover border border-slate-200 shadow-2xs"
-                  />
-                ) : (
-                  <div className="w-9 h-9 bg-slate-900 text-white font-extrabold rounded-full flex items-center justify-center text-xs shadow-2xs tracking-wider">
-                    {initials}
-                  </div>
-                )}
+                <div className="w-9 h-9 bg-slate-900 text-white font-extrabold rounded-full flex items-center justify-center text-xs shadow-2xs tracking-wider">
+                  {initials}
+                </div>
 
                 <div className="text-right hidden sm:block">
                   <div className="font-bold text-slate-800 text-xs">
-                    {currentUser?.name || currentUser?.username || brandTitle}
+                    {displayName}
                   </div>
                   <div className="text-[10px] text-slate-400 capitalize">
                     {role.replace(/_/g, " ").toLowerCase()}

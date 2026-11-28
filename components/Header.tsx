@@ -63,7 +63,6 @@ export default function Header() {
         ? SUPER_ADMIN_FIXED_BALANCE
         : Number(meData.user.walletBalance ?? virtualBal);
 
-      // Ensure live reseller balances from /api/admin/funds when available
       if (!isSuper && isRes && meData.user.id) {
         try {
           const fundsRes = await fetch(
@@ -149,7 +148,7 @@ export default function Header() {
 
   const displayName =
     currentUser?.name || currentUser?.username || "Account";
-  const initials = displayName.substring(0, 2).toUpperCase() || "AC";
+  const initials = displayName.trim().slice(0, 2).toUpperCase() || "AC";
 
   const panelLabel = isSuperAdmin
     ? "Super Admin Panel"
@@ -192,7 +191,6 @@ export default function Header() {
           </div>
         )}
 
-        {/* Profile Dropdown Container */}
         <div className="relative border-l pl-4" ref={dropdownRef}>
           <div
             onClick={() => setDropdownOpen(!dropdownOpen)}

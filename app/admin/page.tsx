@@ -54,8 +54,9 @@ export default function AdminDashboardPage() {
 
   const roleUpper = String(currentUser?.role || "").trim().toUpperCase();
   const isSuperAdmin = roleUpper === "SUPER_ADMIN";
-  const isWhiteLabelReseller = roleUpper === "WHITE_LABEL_RESELLER";
-  const canAccessSiteBranding = isSuperAdmin || isWhiteLabelReseller;
+  const isResellerAccount =
+    roleUpper === "WHITE_LABEL_RESELLER" || roleUpper === "RESELLER";
+  const canAccessSiteBranding = isSuperAdmin || isResellerAccount;
 
   const populateFromUser = useCallback((u: ResellerUser) => {
     const cfg = u.whiteLabelConfig;
@@ -93,8 +94,10 @@ export default function AdminDashboardPage() {
           const eligible = data.users.filter((u: ResellerUser) => {
             const uRole = String(u.role || "").toUpperCase();
             if (uRole === "SUPER_ADMIN") return false;
-            if (isWhiteLabelReseller && currentUser?.id) {
-              return u.id === currentUser.id || u.createdById === currentUser.id;
+            if (isResellerAccount && currentUser?.id) {
+              return (
+                u.id === currentUser.id || u.createdById === currentUser.id
+              );
             }
             return ["WHITE_LABEL_RESELLER", "RESELLER"].includes(uRole);
           });
@@ -108,7 +111,7 @@ export default function AdminDashboardPage() {
               ) || eligible[0];
             setSelectedResellerId(target.id);
             populateFromUser(target);
-          } else if (isWhiteLabelReseller && currentUser) {
+          } else if (isResellerAccount && currentUser) {
             setSelectedResellerId(currentUser.id);
             populateFromUser(currentUser);
           }
@@ -119,7 +122,7 @@ export default function AdminDashboardPage() {
     },
     [
       currentUser,
-      isWhiteLabelReseller,
+      isResellerAccount,
       populateFromUser,
       selectedResellerId,
     ]
@@ -301,7 +304,7 @@ export default function AdminDashboardPage() {
                 </Link>
               ))}
 
-              {/* Site Branding Card: Only SUPER_ADMIN & WHITE_LABEL_RESELLER */}
+              {/* Site Branding Card */}
               {canAccessSiteBranding && (
                 <div
                   onClick={() => setActiveSection("site_branding")}

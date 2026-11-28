@@ -54,9 +54,12 @@ export default function AdminDashboardPage() {
 
   const roleUpper = String(currentUser?.role || "").trim().toUpperCase();
   const isSuperAdmin = roleUpper === "SUPER_ADMIN";
-  const isResellerAccount =
-    roleUpper === "WHITE_LABEL_RESELLER" || roleUpper === "RESELLER";
-  const canAccessSiteBranding = isSuperAdmin || isResellerAccount;
+  const isWhiteLabelReseller =
+    roleUpper === "WHITE_LABEL_RESELLER" || Boolean(currentUser?.isWhiteLabel);
+  const isNormalReseller = roleUpper === "RESELLER" && !isWhiteLabelReseller;
+  const canAccessSiteBranding =
+    isSuperAdmin || isWhiteLabelReseller || isNormalReseller;
+  const canAccessWhiteLabelTabs = isSuperAdmin || isWhiteLabelReseller;
 
   const populateFromUser = useCallback((u: ResellerUser) => {
     const cfg = u.whiteLabelConfig;
@@ -94,7 +97,7 @@ export default function AdminDashboardPage() {
           const eligible = data.users.filter((u: ResellerUser) => {
             const uRole = String(u.role || "").toUpperCase();
             if (uRole === "SUPER_ADMIN") return false;
-            if (isResellerAccount && currentUser?.id) {
+            if ((isWhiteLabelReseller || isNormalReseller) && currentUser?.id) {
               return (
                 u.id === currentUser.id || u.createdById === currentUser.id
               );
@@ -111,7 +114,7 @@ export default function AdminDashboardPage() {
               ) || eligible[0];
             setSelectedResellerId(target.id);
             populateFromUser(target);
-          } else if (isResellerAccount && currentUser) {
+          } else if ((isWhiteLabelReseller || isNormalReseller) && currentUser) {
             setSelectedResellerId(currentUser.id);
             populateFromUser(currentUser);
           }
@@ -122,7 +125,8 @@ export default function AdminDashboardPage() {
     },
     [
       currentUser,
-      isResellerAccount,
+      isWhiteLabelReseller,
+      isNormalReseller,
       populateFromUser,
       selectedResellerId,
     ]
@@ -139,6 +143,15 @@ export default function AdminDashboardPage() {
       setActiveSection("hub");
     }
   }, [activeSection, canAccessSiteBranding]);
+
+  useEffect(() => {
+    if (
+      !canAccessWhiteLabelTabs &&
+      (activeBrandingTab === "domain" || activeBrandingTab === "reseller")
+    ) {
+      setActiveBrandingTab("notification");
+    }
+  }, [canAccessWhiteLabelTabs, activeBrandingTab]);
 
   const handleResellerChange = async (userId: string) => {
     setSelectedResellerId(userId);
@@ -171,7 +184,7 @@ export default function AdminDashboardPage() {
   };
 
   const handleSaveWhiteLabelBranding = async () => {
-    if (!canAccessSiteBranding) return;
+    if (!canAccessWhiteLabelTabs) return;
     if (!domainInput.trim()) {
       alert("Please enter a custom domain (e.g., waba.clientbrand.com)");
       return;
@@ -212,6 +225,17 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const brandingTabs = [
+    ...(canAccessWhiteLabelTabs
+      ? [
+          { id: "domain", label: "🌐 Domain & SSL" },
+          { id: "reseller", label: "🏢 Reseller Branding" },
+        ]
+      : []),
+    { id: "notification", label: "🔔 Notification" },
+    { id: "smtp", label: "⚙️ SMTP" },
+  ];
+
   const hubCards = [
     {
       href: "/admin/user-management",
@@ -249,7 +273,9 @@ export default function AdminDashboardPage() {
           <h1 className="text-xl font-bold text-slate-900 mt-0.5">
             {activeSection === "hub" && "Administrator Control Center"}
             {activeSection === "site_branding" &&
-              "Site Branding & White-Label Setup"}
+              (canAccessWhiteLabelTabs
+                ? "Site Branding & White-Label Setup"
+                : "Site Settings (Notification & SMTP)")}
             {activeSection === "system_traffic" &&
               "System Traffic & Monitoring"}
           </h1>
@@ -307,7 +333,12 @@ export default function AdminDashboardPage() {
               {/* Site Branding Card */}
               {canAccessSiteBranding && (
                 <div
-                  onClick={() => setActiveSection("site_branding")}
+                  onClick={() => {
+                    setActiveBrandingTab(
+                      canAccessWhiteLabelTabs ? "domain" : "notification"
+                    );
+                    setActiveSection("site_branding");
+                  }}
                   className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-emerald-300 cursor-pointer transition space-y-2.5 group"
                 >
                   <div className="flex items-center justify-between">
@@ -315,14 +346,16 @@ export default function AdminDashboardPage() {
                       🎨
                     </span>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      White-Label
+                      {canAccessWhiteLabelTabs ? "White-Label" : "Settings"}
                     </span>
                   </div>
                   <h3 className="font-bold text-slate-900 text-sm">
                     Site Branding
                   </h3>
                   <p className="text-[11px] text-slate-500 leading-relaxed">
-                    Custom domain, A-record IP, SSL, logo & reseller branding.
+                    {canAccessWhiteLabelTabs
+                      ? "Custom domain, A-record IP, SSL, logo & reseller branding."
+                      : "Notification preferences & SMTP configuration."}
                   </p>
                 </div>
               )}
@@ -357,12 +390,7 @@ export default function AdminDashboardPage() {
       {activeSection === "site_branding" && canAccessSiteBranding && (
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 space-y-6">
           <div className="flex flex-wrap border-b border-slate-200 gap-6 text-xs font-semibold text-slate-500">
-            {[
-              { id: "domain", label: "🌐 Domain & SSL" },
-              { id: "reseller", label: "🏢 Reseller Branding" },
-              { id: "notification", label: "🔔 Notification" },
-              { id: "smtp", label: "⚙️ SMTP" },
-            ].map((tab) => (
+            {brandingTabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
@@ -378,7 +406,8 @@ export default function AdminDashboardPage() {
             ))}
           </div>
 
-          {(activeBrandingTab === "domain" || activeBrandingTab === "reseller") &&
+          {canAccessWhiteLabelTabs &&
+            (activeBrandingTab === "domain" || activeBrandingTab === "reseller") &&
             isSuperAdmin && (
               <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
@@ -410,7 +439,7 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
-          {activeBrandingTab === "domain" && (
+          {canAccessWhiteLabelTabs && activeBrandingTab === "domain" && (
             <div className="space-y-4 max-w-2xl">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
@@ -478,7 +507,7 @@ export default function AdminDashboardPage() {
             </div>
           )}
 
-          {activeBrandingTab === "reseller" && (
+          {canAccessWhiteLabelTabs && activeBrandingTab === "reseller" && (
             <div className="space-y-4 max-w-2xl">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">

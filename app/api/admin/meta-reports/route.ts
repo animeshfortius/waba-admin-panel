@@ -154,6 +154,7 @@ export async function GET(req: Request) {
           ? u.apiKeys[0]?.key || u.apiKeys[0]?.token || ""
           : "") ||
         "",
+      actualBalance: u.actualBalance,
       walletBalance: u.walletBalance,
       virtualBalance: u.virtualBalance,
       wabaAccounts: u.wabaAccounts || [],
@@ -276,6 +277,12 @@ export async function GET(req: Request) {
           metaDelivered > 0 ? metaDelivered : localDelivered;
         const effectiveRead = metaRead > 0 ? metaRead : localRead;
 
+        const actualVal = Number(
+          u.actualBalance !== undefined && u.actualBalance !== null
+            ? u.actualBalance
+            : u.walletBalance ?? 0
+        );
+
         return {
           userId: u.id,
           name: u.name || u.username || "User",
@@ -283,11 +290,8 @@ export async function GET(req: Request) {
           email: u.email,
           role: u.role,
           apiKey: u.apiKey,
-          walletBalance: Number(
-            (
-              Number(u.walletBalance || 0) + Number(u.virtualBalance || 0)
-            ).toFixed(2)
-          ),
+          actualBalance: Number(actualVal.toFixed(2)),
+          walletBalance: Number(actualVal.toFixed(2)),
           wabaCount: wabaDetails.length,
           wabas: wabaDetails,
           metrics: {

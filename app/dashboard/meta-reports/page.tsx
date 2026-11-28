@@ -22,7 +22,7 @@ interface UserMetaReport {
   role: string;
   apiKey?: string;
   walletBalance: number;
-  actualBalance?: number;
+  actualBalance?: number | null;
   wabaCount: number;
   wabas: WabaDetail[];
   metrics: {
@@ -104,8 +104,9 @@ function getAccountBalanceValue(item: UserMetaReport): number {
   const roleUpper = String(item.role || "").trim().toUpperCase();
   const isResellerRole =
     roleUpper === "RESELLER" || roleUpper === "WHITE_LABEL_RESELLER";
-  if (isResellerRole && typeof item.actualBalance === "number") {
-    return Number(item.actualBalance);
+  if (isResellerRole && item.actualBalance !== undefined && item.actualBalance !== null) {
+    const parsedActual = Number(item.actualBalance);
+    return Number.isFinite(parsedActual) ? parsedActual : 0;
   }
   return Number(item.walletBalance ?? 0);
 }

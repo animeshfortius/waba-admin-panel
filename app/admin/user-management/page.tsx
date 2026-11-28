@@ -288,7 +288,7 @@ export default function UserManagementPage() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("profile");
-  const [whatsappSubTab, setWhatsappSubTab] = useState("channelList");
+  const [whatsappSubTab, setWhatsappSubTab] = useState("accountSettings");
 
   const [currentAdminId, setCurrentAdminId] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState("");
@@ -349,6 +349,25 @@ export default function UserManagementPage() {
   const normalizedRole = String(currentUserRole || "").trim().toUpperCase();
   const isSuperAdmin = normalizedRole === "SUPER_ADMIN";
   const isWhiteLabelReseller = normalizedRole === "WHITE_LABEL_RESELLER";
+  const canViewAllWhatsappSubTabs = isSuperAdmin;
+
+  const allowedWhatsappSubTabs = canViewAllWhatsappSubTabs
+    ? [
+        { id: "accountSettings", label: "Account Settings" },
+        { id: "messageManagement", label: "Message Management" },
+        { id: "channelList", label: "Channel List" },
+        { id: "bspConfig", label: "BSP Configuration" },
+      ]
+    : [{ id: "accountSettings", label: "Account Settings" }];
+
+  useEffect(() => {
+    const isAllowed = allowedWhatsappSubTabs.some(
+      (tab) => tab.id === whatsappSubTab
+    );
+    if (!isAllowed) {
+      setWhatsappSubTab("accountSettings");
+    }
+  }, [allowedWhatsappSubTabs, whatsappSubTab]);
 
   const sanitizeUsersForViewer = useCallback(
     (list: any[]) => {
@@ -596,21 +615,25 @@ export default function UserManagementPage() {
         })
         .catch((err) => console.error("Error loading user funds:", err));
 
-      fetch(
-        `/api/admin/waba-accounts?userId=${encodeURIComponent(selectedUser.id)}`,
-        { credentials: "include", cache: "no-store" }
-      )
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success || Array.isArray(data)) {
-            setWabaChannels(data.channels || data || []);
-          }
-        })
-        .catch(() => {
-          setWabaChannels([]);
-        });
+      if (canViewAllWhatsappSubTabs) {
+        fetch(
+          `/api/admin/waba-accounts?userId=${encodeURIComponent(
+            selectedUser.id
+          )}`,
+          { credentials: "include", cache: "no-store" }
+        )
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success || Array.isArray(data)) {
+              setWabaChannels(data.channels || data || []);
+            }
+          })
+          .catch(() => {
+            setWabaChannels([]);
+          });
+      }
     }
-  }, [selectedUser?.id]);
+  }, [selectedUser?.id, canViewAllWhatsappSubTabs]);
 
   const handleLoginAsUser = async () => {
     if (!selectedUser?.id) return;
@@ -1124,161 +1147,132 @@ export default function UserManagementPage() {
                 <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">
                   Account Settings
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setWhatsappSubTab("accountSettings")}
-                  className={`w-full text-left px-3 py-2 rounded-xl cursor-pointer ${
-                    whatsappSubTab === "accountSettings"
-                      ? "bg-emerald-50 text-emerald-700 font-bold"
-                      : "hover:bg-slate-50"
-                  }`}
-                >
-                  Account Settings
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWhatsappSubTab("messageManagement")}
-                  className={`w-full text-left px-3 py-2 rounded-xl cursor-pointer ${
-                    whatsappSubTab === "messageManagement"
-                      ? "bg-emerald-50 text-emerald-700 font-bold"
-                      : "hover:bg-slate-50"
-                  }`}
-                >
-                  Message Management
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWhatsappSubTab("channelList")}
-                  className={`w-full text-left px-3 py-2 rounded-xl cursor-pointer ${
-                    whatsappSubTab === "channelList"
-                      ? "bg-emerald-50 text-emerald-700 font-bold"
-                      : "hover:bg-slate-50"
-                  }`}
-                >
-                  Channel List
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWhatsappSubTab("bspConfig")}
-                  className={`w-full text-left px-3 py-2 rounded-xl cursor-pointer ${
-                    whatsappSubTab === "bspConfig"
-                      ? "bg-emerald-50 text-emerald-700 font-bold"
-                      : "hover:bg-slate-50"
-                  }`}
-                >
-                  BSP Configuration
-                </button>
+                {allowedWhatsappSubTabs.map((sub) => (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    onClick={() => setWhatsappSubTab(sub.id)}
+                    className={`w-full text-left px-3 py-2 rounded-xl cursor-pointer ${
+                      whatsappSubTab === sub.id
+                        ? "bg-emerald-50 text-emerald-700 font-bold"
+                        : "hover:bg-slate-50"
+                    }`}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
               </div>
 
               <div className="md:col-span-3 space-y-4">
-                {whatsappSubTab === "channelList" && (
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                      <h3 className="font-bold text-slate-800 text-sm">
-                        Channel List
-                      </h3>
-                    </div>
-                    <div className="overflow-x-auto rounded-xl border border-slate-200/80">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 text-slate-500 uppercase border-b font-bold text-[10px]">
-                            <th className="p-3">User Name</th>
-                            <th className="p-3">WABA Details</th>
-                            <th className="p-3">Default</th>
-                            <th className="p-3">Display Name</th>
-                            <th className="p-3">ConfigureDate</th>
-                            <th className="p-3">Webhook Url</th>
-                            <th className="p-3">TPS</th>
-                            <th className="p-3 text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {wabaChannels.length === 0 ? (
-                            <tr>
-                              <td
-                                colSpan={8}
-                                className="p-8 text-center text-slate-400"
-                              >
-                                No channels found
-                              </td>
+                {canViewAllWhatsappSubTabs &&
+                  whatsappSubTab === "channelList" && (
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                        <h3 className="font-bold text-slate-800 text-sm">
+                          Channel List
+                        </h3>
+                      </div>
+                      <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-500 uppercase border-b font-bold text-[10px]">
+                              <th className="p-3">User Name</th>
+                              <th className="p-3">WABA Details</th>
+                              <th className="p-3">Default</th>
+                              <th className="p-3">Display Name</th>
+                              <th className="p-3">ConfigureDate</th>
+                              <th className="p-3">Webhook Url</th>
+                              <th className="p-3">TPS</th>
+                              <th className="p-3 text-right">Action</th>
                             </tr>
-                          ) : (
-                            wabaChannels.map((ch: any) => (
-                              <tr
-                                key={ch.id}
-                                className="hover:bg-slate-50 text-slate-700 font-medium"
-                              >
-                                <td className="p-3 font-bold text-slate-800">
-                                  {selectedUser.username || selectedUser.name}
-                                </td>
-                                <td className="p-3 font-mono text-[11px] leading-relaxed">
-                                  WABA Number: {ch.wabaNumber} <br />
-                                  Phone ID: {ch.phoneId} <br />
-                                  Waba ID: {ch.wabaId}
-                                </td>
-                                <td className="p-3">
-                                  <span className="bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full text-[10px] font-semibold">
-                                    ● Set Default
-                                  </span>
-                                </td>
-                                <td className="p-3 font-semibold text-slate-800">
-                                  {ch.displayName || "Verified Account"}
-                                </td>
-                                <td className="p-3 font-mono text-[11px] text-slate-500">
-                                  {ch.configureDate || "N/A"}
-                                </td>
-                                <td className="p-3 text-slate-500">
-                                  {ch.webhookUrl || "NA"}
-                                </td>
-                                <td className="p-3 font-bold text-slate-800">
-                                  {ch.tps || 50}
-                                </td>
-                                <td className="p-3 text-right space-x-1 whitespace-nowrap">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedChannel(ch);
-                                      setWebhookUrlInput(
-                                        ch.webhookUrl === "NA"
-                                          ? ""
-                                          : ch.webhookUrl
-                                      );
-                                      setTpsInput(ch.tps || "50");
-                                      setShowConfigModal(true);
-                                    }}
-                                    className="p-1.5 bg-blue-50 text-blue-600 rounded border hover:bg-blue-100 cursor-pointer"
-                                    title="Configure"
-                                  >
-                                    ⚙️
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowDeleteModal(true)}
-                                    className="p-1.5 bg-rose-50 text-rose-600 rounded border hover:bg-rose-100 cursor-pointer"
-                                    title="Delete Channel"
-                                  >
-                                    🗑️
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedChannel(ch);
-                                      setShowRegisterApiModal(true);
-                                    }}
-                                    className="p-1.5 bg-amber-50 text-amber-600 rounded border hover:bg-amber-100 font-bold cursor-pointer"
-                                    title="Register API"
-                                  >
-                                    🔑
-                                  </button>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {wabaChannels.length === 0 ? (
+                              <tr>
+                                <td
+                                  colSpan={8}
+                                  className="p-8 text-center text-slate-400"
+                                >
+                                  No channels found
                                 </td>
                               </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                            ) : (
+                              wabaChannels.map((ch: any) => (
+                                <tr
+                                  key={ch.id}
+                                  className="hover:bg-slate-50 text-slate-700 font-medium"
+                                >
+                                  <td className="p-3 font-bold text-slate-800">
+                                    {selectedUser.username || selectedUser.name}
+                                  </td>
+                                  <td className="p-3 font-mono text-[11px] leading-relaxed">
+                                    WABA Number: {ch.wabaNumber} <br />
+                                    Phone ID: {ch.phoneId} <br />
+                                    Waba ID: {ch.wabaId}
+                                  </td>
+                                  <td className="p-3">
+                                    <span className="bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full text-[10px] font-semibold">
+                                      ● Set Default
+                                    </span>
+                                  </td>
+                                  <td className="p-3 font-semibold text-slate-800">
+                                    {ch.displayName || "Verified Account"}
+                                  </td>
+                                  <td className="p-3 font-mono text-[11px] text-slate-500">
+                                    {ch.configureDate || "N/A"}
+                                  </td>
+                                  <td className="p-3 text-slate-500">
+                                    {ch.webhookUrl || "NA"}
+                                  </td>
+                                  <td className="p-3 font-bold text-slate-800">
+                                    {ch.tps || 50}
+                                  </td>
+                                  <td className="p-3 text-right space-x-1 whitespace-nowrap">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedChannel(ch);
+                                        setWebhookUrlInput(
+                                          ch.webhookUrl === "NA"
+                                            ? ""
+                                            : ch.webhookUrl
+                                        );
+                                        setTpsInput(ch.tps || "50");
+                                        setShowConfigModal(true);
+                                      }}
+                                      className="p-1.5 bg-blue-50 text-blue-600 rounded border hover:bg-blue-100 cursor-pointer"
+                                      title="Configure"
+                                    >
+                                      ⚙️
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowDeleteModal(true)}
+                                      className="p-1.5 bg-rose-50 text-rose-600 rounded border hover:bg-rose-100 cursor-pointer"
+                                      title="Delete Channel"
+                                    >
+                                      🗑️
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedChannel(ch);
+                                        setShowRegisterApiModal(true);
+                                      }}
+                                      className="p-1.5 bg-amber-50 text-amber-600 rounded border hover:bg-amber-100 font-bold cursor-pointer"
+                                      title="Register API"
+                                    >
+                                      🔑
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {whatsappSubTab === "accountSettings" && (
                   <div className="space-y-4">
@@ -1363,13 +1357,14 @@ export default function UserManagementPage() {
                   </div>
                 )}
 
-                {whatsappSubTab === "messageManagement" && (
-                  <div className="p-6 border border-slate-200 rounded-xl bg-slate-50 text-center text-slate-500 font-medium">
-                    Message Management configuration view
-                  </div>
-                )}
+                {canViewAllWhatsappSubTabs &&
+                  whatsappSubTab === "messageManagement" && (
+                    <div className="p-6 border border-slate-200 rounded-xl bg-slate-50 text-center text-slate-500 font-medium">
+                      Message Management configuration view
+                    </div>
+                  )}
 
-                {whatsappSubTab === "bspConfig" && (
+                {canViewAllWhatsappSubTabs && whatsappSubTab === "bspConfig" && (
                   <div className="p-6 border border-slate-200 rounded-xl bg-slate-50 text-center text-slate-500 font-medium">
                     BSP Configuration view
                   </div>
@@ -1644,7 +1639,7 @@ export default function UserManagementPage() {
       )}
 
       {/* Configure Modal */}
-      {showConfigModal && selectedChannel && (
+      {canViewAllWhatsappSubTabs && showConfigModal && selectedChannel && (
         <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
@@ -1708,61 +1703,66 @@ export default function UserManagementPage() {
       )}
 
       {/* Register API Confirmation Modal */}
-      {showRegisterApiModal && selectedChannel && (
-        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
-            <div className="text-3xl">🔑</div>
-            <h3 className="text-base font-bold text-slate-900">
-              Are you sure?
-            </h3>
-            <p className="text-xs text-slate-600">
-              Do you really want to call Register API against this number?
-            </p>
-            <div className="flex justify-center space-x-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setShowRegisterApiModal(false)}
-                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-medium cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const res = await fetch("/api/admin/waba-accounts/register", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      credentials: "include",
-                      body: JSON.stringify({
-                        wabaNumber: selectedChannel?.wabaNumber,
-                        phoneId: selectedChannel?.phoneId,
-                        accessToken: selectedChannel?.accessToken,
-                      }),
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                      alert("✅ " + data.message);
-                    } else {
-                      alert("❌ Error: " + data.error);
+      {canViewAllWhatsappSubTabs &&
+        showRegisterApiModal &&
+        selectedChannel && (
+          <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
+              <div className="text-3xl">🔑</div>
+              <h3 className="text-base font-bold text-slate-900">
+                Are you sure?
+              </h3>
+              <p className="text-xs text-slate-600">
+                Do you really want to call Register API against this number?
+              </p>
+              <div className="flex justify-center space-x-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowRegisterApiModal(false)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-medium cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(
+                        "/api/admin/waba-accounts/register",
+                        {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          credentials: "include",
+                          body: JSON.stringify({
+                            wabaNumber: selectedChannel?.wabaNumber,
+                            phoneId: selectedChannel?.phoneId,
+                            accessToken: selectedChannel?.accessToken,
+                          }),
+                        }
+                      );
+                      const data = await res.json();
+                      if (data.success) {
+                        alert("✅ " + data.message);
+                      } else {
+                        alert("❌ Error: " + data.error);
+                      }
+                    } catch {
+                      alert("Network error calling Register API");
+                    } finally {
+                      setShowRegisterApiModal(false);
                     }
-                  } catch {
-                    alert("Network error calling Register API");
-                  } finally {
-                    setShowRegisterApiModal(false);
-                  }
-                }}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-2xs cursor-pointer"
-              >
-                Yes, Register it!
-              </button>
+                  }}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-2xs cursor-pointer"
+                >
+                  Yes, Register it!
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Delete Channel Confirmation Modal */}
-      {showDeleteModal && (
+      {canViewAllWhatsappSubTabs && showDeleteModal && (
         <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
             <div className="text-3xl">⚠️</div>

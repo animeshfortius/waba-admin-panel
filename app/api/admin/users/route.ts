@@ -58,15 +58,22 @@ async function getAuthenticatedActor() {
       select: {
         id: true,
         role: true,
+        isWhiteLabel: true,
         whiteLabelConfig: true,
       },
     });
 
     if (!user) return null;
 
+    const normalized = normalizeRole(user.role);
+    const effectiveRole =
+      normalized === "RESELLER" && user.isWhiteLabel
+        ? "WHITE_LABEL_RESELLER"
+        : normalized;
+
     return {
       id: user.id,
-      role: normalizeRole(user.role),
+      role: effectiveRole,
       whiteLabelConfig: user.whiteLabelConfig,
     };
   } catch {
@@ -192,8 +199,27 @@ export async function POST(req: Request) {
     }
 
     const isSuperAdmin = actor.role === "SUPER_ADMIN";
-    const isReseller =
-      actor.role === "RESELLER" || actor.role === "WHITE_LABEL_RESELLER";
+    const isWhiteLabelReseller = actor.role === "WHITE_LABEL_RESELLER";
+    const isReseller = actor.role === "RESELLER" || isWhiteLabelReseller;
+
+    if (isWhiteLabelReseller) {
+      const cfg = actor.whiteLabelConfig;
+      const hasDomain = Boolean(String(cfg?.domain || "").trim());
+      const sslActive =
+        String(cfg?.sslStatus || "").trim().toUpperCase() === "ACTIVE";
+      const isConfigActive = Boolean(cfg?.isActive);
+
+      if (!hasDomain || !sslActive || !isConfigActive) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Complete your Domain & SSL setup (active domain + ACTIVE SSL) before creating user accounts.",
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     const body = await req.json();
     const {

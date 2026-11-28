@@ -27,7 +27,7 @@ interface ResellerUser {
 export default function AdminDashboardPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [activeSection, setActiveSection] = useState<string>("hub");
-  const [activeBrandingTab, setActiveBrandingTab] = useState<string>("domain");
+  const [activeBrandingTab, setActiveBrandingTab] = useState<string>("reseller");
 
   const [resellers, setResellers] = useState<ResellerUser[]>([]);
   const [selectedResellerId, setSelectedResellerId] = useState<string>("");
@@ -57,9 +57,12 @@ export default function AdminDashboardPage() {
   const isWhiteLabelReseller =
     roleUpper === "WHITE_LABEL_RESELLER" || Boolean(currentUser?.isWhiteLabel);
   const isNormalReseller = roleUpper === "RESELLER" && !isWhiteLabelReseller;
+
   const canAccessSiteBranding =
     isSuperAdmin || isWhiteLabelReseller || isNormalReseller;
-  const canAccessWhiteLabelTabs = isSuperAdmin || isWhiteLabelReseller;
+  const canAccessDomainAndSsl = isSuperAdmin || isWhiteLabelReseller;
+  const canAccessResellerBranding =
+    isSuperAdmin || isWhiteLabelReseller || isNormalReseller;
 
   const populateFromUser = useCallback((u: ResellerUser) => {
     const cfg = u.whiteLabelConfig;
@@ -145,13 +148,10 @@ export default function AdminDashboardPage() {
   }, [activeSection, canAccessSiteBranding]);
 
   useEffect(() => {
-    if (
-      !canAccessWhiteLabelTabs &&
-      (activeBrandingTab === "domain" || activeBrandingTab === "reseller")
-    ) {
-      setActiveBrandingTab("notification");
+    if (!canAccessDomainAndSsl && activeBrandingTab === "domain") {
+      setActiveBrandingTab("reseller");
     }
-  }, [canAccessWhiteLabelTabs, activeBrandingTab]);
+  }, [canAccessDomainAndSsl, activeBrandingTab]);
 
   const handleResellerChange = async (userId: string) => {
     setSelectedResellerId(userId);
@@ -184,8 +184,8 @@ export default function AdminDashboardPage() {
   };
 
   const handleSaveWhiteLabelBranding = async () => {
-    if (!canAccessWhiteLabelTabs) return;
-    if (!domainInput.trim()) {
+    if (!canAccessSiteBranding) return;
+    if (canAccessDomainAndSsl && !domainInput.trim()) {
       alert("Please enter a custom domain (e.g., waba.clientbrand.com)");
       return;
     }
@@ -198,7 +198,7 @@ export default function AdminDashboardPage() {
         credentials: "include",
         body: JSON.stringify({
           userId: selectedResellerId || currentUser?.id,
-          domain: domainInput.trim(),
+          domain: domainInput.trim() || null,
           brandName: brandNameInput.trim(),
           logoUrl: logoUrlInput.trim() || null,
           primaryColor: primaryColorInput,
@@ -212,7 +212,7 @@ export default function AdminDashboardPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        alert("White-Label domain & branding saved successfully!");
+        alert("Site branding settings saved successfully!");
         await loadResellers(selectedResellerId);
       } else {
         alert(data.error || "Failed to save branding");
@@ -226,11 +226,9 @@ export default function AdminDashboardPage() {
   };
 
   const brandingTabs = [
-    ...(canAccessWhiteLabelTabs
-      ? [
-          { id: "domain", label: "🌐 Domain & SSL" },
-          { id: "reseller", label: "🏢 Reseller Branding" },
-        ]
+    ...(canAccessDomainAndSsl ? [{ id: "domain", label: "🌐 Domain & SSL" }] : []),
+    ...(canAccessResellerBranding
+      ? [{ id: "reseller", label: "🏢 Reseller Branding" }]
       : []),
     { id: "notification", label: "🔔 Notification" },
     { id: "smtp", label: "⚙️ SMTP" },
@@ -273,9 +271,9 @@ export default function AdminDashboardPage() {
           <h1 className="text-xl font-bold text-slate-900 mt-0.5">
             {activeSection === "hub" && "Administrator Control Center"}
             {activeSection === "site_branding" &&
-              (canAccessWhiteLabelTabs
+              (canAccessDomainAndSsl
                 ? "Site Branding & White-Label Setup"
-                : "Site Settings (Notification & SMTP)")}
+                : "Site Branding & Settings")}
             {activeSection === "system_traffic" &&
               "System Traffic & Monitoring"}
           </h1>
@@ -335,7 +333,7 @@ export default function AdminDashboardPage() {
                 <div
                   onClick={() => {
                     setActiveBrandingTab(
-                      canAccessWhiteLabelTabs ? "domain" : "notification"
+                      canAccessDomainAndSsl ? "domain" : "reseller"
                     );
                     setActiveSection("site_branding");
                   }}
@@ -346,16 +344,16 @@ export default function AdminDashboardPage() {
                       🎨
                     </span>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      {canAccessWhiteLabelTabs ? "White-Label" : "Settings"}
+                      {canAccessDomainAndSsl ? "White-Label" : "Branding"}
                     </span>
                   </div>
                   <h3 className="font-bold text-slate-900 text-sm">
                     Site Branding
                   </h3>
                   <p className="text-[11px] text-slate-500 leading-relaxed">
-                    {canAccessWhiteLabelTabs
+                    {canAccessDomainAndSsl
                       ? "Custom domain, A-record IP, SSL, logo & reseller branding."
-                      : "Notification preferences & SMTP configuration."}
+                      : "Reseller branding, notifications & SMTP configuration."}
                   </p>
                 </div>
               )}
@@ -406,7 +404,7 @@ export default function AdminDashboardPage() {
             ))}
           </div>
 
-          {canAccessWhiteLabelTabs &&
+          {canAccessDomainAndSsl &&
             (activeBrandingTab === "domain" || activeBrandingTab === "reseller") &&
             isSuperAdmin && (
               <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -439,7 +437,7 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
-          {canAccessWhiteLabelTabs && activeBrandingTab === "domain" && (
+          {canAccessDomainAndSsl && activeBrandingTab === "domain" && (
             <div className="space-y-4 max-w-2xl">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
@@ -507,7 +505,7 @@ export default function AdminDashboardPage() {
             </div>
           )}
 
-          {canAccessWhiteLabelTabs && activeBrandingTab === "reseller" && (
+          {canAccessResellerBranding && activeBrandingTab === "reseller" && (
             <div className="space-y-4 max-w-2xl">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">

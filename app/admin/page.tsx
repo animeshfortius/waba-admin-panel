@@ -11,17 +11,83 @@ interface ResellerUser {
   role: string;
   createdById?: string | null;
   isWhiteLabel?: boolean;
-  whiteLabelConfig?: {
-    domain?: string;
-    brandName?: string;
-    logoUrl?: string | null;
-    primaryColor?: string;
-    supportEmail?: string | null;
-    supportPhone?: string | null;
-    serverIp?: string | null;
-    sslStatus?: string;
-    isActive?: boolean;
-  } | null;
+  whiteLabelConfig?: any;
+}
+
+interface NotificationTabState {
+  notifyCustomerViaEmail: boolean;
+  notifyCustomerViaSms: boolean;
+  notifyMeViaEmail: boolean;
+  sendPasswordViaSms: boolean;
+  lowBalanceAlertNotification: boolean;
+  defaultWalletBalance: string;
+  defaultValidityMonths: string;
+}
+
+const DEFAULT_NOTIFICATION_TAB: NotificationTabState = {
+  notifyCustomerViaEmail: false,
+  notifyCustomerViaSms: false,
+  notifyMeViaEmail: false,
+  sendPasswordViaSms: false,
+  lowBalanceAlertNotification: true,
+  defaultWalletBalance: "",
+  defaultValidityMonths: "",
+};
+
+const VALIDITY_MONTH_OPTIONS = [
+  { value: "", label: "Select Month" },
+  ...Array.from({ length: 24 }, (_, i) => {
+    const m = i + 1;
+    return {
+      value: String(m),
+      label: m === 1 ? "1 Month" : `${m} Months`,
+    };
+  }),
+];
+
+function YesNoToggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+}) {
+  return (
+    <div className="inline-flex items-center gap-2 select-none">
+      <span
+        className={`text-[11px] font-bold ${
+          !checked ? "text-rose-600" : "text-slate-400"
+        }`}
+      >
+        No
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+          checked ? "bg-emerald-600" : "bg-rose-500"
+        }`}
+      >
+        <span
+          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition duration-200 ${
+            checked ? "translate-x-5" : "translate-x-0"
+          }`}
+        />
+      </button>
+      <span
+        className={`text-[11px] font-bold ${
+          checked ? "text-emerald-600" : "text-slate-400"
+        }`}
+      >
+        Yes
+      </span>
+    </div>
+  );
 }
 
 export default function AdminDashboardPage() {
@@ -45,8 +111,9 @@ export default function AdminDashboardPage() {
   const [savingBranding, setSavingBranding] = useState(false);
 
   // Notification & SMTP Form State
-  const [notifyEmail, setNotifyEmail] = useState(true);
-  const [notifyLowBalance, setNotifyLowBalance] = useState(true);
+  const [notifState, setNotifState] = useState<NotificationTabState>(
+    DEFAULT_NOTIFICATION_TAB
+  );
   const [smtpHost, setSmtpHost] = useState("");
   const [smtpPort, setSmtpPort] = useState("587");
   const [smtpUser, setSmtpUser] = useState("");
@@ -75,6 +142,46 @@ export default function AdminDashboardPage() {
     setServerIpInput(cfg?.serverIp || "171.50.181.171");
     setSslStatusInput(cfg?.sslStatus || "PENDING");
     setIsActiveBranding(cfg?.isActive ?? true);
+
+    const nCfg = cfg?.notificationConfig || {};
+    setNotifState({
+      notifyCustomerViaEmail: Boolean(
+        nCfg.notifyCustomerViaEmail ?? nCfg.notifyCustomerEmail ?? false
+      ),
+      notifyCustomerViaSms: Boolean(
+        nCfg.notifyCustomerViaSms ?? nCfg.notifyCustomerSms ?? false
+      ),
+      notifyMeViaEmail: Boolean(
+        nCfg.notifyMeViaEmail ?? nCfg.notifyAdminEmail ?? false
+      ),
+      sendPasswordViaSms: Boolean(
+        nCfg.sendPasswordViaSms ?? nCfg.sendPasswordSms ?? false
+      ),
+      lowBalanceAlertNotification: Boolean(
+        nCfg.lowBalanceAlertNotification ?? nCfg.lowBalanceAlert ?? true
+      ),
+      defaultWalletBalance:
+        cfg?.defaultWalletBalance !== undefined &&
+        cfg?.defaultWalletBalance !== null &&
+        Number(cfg.defaultWalletBalance) > 0
+          ? String(cfg.defaultWalletBalance)
+          : nCfg.defaultWalletBalance !== undefined &&
+            nCfg.defaultWalletBalance !== null &&
+            String(nCfg.defaultWalletBalance) !== "" &&
+            Number(nCfg.defaultWalletBalance) !== 0
+          ? String(nCfg.defaultWalletBalance)
+          : "",
+      defaultValidityMonths:
+        cfg?.defaultValidityMonths !== undefined &&
+        cfg?.defaultValidityMonths !== null &&
+        Number(cfg.defaultValidityMonths) > 0
+          ? String(cfg.defaultValidityMonths)
+          : nCfg.defaultValidityMonths !== undefined &&
+            nCfg.defaultValidityMonths !== null &&
+            String(nCfg.defaultValidityMonths) !== ""
+          ? String(nCfg.defaultValidityMonths)
+          : "",
+    });
   }, []);
 
   useEffect(() => {
@@ -177,6 +284,46 @@ export default function AdminDashboardPage() {
         setServerIpInput(cfg.serverIp || "171.50.181.171");
         setSslStatusInput(cfg.sslStatus || "PENDING");
         setIsActiveBranding(cfg.isActive ?? true);
+
+        const nCfg = cfg.notificationConfig || {};
+        setNotifState({
+          notifyCustomerViaEmail: Boolean(
+            nCfg.notifyCustomerViaEmail ?? nCfg.notifyCustomerEmail ?? false
+          ),
+          notifyCustomerViaSms: Boolean(
+            nCfg.notifyCustomerViaSms ?? nCfg.notifyCustomerSms ?? false
+          ),
+          notifyMeViaEmail: Boolean(
+            nCfg.notifyMeViaEmail ?? nCfg.notifyAdminEmail ?? false
+          ),
+          sendPasswordViaSms: Boolean(
+            nCfg.sendPasswordViaSms ?? nCfg.sendPasswordSms ?? false
+          ),
+          lowBalanceAlertNotification: Boolean(
+            nCfg.lowBalanceAlertNotification ?? nCfg.lowBalanceAlert ?? true
+          ),
+          defaultWalletBalance:
+            cfg.defaultWalletBalance !== undefined &&
+            cfg.defaultWalletBalance !== null &&
+            Number(cfg.defaultWalletBalance) > 0
+              ? String(cfg.defaultWalletBalance)
+              : nCfg.defaultWalletBalance !== undefined &&
+                nCfg.defaultWalletBalance !== null &&
+                String(nCfg.defaultWalletBalance) !== "" &&
+                Number(nCfg.defaultWalletBalance) !== 0
+              ? String(nCfg.defaultWalletBalance)
+              : "",
+          defaultValidityMonths:
+            cfg.defaultValidityMonths !== undefined &&
+            cfg.defaultValidityMonths !== null &&
+            Number(cfg.defaultValidityMonths) > 0
+              ? String(cfg.defaultValidityMonths)
+              : nCfg.defaultValidityMonths !== undefined &&
+                nCfg.defaultValidityMonths !== null &&
+                String(nCfg.defaultValidityMonths) !== ""
+              ? String(nCfg.defaultValidityMonths)
+              : "",
+        });
       }
     } catch (err) {
       console.error("Failed to fetch branding config:", err);
@@ -189,6 +336,21 @@ export default function AdminDashboardPage() {
       alert("Please enter a custom domain (e.g., waba.clientbrand.com)");
       return;
     }
+
+    const parsedDefaultBalance =
+      notifState.defaultWalletBalance.trim() === ""
+        ? 0
+        : Number(notifState.defaultWalletBalance);
+
+    if (Number.isNaN(parsedDefaultBalance) || parsedDefaultBalance < 0) {
+      alert("Default Wallet Balance must be a valid non-negative number.");
+      return;
+    }
+
+    const parsedDefaultValidity =
+      notifState.defaultValidityMonths === ""
+        ? null
+        : Number(notifState.defaultValidityMonths);
 
     setSavingBranding(true);
     try {
@@ -207,6 +369,17 @@ export default function AdminDashboardPage() {
           serverIp: serverIpInput.trim() || "171.50.181.171",
           sslStatus: sslStatusInput,
           isActive: isActiveBranding,
+          defaultWalletBalance: parsedDefaultBalance,
+          defaultValidityMonths: parsedDefaultValidity,
+          notificationConfig: {
+            notifyCustomerViaEmail: notifState.notifyCustomerViaEmail,
+            notifyCustomerViaSms: notifState.notifyCustomerViaSms,
+            notifyMeViaEmail: notifState.notifyMeViaEmail,
+            sendPasswordViaSms: notifState.sendPasswordViaSms,
+            lowBalanceAlertNotification: notifState.lowBalanceAlertNotification,
+            defaultWalletBalance: parsedDefaultBalance,
+            defaultValidityMonths: parsedDefaultValidity,
+          },
         }),
       });
 
@@ -405,7 +578,9 @@ export default function AdminDashboardPage() {
           </div>
 
           {canAccessDomainAndSsl &&
-            (activeBrandingTab === "domain" || activeBrandingTab === "reseller") &&
+            (activeBrandingTab === "domain" ||
+              activeBrandingTab === "reseller" ||
+              activeBrandingTab === "notification") &&
             isSuperAdmin && (
               <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
@@ -585,35 +760,144 @@ export default function AdminDashboardPage() {
           )}
 
           {activeBrandingTab === "notification" && (
-            <div className="space-y-3 max-w-2xl">
-              <div className="flex justify-between items-center border border-slate-200 p-3.5 rounded-xl bg-slate-50">
-                <span className="font-semibold text-slate-700">
-                  Notify Customer via Email
-                </span>
-                <input
-                  type="checkbox"
-                  checked={notifyEmail}
-                  onChange={(e) => setNotifyEmail(e.target.checked)}
-                  className="toggle toggle-success cursor-pointer"
-                />
+            <div className="space-y-5 max-w-3xl">
+              <div className="border-b border-slate-100 pb-2">
+                <h3 className="text-sm font-bold text-slate-800">
+                  Settings tab
+                </h3>
               </div>
-              <div className="flex justify-between items-center border border-slate-200 p-3.5 rounded-xl bg-slate-50">
-                <span className="font-semibold text-slate-700">
-                  Low Balance Alert Notification
-                </span>
-                <input
-                  type="checkbox"
-                  checked={notifyLowBalance}
-                  onChange={(e) => setNotifyLowBalance(e.target.checked)}
-                  className="toggle toggle-success cursor-pointer"
-                />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                <div className="flex justify-between items-center border border-slate-200 p-3.5 rounded-xl bg-slate-50">
+                  <span className="font-semibold text-slate-700">
+                    Notify Customer via Email
+                  </span>
+                  <YesNoToggle
+                    checked={notifState.notifyCustomerViaEmail}
+                    onChange={(val) =>
+                      setNotifState((prev) => ({
+                        ...prev,
+                        notifyCustomerViaEmail: val,
+                      }))
+                    }
+                    label="Notify Customer via Email"
+                  />
+                </div>
+
+                <div className="flex justify-between items-center border border-slate-200 p-3.5 rounded-xl bg-slate-50">
+                  <span className="font-semibold text-slate-700">
+                    Notify Customer via SMS
+                  </span>
+                  <YesNoToggle
+                    checked={notifState.notifyCustomerViaSms}
+                    onChange={(val) =>
+                      setNotifState((prev) => ({
+                        ...prev,
+                        notifyCustomerViaSms: val,
+                      }))
+                    }
+                    label="Notify Customer via SMS"
+                  />
+                </div>
+
+                <div className="flex justify-between items-center border border-slate-200 p-3.5 rounded-xl bg-slate-50">
+                  <span className="font-semibold text-slate-700">
+                    Notify ME via Email
+                  </span>
+                  <YesNoToggle
+                    checked={notifState.notifyMeViaEmail}
+                    onChange={(val) =>
+                      setNotifState((prev) => ({
+                        ...prev,
+                        notifyMeViaEmail: val,
+                      }))
+                    }
+                    label="Notify ME via Email"
+                  />
+                </div>
+
+                <div className="flex justify-between items-center border border-slate-200 p-3.5 rounded-xl bg-slate-50">
+                  <span className="font-semibold text-slate-700">
+                    Send Password via SMS
+                  </span>
+                  <YesNoToggle
+                    checked={notifState.sendPasswordViaSms}
+                    onChange={(val) =>
+                      setNotifState((prev) => ({
+                        ...prev,
+                        sendPasswordViaSms: val,
+                      }))
+                    }
+                    label="Send Password via SMS"
+                  />
+                </div>
+
+                <div className="flex justify-between items-center border border-slate-200 p-3.5 rounded-xl bg-slate-50 md:col-span-2">
+                  <span className="font-semibold text-slate-700">
+                    Low Balance Alert Notification
+                  </span>
+                  <YesNoToggle
+                    checked={notifState.lowBalanceAlertNotification}
+                    onChange={(val) =>
+                      setNotifState((prev) => ({
+                        ...prev,
+                        lowBalanceAlertNotification: val,
+                      }))
+                    }
+                    label="Low Balance Alert Notification"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-semibold text-slate-700">
+                    Default Wallet Balance
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="e.g 100"
+                    value={notifState.defaultWalletBalance}
+                    onChange={(e) =>
+                      setNotifState((prev) => ({
+                        ...prev,
+                        defaultWalletBalance: e.target.value,
+                      }))
+                    }
+                    className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-semibold text-slate-700">
+                    Default Validity
+                  </label>
+                  <select
+                    value={notifState.defaultValidityMonths}
+                    onChange={(e) =>
+                      setNotifState((prev) => ({
+                        ...prev,
+                        defaultValidityMonths: e.target.value,
+                      }))
+                    }
+                    className="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  >
+                    {VALIDITY_MONTH_OPTIONS.map((opt) => (
+                      <option key={opt.label} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
               <button
                 type="button"
-                onClick={() => alert("Notification preferences saved!")}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl cursor-pointer"
+                disabled={savingBranding}
+                onClick={handleSaveWhiteLabelBranding}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl cursor-pointer disabled:opacity-50"
               >
-                Save Notification Settings
+                {savingBranding ? "Saving..." : "Save Notification Settings"}
               </button>
             </div>
           )}

@@ -226,3 +226,98 @@ export async function GET(request: Request) {
     );
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const actor = await getAuthenticatedActor();
+    if (!actor) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const isSuperAdmin = actor.role === "SUPER_ADMIN";
+    const isReseller =
+      actor.role === "RESELLER" || actor.role === "WHITE_LABEL_RESELLER";
+
+    if (!isSuperAdmin && !isReseller) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: WABA channel delete restricted" },
+        { status: 403 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    let channelId = String(searchParams.get("id") || "").trim();
+
+    if (!channelId) {
+      try {
+        const body = await request.json();
+        channelId = String(body?.id || body?.channelId || "").trim();
+      } catch {
+        // Ignore empty body when ?id= is passed in URL
+      }
+    }
+
+    if (!channelId) {
+      return NextResponse.json(
+        { success: false, error: "Channel ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const existingChannel = await prisma.wabaAccount.findUnique({
+      where: { id: channelId },
+      include: {
+        user: {
+          select: { id: true, role: true, createdById: true },
+        },
+      },
+    });
+
+    if (!existingChannel) {
+      return NextResponse.json(
+        { success: false, error: "Channel not found" },
+        { status: 404 }
+      );
+    }
+
+    if (!isSuperAdmin) {
+      const ownerRole = normalizeRole(existingChannel.user?.role);
+      const allowed =
+        ownerRole !== "SUPER_ADMIN" &&
+        (existingChannel.userId === actor.id ||
+          existingChannel.user?.createdById === actor.id);
+
+      if (!allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Forbidden: Channel outside your account scope",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    await prisma.wabaAccount.delete({
+      where: { id: existingChannel.id },
+    });
+
+    return NextResponse.json({
+      success: true,
+      id: existingChannel.id,
+      message: "Channel deleted successfully.",
+    });
+  } catch (error: any) {
+    console.error("Admin waba-accounts DELETE Error:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error?.message || "Failed to delete WABA channel",
+      },
+      { status: 500 }
+    );
+  }
+}

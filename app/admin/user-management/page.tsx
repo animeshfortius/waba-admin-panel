@@ -298,6 +298,7 @@ export default function UserManagementPage() {
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showRegisterApiModal, setShowRegisterApiModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingChannel, setDeletingChannel] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<any>(null);
   const [webhookUrlInput, setWebhookUrlInput] = useState("");
   const [tpsInput, setTpsInput] = useState("50");
@@ -1247,7 +1248,10 @@ export default function UserManagementPage() {
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => setShowDeleteModal(true)}
+                                      onClick={() => {
+                                        setSelectedChannel(ch);
+                                        setShowDeleteModal(true);
+                                      }}
                                       className="p-1.5 bg-rose-50 text-rose-600 rounded border hover:bg-rose-100 cursor-pointer"
                                       title="Delete Channel"
                                     >
@@ -1775,20 +1779,64 @@ export default function UserManagementPage() {
             <div className="flex justify-center space-x-3 pt-3 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-medium cursor-pointer"
+                disabled={deletingChannel}
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setSelectedChannel(null);
+                }}
+                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-medium cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  alert("Channel deleted successfully!");
-                  setShowDeleteModal(false);
+                disabled={deletingChannel}
+                onClick={async () => {
+                  if (!selectedChannel?.id) {
+                    alert("Channel ID missing!");
+                    return;
+                  }
+
+                  setDeletingChannel(true);
+                  try {
+                    const res = await fetch(
+                      `/api/admin/waba-accounts?id=${encodeURIComponent(
+                        String(selectedChannel.id)
+                      )}`,
+                      {
+                        method: "DELETE",
+                        credentials: "include",
+                      }
+                    );
+                    const data = await res.json().catch(() => ({}));
+
+                    if (!res.ok || data?.success === false) {
+                      alert(
+                        data?.error ||
+                          data?.message ||
+                          "Failed to delete channel."
+                      );
+                      return;
+                    }
+
+                    setWabaChannels((prev: any[]) =>
+                      prev.filter(
+                        (ch: any) => String(ch.id) !== String(selectedChannel.id)
+                      )
+                    );
+                    setShowDeleteModal(false);
+                    setSelectedChannel(null);
+                    alert(data?.message || "Channel deleted successfully!");
+                  } catch (err) {
+                    console.error("Delete channel error:", err);
+                    alert("Network error while deleting channel.");
+                  } finally {
+                    setDeletingChannel(false);
+                  }
                 }}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
               >
-                Yes, delete!
+                {deletingChannel ? "Deleting..." : "Yes, delete!"}
               </button>
             </div>
           </div>

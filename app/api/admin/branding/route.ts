@@ -73,6 +73,49 @@ function cleanDomainInput(input?: string | null): string {
     .replace(/^www\./, "");
 }
 
+function hydrateConfig(cfg: any) {
+  if (!cfg) return null;
+  let parsedMeta: any = {};
+  if (typeof cfg.faviconUrl === "string" && cfg.faviconUrl.startsWith("{")) {
+    try {
+      parsedMeta = JSON.parse(cfg.faviconUrl);
+    } catch {
+      parsedMeta = {};
+    }
+  }
+  const notificationConfig = {
+    notifyCustomerViaEmail: Boolean(
+      parsedMeta?.notificationConfig?.notifyCustomerViaEmail ?? false
+    ),
+    notifyCustomerViaSms: Boolean(
+      parsedMeta?.notificationConfig?.notifyCustomerViaSms ?? false
+    ),
+    notifyMeViaEmail: Boolean(
+      parsedMeta?.notificationConfig?.notifyMeViaEmail ?? false
+    ),
+    sendPasswordViaSms: Boolean(
+      parsedMeta?.notificationConfig?.sendPasswordViaSms ?? false
+    ),
+    lowBalanceAlertNotification: Boolean(
+      parsedMeta?.notificationConfig?.lowBalanceAlertNotification ?? true
+    ),
+    defaultWalletBalance: Number(
+      parsedMeta?.notificationConfig?.defaultWalletBalance ?? 0
+    ),
+    defaultValidityMonths:
+      parsedMeta?.notificationConfig?.defaultValidityMonths ?? null,
+  };
+
+  return {
+    ...cfg,
+    faviconUrl: parsedMeta?.faviconUrl ?? (typeof cfg.faviconUrl === "string" && !cfg.faviconUrl.startsWith("{") ? cfg.faviconUrl : null),
+    defaultWalletBalance: notificationConfig.defaultWalletBalance,
+    defaultValidityMonths: notificationConfig.defaultValidityMonths,
+    notificationConfig,
+    smtpConfig: parsedMeta?.smtpConfig || {},
+  };
+}
+
 export async function GET(req: Request) {
   try {
     const actor = await getAuthenticatedActor();
@@ -123,7 +166,7 @@ export async function GET(req: Request) {
           },
         },
       });
-      return NextResponse.json({ success: true, config });
+      return NextResponse.json({ success: true, config: hydrateConfig(config) });
     }
 
     if (domain) {
@@ -146,7 +189,7 @@ export async function GET(req: Request) {
         return NextResponse.json({ success: true, config: null });
       }
 
-      return NextResponse.json({ success: true, config });
+      return NextResponse.json({ success: true, config: hydrateConfig(config) });
     }
 
     const configs = await prisma.whiteLabelConfig.findMany({
@@ -165,9 +208,10 @@ export async function GET(req: Request) {
       },
     });
 
-    const safeConfigs = isSuperAdmin
+    const safeConfigs = (isSuperAdmin
       ? configs
-      : configs.filter((c: any) => c.userId === actor.id);
+      : configs.filter((c: any) => c.userId === actor.id)
+    ).map(hydrateConfig);
 
     return NextResponse.json({ success: true, configs: safeConfigs });
   } catch (error: any) {
@@ -219,16 +263,13 @@ export async function POST(req: Request) {
       serverIp,
       sslStatus,
       isActive,
+      defaultWalletBalance,
+      defaultValidityMonths,
+      notificationConfig,
+      smtpConfig,
     } = body;
 
     const normalizedDomain = cleanDomainInput(domain);
-
-    if ((isSuperAdmin || isWhiteLabelReseller) && !normalizedDomain) {
-      return NextResponse.json(
-        { success: false, error: "Valid custom domain is required" },
-        { status: 400 }
-      );
-    }
 
     let targetUserId = userId;
     if (!targetUserId) {
@@ -306,6 +347,63 @@ export async function POST(req: Request) {
     const activeFlag = isActive !== undefined ? Boolean(isActive) : true;
     const promoteToWhiteLabel = isSuperAdmin || isWhiteLabelReseller;
 
+    const existingHydrated = hydrateConfig(targetUser.whiteLabelConfig);
+    const mergedNotif = {
+      notifyCustomerViaEmail: Boolean(
+        notificationConfig?.notifyCustomerViaEmail ??
+          existingHydrated?.notificationConfig?.notifyCustomerViaEmail ??
+          false
+      ),
+      notifyCustomerViaSms: Boolean(
+        notificationConfig?.notifyCustomerViaSms ??
+          existingHydrated?.notificationConfig?.notifyCustomerViaSms ??
+          false
+      ),
+      notifyMeViaEmail: Boolean(
+        notificationConfig?.notifyMeViaEmail ??
+          existingHydrated?.notificationConfig?.notifyMeViaEmail ??
+          false
+      ),
+      sendPasswordViaSms: Boolean(
+        notificationConfig?.sendPasswordViaSms ??
+          existingHydrated?.notificationConfig?.sendPasswordViaSms ??
+          false
+      ),
+      lowBalanceAlertNotification: Boolean(
+        notificationConfig?.lowBalanceAlertNotification ??
+          existingHydrated?.notificationConfig?.lowBalanceAlertNotification ??
+          true
+      ),
+      defaultWalletBalance:
+        defaultWalletBalance !== undefined
+          ? Number(defaultWalletBalance || 0)
+          : notificationConfig?.defaultWalletBalance !== undefined
+          ? Number(notificationConfig.defaultWalletBalance || 0)
+          : Number(
+              existingHydrated?.notificationConfig?.defaultWalletBalance ?? 0
+            ),
+      defaultValidityMonths:
+        defaultValidityMonths !== undefined
+          ? defaultValidityMonths
+          : notificationConfig?.defaultValidityMonths !== undefined
+          ? notificationConfig.defaultValidityMonths
+          : existingHydrated?.notificationConfig?.defaultValidityMonths ?? null,
+    };
+
+    const mergedSmtp = {
+      ...(existingHydrated?.smtpConfig || {}),
+      ...(smtpConfig || {}),
+    };
+
+    const packedMeta = JSON.stringify({
+      faviconUrl:
+        faviconUrl !== undefined
+          ? faviconUrl
+          : existingHydrated?.faviconUrl || null,
+      notificationConfig: mergedNotif,
+      smtpConfig: mergedSmtp,
+    });
+
     const savedConfig = await prisma.$transaction(async (tx) => {
       if (promoteToWhiteLabel && targetUser.role !== "SUPER_ADMIN") {
         await tx.user.update({
@@ -325,7 +423,7 @@ export async function POST(req: Request) {
             : {}),
           brandName: (brandName || targetUser.name || "Partner Portal").trim(),
           logoUrl: logoUrl !== undefined ? logoUrl : undefined,
-          faviconUrl: faviconUrl !== undefined ? faviconUrl : undefined,
+          faviconUrl: packedMeta,
           primaryColor: primaryColor || "#059669",
           supportEmail: supportEmail !== undefined ? supportEmail : undefined,
           supportPhone: supportPhone !== undefined ? supportPhone : undefined,
@@ -338,7 +436,7 @@ export async function POST(req: Request) {
           domain: effectiveDomain,
           brandName: (brandName || targetUser.name || "Partner Portal").trim(),
           logoUrl: logoUrl || null,
-          faviconUrl: faviconUrl || null,
+          faviconUrl: packedMeta,
           primaryColor: primaryColor || "#059669",
           supportEmail: supportEmail || targetUser.email || null,
           supportPhone: supportPhone || targetUser.phone || null,
@@ -352,7 +450,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       message: "Branding settings saved successfully!",
-      config: savedConfig,
+      config: hydrateConfig(savedConfig),
     });
   } catch (error: any) {
     console.error("Error saving white-label branding:", error);

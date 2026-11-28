@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getTenantContext, getOwnerWhere } from "@/lib/tenant-auth";
 
 const META_GRAPH_VERSION = "v21.0";
-const DEFAULT_META_APP_ID = "1405995811146008";
+const DEFAULT_META_APP_ID = "1920311502273206";
 
 export async function POST(req: Request) {
   try {

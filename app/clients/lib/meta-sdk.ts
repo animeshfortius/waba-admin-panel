@@ -8,7 +8,7 @@ export const loadFacebookSDK = () => {
 
     window.fbAsyncInit = function () {
       window.FB.init({
-        appId: process.env.NEXT_PUBLIC_META_APP_ID || "123456789012345",
+        appId: process.env.NEXT_PUBLIC_META_APP_ID || "1920311502273206",
         cookie: true,
         xfbml: true,
         version: "v20.0",
@@ -40,7 +40,7 @@ export const launchEmbeddedSignup = (onSuccess: (data: any) => void) => {
       }
     },
     {
-      config_id: process.env.NEXT_PUBLIC_META_CONFIG_ID || "YOUR_CONFIG_ID",
+      config_id: process.env.NEXT_PUBLIC_META_CONFIG_ID || "1119496684172826",
       response_type: "code",
       override_default_response_type: true,
       extras: { setup: {} },

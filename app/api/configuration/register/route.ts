@@ -34,7 +34,7 @@ export async function POST(request: Request) {
         : tenant.userId;
 
     const appId = String(
-      process.env.NEXT_PUBLIC_META_APP_ID || "1405995811146008"
+      process.env.NEXT_PUBLIC_META_APP_ID || "1920311502273206"
     ).trim();
     const appSecret = String(process.env.META_APP_SECRET || "").trim();
     const smartpingAuthKey = String(

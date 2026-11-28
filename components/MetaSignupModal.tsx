@@ -25,7 +25,7 @@ export default function MetaSignupModal({
     // Initialize Facebook SDK
     window.fbAsyncInit = function () {
       window.FB.init({
-        appId: '1405995811146008',
+        appId: '1920311502273206',
         cookie: true,
         xfbml: true,
         version: 'v18.0'
@@ -95,12 +95,12 @@ export default function MetaSignupModal({
         alert("User cancelled login or did not fully authorize.");
       }
     }, {
-      config_id: '891599173270116',
+      config_id: '1119496684172826',
       response_type: 'code',
       override_default_response_type: true,
       extras: {
         setup: {
-          solutionID: '891846553340614'
+          solutionID: '1660427402252843'
         },
         featureType: 'whatsapp_business_app_onboarding',
         sessionInfoVersion: 3
